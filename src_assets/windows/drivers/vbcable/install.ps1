@@ -4,7 +4,6 @@
 #
 # This script is run automatically by Vibepollo when mic passthrough is
 # configured and VB-Audio CABLE is not already installed.
-
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
@@ -22,7 +21,6 @@ try {
     Write-Output "Extracting..."
     Expand-Archive -Path $zipPath -DestinationPath $tempDir -Force
 
-    # Locate the installer executable
     $installer = Get-ChildItem -Path $tempDir -Filter 'VBCABLE_Setup*.exe' -Recurse | Select-Object -First 1
     if (-not $installer) {
         $installer = Get-ChildItem -Path $tempDir -Filter 'VBCABLE_Setup_x64.exe' -Recurse | Select-Object -First 1
@@ -32,7 +30,7 @@ try {
     }
 
     Write-Output "Running installer: $($installer.FullName)"
-    $proc = Start-Process -FilePath $installer.FullName -ArgumentList '/S', '/qn' -Wait -PassThru -NoNewWindow
+    $proc = Start-Process -FilePath $installer.FullName -ArgumentList '/S', '/qn' -Wait -PassThru
     if ($proc.ExitCode -notin @(0, 3010)) {
         throw "Installer exited with code $($proc.ExitCode)"
     }
