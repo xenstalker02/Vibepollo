@@ -12,11 +12,14 @@ Write-Host "Backup: sunshine.exe.bak created"
 Copy-Item "$buildDir\sunshine.exe" "$installDir\sunshine.exe" -Force
 Write-Host "Deployed: sunshine.exe ($(( Get-Item "$buildDir\sunshine.exe" ).LastWriteTime))"
 
-# Step 6c: Deploy drivers\vbcable\install.ps1 and bundled installer
+# Step 6c: Deploy drivers\vbcable (installer script + bundled driver files)
 New-Item -ItemType Directory -Path "$installDir\drivers\vbcable" -Force | Out-Null
-Copy-Item "$buildDir\drivers\vbcable\install.ps1"           "$installDir\drivers\vbcable\install.ps1"           -Force
-Copy-Item "$buildDir\drivers\vbcable\VBCABLE_Setup_x64.exe" "$installDir\drivers\vbcable\VBCABLE_Setup_x64.exe" -Force
-Write-Host "Deployed: drivers\vbcable\install.ps1 + VBCABLE_Setup_x64.exe"
+Copy-Item "$buildDir\drivers\vbcable\install.ps1"               "$installDir\drivers\vbcable\install.ps1"               -Force
+Copy-Item "$buildDir\drivers\vbcable\vbMmeCable64_win7.inf"     "$installDir\drivers\vbcable\vbMmeCable64_win7.inf"     -Force
+Copy-Item "$buildDir\drivers\vbcable\vbaudio_cable64_win7.sys"  "$installDir\drivers\vbcable\vbaudio_cable64_win7.sys"  -Force
+Copy-Item "$buildDir\drivers\vbcable\vbaudio_cable64_win7.cat"  "$installDir\drivers\vbcable\vbaudio_cable64_win7.cat"  -Force
+Copy-Item "$buildDir\drivers\vbcable\VBCABLE_Setup_x64.exe"     "$installDir\drivers\vbcable\VBCABLE_Setup_x64.exe"     -Force
+Write-Host "Deployed: drivers\vbcable\"
 
 # Step 6d: Deploy updated web assets
 $buildWeb   = "$buildDir\assets\web"
