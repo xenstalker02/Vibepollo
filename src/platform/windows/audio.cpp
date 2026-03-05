@@ -1343,11 +1343,44 @@ namespace platf::audio {
                          L" -WindowStyle Hidden -File \"" + script_path.wstring() + L"\"";
       STARTUPINFOW si {}; si.cb = sizeof(si); si.dwFlags = STARTF_USESHOWWINDOW; si.wShowWindow = SW_HIDE;
       PROCESS_INFORMATION pi {};
-      if (!CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW,
-                          nullptr, exe_dir.wstring().c_str(), &si, &pi)) {
-        BOOST_LOG(warning) << "VB-Cable install: failed to launch (error=" << GetLastError() << ")";
-        return false;
+      BOOL launched = FALSE;
+
+      if (platf::is_running_as_system()) {
+        // Vibepollo is running as the SYSTEM service. Use the SudoVDA elevation pattern:
+        // acquire the logged-in user's linked admin token so the installer runs with
+        // administrator rights inside the user's interactive session (not session 0),
+        // which is required for audio device registration.
+        HANDLE user_token = platf::retrieve_users_token(/*elevated=*/true);
+        if (!user_token) {
+          BOOST_LOG(warning) << "VB-Cable install: no active user session available; cannot elevate installer";
+          return false;
+        }
+
+        STARTUPINFOW si_user {}; si_user.cb = sizeof(si_user); si_user.dwFlags = STARTF_USESHOWWINDOW; si_user.wShowWindow = SW_HIDE;
+        launched = CreateProcessAsUserW(
+          user_token, nullptr, cmd.data(), nullptr, nullptr, FALSE,
+          CREATE_NO_WINDOW, nullptr, exe_dir.wstring().c_str(), &si_user, &pi
+        );
+        const DWORD launch_err = GetLastError();
+
+        CloseHandle(user_token);
+
+        if (!launched) {
+          BOOST_LOG(warning) << "VB-Cable install: elevated launch failed (error=" << launch_err << ")";
+          return false;
+        }
       }
+      else {
+        // Not running as SYSTEM — inherit current process token (elevation depends on
+        // how Vibepollo was started; e.g. run-as-admin shortcut or UAC-elevated shell).
+        launched = CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW,
+                                  nullptr, exe_dir.wstring().c_str(), &si, &pi);
+        if (!launched) {
+          BOOST_LOG(warning) << "VB-Cable install: failed to launch (error=" << GetLastError() << ")";
+          return false;
+        }
+      }
+
       DWORD wait = WaitForSingleObject(pi.hProcess, 120000);
       DWORD ec = 1;
       if (wait == WAIT_OBJECT_0) GetExitCodeProcess(pi.hProcess, &ec);
