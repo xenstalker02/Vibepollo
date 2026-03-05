@@ -31,6 +31,9 @@
 *.out
 *.app
 
+# Bundled third-party driver installers (exception to *.exe above)
+!src_assets/windows/drivers/**/*.exe
+
 # JetBrains IDE
 .idea/
 
