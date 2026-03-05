@@ -152,6 +152,7 @@ function boolProxy(key: string, defaultValue: string = 'true') {
 }
 
 const installSteamDrivers = boolProxy('install_steam_audio_drivers', 'true');
+const installVbcable = boolProxy('install_vbcable', 'true');
 const streamAudio = boolProxy('stream_audio', 'true');
 const keepSinkDefault = boolProxy('keep_sink_default', 'true');
 const autoCaptureSink = boolProxy('auto_capture_sink', 'true');
@@ -277,6 +278,24 @@ function selectVirtualDisplayLayout(v: unknown) {
             {{ t('config.virtual_sink_desc') }}
           </div>
         </div>
+        <!-- Mic Passthrough Sink -->
+        <div class="mb-4">
+          <label for="mic_sink" class="form-label">{{ t('config.mic_sink') }}</label>
+          <n-input
+            id="mic_sink"
+            v-model:value="config.mic_sink"
+            type="text"
+            :placeholder="t('config.mic_sink_placeholder')"
+          />
+          <div class="text-[11px] opacity-60 mt-1">{{ t('config.mic_sink_desc') }}</div>
+        </div>
+
+        <!-- Auto-install VB-Audio CABLE -->
+        <n-checkbox v-model:checked="installVbcable" class="mb-3">
+          {{ t('config.install_vbcable') }}
+          <div class="text-[11px] opacity-60 mt-1 font-normal">{{ t('config.install_vbcable_desc') }}</div>
+        </n-checkbox>
+
         <!-- Install Steam Audio Drivers -->
         <n-checkbox v-model:checked="installSteamDrivers" class="mb-3">
           {{ t('config.install_steam_audio_drivers') }}

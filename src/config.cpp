@@ -799,8 +799,10 @@ namespace config {
   audio_t audio {
     {},  // audio_sink
     {},  // virtual_sink
+    "CABLE Input",  // mic_sink
     true,  // stream audio
     true,  // install_steam_drivers
+    true,  // install_vbcable
     true,  // keep_sink_default
     true,  // auto_capture
   };
@@ -1645,8 +1647,10 @@ namespace config {
 
     string_f(vars, "audio_sink", audio.sink);
     string_f(vars, "virtual_sink", audio.virtual_sink);
+    string_f(vars, "mic_sink", audio.mic_sink);
     bool_f(vars, "stream_audio", audio.stream);
     bool_f(vars, "install_steam_audio_drivers", audio.install_steam_drivers);
+    bool_f(vars, "install_vbcable", audio.install_vbcable);
     bool_f(vars, "keep_sink_default", audio.keep_default);
     bool_f(vars, "auto_capture_sink", audio.auto_capture);
 

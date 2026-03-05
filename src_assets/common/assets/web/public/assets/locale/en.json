@@ -120,8 +120,7 @@
     "refresh_now": "Refresh now",
     "close_hint": "If you stopped Vibepollo intentionally, you may close this tab.",
     "output_name_desc_unix": "During Vibepollo startup, you should see the list of detected displays. Note: You need to use the id value inside the parenthesis. Below is an example; the actual output can be found in the Troubleshooting tab.",
-    "output_name_desc_windows": "Manually specify a display device id to use for capture. If unset, the primary display is captured. Note: If you specified a GPU above, this display must be connected to that GPU. During Vibepollo startup, you should see the list of detected displays. Below is an example; the actual output can be found in the Troubleshooting tab.",
-    "close_hint": "If you stopped Vibepollo intentionally, you may close this tab."
+    "output_name_desc_windows": "Manually specify a display device id to use for capture. If unset, the primary display is captured. Note: If you specified a GPU above, this display must be connected to that GPU. During Vibepollo startup, you should see the list of detected displays. Below is an example; the actual output can be found in the Troubleshooting tab."
   },
   "config": {
     "amf": {
@@ -595,7 +594,12 @@
     "ignore_encoder_probe_failure": "Ignore Encoder Probe Failure",
     "ignore_encoder_probe_failure_desc": "Allow streaming to continue even if probing for encoders fails. This may result in streaming failure if no encoder is available.",
     "legacy_ordering": "App ordering for legacy clients",
-    "legacy_ordering_desc": "Enable ordering support workaround for legacy clients. Can cause issues with clients or scripts that can't handle UTF8 correctly. Artemis clients support this by default."
+    "legacy_ordering_desc": "Enable ordering support workaround for legacy clients. Can cause issues with clients or scripts that can't handle UTF8 correctly. Artemis clients support this by default.",
+    "mic_sink": "Mic Passthrough Sink",
+    "mic_sink_desc": "Device name to receive the client's microphone audio (e.g. 'CABLE Input'). When set, the client mic is decoded and written here so host applications see it as a live microphone. Leave blank to disable mic passthrough.",
+    "mic_sink_placeholder": "CABLE Input",
+    "install_vbcable": "Auto-install VB-Audio CABLE",
+    "install_vbcable_desc": "Automatically download and install VB-Audio Virtual Cable the first time Vibepollo starts if the mic passthrough sink device is not found. Requires an internet connection."
   },
   "index": {
     "description": "Vibepollo is a self-hosted game stream host for Moonlight.",

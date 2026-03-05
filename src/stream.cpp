@@ -23,6 +23,7 @@
 extern "C" {
   // clang-format off
 #include <moonlight-common-c/src/Limelight-internal.h>
+#include <opus/opus.h>
 #include "rswrapper.h"
   // clang-format on
 }
@@ -71,6 +72,7 @@ extern "C" {
 #define IDX_SET_CLIPBOARD 16
 #define IDX_FILE_TRANSFER_NONCE_REQUEST 17
 #define IDX_SET_ADAPTIVE_TRIGGERS 18
+#define IDX_MIC_AUDIO_DATA 19
 
 static const short packetTypes[] = {
   0x0305,  // Start A
@@ -92,6 +94,7 @@ static const short packetTypes[] = {
   0x3001,  // Set Clipboard (Apollo protocol extension)
   0x3002,  // File transfer nonce request (Apollo protocol extension)
   0x5503,  // Set Adaptive triggers (Sunshine protocol extension)
+  0x3003,  // Mic audio data (Apollo protocol extension)
 };
 
 namespace asio = boost::asio;
@@ -465,6 +468,15 @@ namespace stream {
       platf::feedback_queue_t feedback_queue;
       safe::mail_raw_t::event_t<video::hdr_info_t> hdr_queue;
     } control;
+
+    // Upstream mic passthrough: receives Opus audio from the client,
+    // decodes it, and writes PCM into a virtual audio device on the host.
+    struct {
+      std::unique_ptr<platf::speaker_t> speaker;
+      std::unique_ptr<OpusDecoder, void (*)(OpusDecoder *)> decoder {nullptr, opus_decoder_destroy};
+      int channels = 0;
+      std::string prev_default_capture_id;  // Restored on session end
+    } mic;
 
     std::uint32_t launch_session_id;
     std::string device_name;
@@ -1231,6 +1243,36 @@ namespace stream {
         BOOST_LOG(debug) << "Permission File Upload deined for [" << session->device_name << "]";
         return;
       }
+    });
+
+    server->map(packetTypes[IDX_MIC_AUDIO_DATA], [](session_t *session, const std::string_view &payload) {
+      BOOST_LOG(verbose) << "type [IDX_MIC_AUDIO_DATA]"sv;
+
+      if (!session->mic.speaker || !session->mic.decoder) {
+        return;
+      }
+
+      // The payload has already been decrypted by the IDX_ENCRYPTED outer handler.
+      // Decode the Opus packet into interleaved float PCM samples.
+      // 960 frames = 20 ms at 48 kHz, the maximum Moonlight uses.
+      constexpr int MAX_FRAME_SIZE = 960;
+      std::vector<float> pcm((size_t)(MAX_FRAME_SIZE * session->mic.channels));
+
+      int frames = opus_decode_float(
+        session->mic.decoder.get(),
+        (const unsigned char *) payload.data(),
+        (opus_int32) payload.size(),
+        pcm.data(),
+        MAX_FRAME_SIZE,
+        0  // no FEC decode
+      );
+
+      if (frames < 0) {
+        BOOST_LOG(warning) << "Mic Opus decode error: "sv << opus_strerror(frames);
+        return;
+      }
+
+      session->mic.speaker->write(pcm.data(), (std::uint32_t) frames);
     });
 
     server->map(packetTypes[IDX_ENCRYPTED], [server](session_t *session, const std::string_view &payload) {
@@ -2254,6 +2296,15 @@ namespace stream {
       BOOST_LOG(debug) << "Resetting Input..."sv;
       input::reset(session.input);
 
+      // Restore the previous default audio input device (was switched on session start for mic passthrough)
+      if (!session.mic.prev_default_capture_id.empty()) {
+        auto audio_ctrl = platf::audio_control();
+        if (audio_ctrl) {
+          audio_ctrl->restore_default_capture_device(session.mic.prev_default_capture_id);
+        }
+        session.mic.prev_default_capture_id.clear();
+      }
+
       if (!session.undo_cmds.empty()) {
         auto exec_thread = std::thread([cmd_list = session.undo_cmds] {
           for (auto &cmd : cmd_list) {
@@ -2365,6 +2416,31 @@ namespace stream {
       session.audio.peer.port(0);
 
       session.pingTimeout = std::chrono::steady_clock::now() + config::stream.ping_timeout;
+
+      // Initialize upstream mic passthrough. We open the WASAPI render client here
+      // and keep it alive for the full session. The control-stream handler writes
+      // decoded PCM into it when IDX_MIC_AUDIO_DATA packets arrive.
+      if (!config::audio.mic_sink.empty()) {
+        auto audio_ctrl = platf::audio_control();
+        if (audio_ctrl) {
+          constexpr int MIC_CHANNELS = 2;  // stereo — matches standard Moonlight client mic Opus output
+          auto spk = audio_ctrl->virtual_microphone(config::audio.mic_sink, MIC_CHANNELS, 48000);
+          if (spk) {
+            int err = OPUS_OK;
+            auto dec = opus_decoder_create(48000, MIC_CHANNELS, &err);
+            if (err != OPUS_OK || !dec) {
+              BOOST_LOG(error) << "Failed to create Opus decoder for mic passthrough: "sv << opus_strerror(err);
+            } else {
+              session.mic.speaker = std::move(spk);
+              session.mic.decoder.reset(dec);
+              session.mic.channels = MIC_CHANNELS;
+              BOOST_LOG(info) << "Mic passthrough active → \""sv << config::audio.mic_sink << '"';
+              // Switch the Windows default audio input to "CABLE Output" so host apps see the client's mic
+              session.mic.prev_default_capture_id = audio_ctrl->switch_default_capture_device("CABLE Output");
+            }
+          }
+        }
+      }
 
       session.audioThread = std::thread {audioThread, &session};
       session.videoThread = std::thread {videoThread, &session};

@@ -36,7 +36,10 @@ add_dependencies(sunshine copy_playnite_plugin)
 
 # Ensure the Windows display helper is built and staged under the Sunshine tools
 # directory so the runtime launcher can find it reliably.
-if (TARGET sunshine_display_helper)
+# Set BUILD_DISPLAY_HELPER=ON to compile sunshine_display_helper before sunshine.
+# Off by default so sunshine can build even when the helper fails to compile.
+option(BUILD_DISPLAY_HELPER "Build sunshine_display_helper as a dependency of sunshine" OFF)
+if (BUILD_DISPLAY_HELPER AND TARGET sunshine_display_helper)
     # Build helper before sunshine to make the copy step reliable
     add_dependencies(sunshine sunshine_display_helper)
 

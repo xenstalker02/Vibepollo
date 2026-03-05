@@ -189,8 +189,10 @@ namespace config {
   struct audio_t {
     std::string sink;
     std::string virtual_sink;
+    std::string mic_sink;  ///< Device name for upstream mic passthrough output (e.g. "CABLE Input")
     bool stream;
     bool install_steam_drivers;
+    bool install_vbcable;  ///< Auto-install VB-Audio CABLE if not present
     bool keep_default;
     bool auto_capture;
   };

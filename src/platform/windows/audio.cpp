@@ -218,6 +218,7 @@ namespace platf::audio {
   using collection_t = util::safe_ptr<IMMDeviceCollection, Release<IMMDeviceCollection>>;
   using audio_client_t = util::safe_ptr<IAudioClient, Release<IAudioClient>>;
   using audio_capture_t = util::safe_ptr<IAudioCaptureClient, Release<IAudioCaptureClient>>;
+  using audio_render_t = util::safe_ptr<IAudioRenderClient, Release<IAudioRenderClient>>;
   using wave_format_t = util::safe_ptr<WAVEFORMATEX, co_task_free<WAVEFORMATEX>>;
   using wstring_t = util::safe_ptr<WCHAR, co_task_free<WCHAR>>;
   using handle_t = util::safe_ptr_v2<void, BOOL, CloseHandle>;
@@ -682,6 +683,121 @@ namespace platf::audio {
     HANDLE mmcss_task_handle = nullptr;
   };
 
+  /**
+   * @brief WASAPI render client for pushing PCM audio into a virtual audio device.
+   * Used for upstream mic passthrough: decoded client mic Opus audio is written
+   * into a device like VB-Audio "CABLE Input" so Windows apps can read it as a mic.
+   */
+  class speaker_wasapi_t: public platf::speaker_t {
+  public:
+    int write(const float *samples, std::uint32_t frame_count) override {
+      UINT32 padding;
+      auto status = audio_client->GetCurrentPadding(&padding);
+      if (FAILED(status)) {
+        BOOST_LOG(error) << "Couldn't get audio render padding [0x"sv << util::hex(status).to_string_view() << ']';
+        return -1;
+      }
+
+      auto available = buffer_frames - padding;
+      auto to_write = std::min(frame_count, available);
+      if (to_write == 0) {
+        // Render buffer is full; drop this frame rather than block.
+        return 0;
+      }
+
+      BYTE *buf;
+      status = audio_render->GetBuffer(to_write, &buf);
+      if (FAILED(status)) {
+        BOOST_LOG(error) << "Couldn't get render buffer [0x"sv << util::hex(status).to_string_view() << ']';
+        return -1;
+      }
+
+      std::memcpy(buf, samples, to_write * channels * sizeof(float));
+      audio_render->ReleaseBuffer(to_write, 0);
+
+      return 0;
+    }
+
+    int init(const std::wstring &device_id, int channel_count, std::uint32_t sample_rate) {
+      HRESULT status;
+
+      device_enum_t dev_enum;
+      status = CoCreateInstance(
+        CLSID_MMDeviceEnumerator,
+        nullptr,
+        CLSCTX_ALL,
+        IID_IMMDeviceEnumerator,
+        (void **) &dev_enum
+      );
+      if (FAILED(status)) {
+        BOOST_LOG(error) << "speaker_wasapi_t: Couldn't create Device Enumerator [0x"sv << util::hex(status).to_string_view() << ']';
+        return -1;
+      }
+
+      device_t device;
+      status = dev_enum->GetDevice(device_id.c_str(), &device);
+      if (FAILED(status)) {
+        BOOST_LOG(error) << "speaker_wasapi_t: Couldn't get render device by ID [0x"sv << util::hex(status).to_string_view() << ']';
+        return -1;
+      }
+
+      status = device->Activate(IID_IAudioClient, CLSCTX_ALL, nullptr, (void **) &audio_client);
+      if (FAILED(status)) {
+        BOOST_LOG(error) << "speaker_wasapi_t: Couldn't activate render device [0x"sv << util::hex(status).to_string_view() << ']';
+        return -1;
+      }
+
+      DWORD channel_mask = (channel_count == 2) ? waveformat_mask_stereo : SPEAKER_FRONT_CENTER;
+      WAVEFORMATEXTENSIBLE waveformat = create_waveformat(sample_format_e::f32, (WORD) channel_count, channel_mask);
+
+      status = audio_client->Initialize(
+        AUDCLNT_SHAREMODE_SHARED,
+        AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY,
+        0, 0,
+        (LPWAVEFORMATEX) &waveformat,
+        nullptr
+      );
+      if (FAILED(status)) {
+        BOOST_LOG(error) << "speaker_wasapi_t: Couldn't initialize render audio client [0x"sv << util::hex(status).to_string_view() << ']';
+        return -1;
+      }
+
+      status = audio_client->GetBufferSize(&buffer_frames);
+      if (FAILED(status)) {
+        BOOST_LOG(error) << "speaker_wasapi_t: Couldn't get render buffer size [0x"sv << util::hex(status).to_string_view() << ']';
+        return -1;
+      }
+
+      status = audio_client->GetService(IID_IAudioRenderClient, (void **) &audio_render);
+      if (FAILED(status)) {
+        BOOST_LOG(error) << "speaker_wasapi_t: Couldn't get IAudioRenderClient [0x"sv << util::hex(status).to_string_view() << ']';
+        return -1;
+      }
+
+      status = audio_client->Start();
+      if (FAILED(status)) {
+        BOOST_LOG(error) << "speaker_wasapi_t: Couldn't start audio render client [0x"sv << util::hex(status).to_string_view() << ']';
+        return -1;
+      }
+
+      channels = channel_count;
+      BOOST_LOG(info) << "Mic passthrough render client started ("sv << channel_count << "ch, "sv << sample_rate << " Hz)"sv;
+      return 0;
+    }
+
+    ~speaker_wasapi_t() override {
+      if (audio_client) {
+        audio_client->Stop();
+      }
+    }
+
+  private:
+    audio_client_t audio_client;
+    audio_render_t audio_render;
+    UINT32 buffer_frames = 0;
+    int channels = 0;
+  };
+
   class audio_control_t: public ::platf::audio_control_t {
   public:
     std::optional<sink_t> sink_info() override {
@@ -780,6 +896,24 @@ namespace platf::audio {
       }
 
       return mic;
+    }
+
+    std::unique_ptr<platf::speaker_t> virtual_microphone(const std::string &device_name, int channels, std::uint32_t sample_rate) override {
+      // "CABLE Input" is a render (playback) endpoint from WASAPI's perspective,
+      // so find_device_id (which enumerates eRender) will locate it correctly.
+      auto match_list = match_all_fields(from_utf8(device_name));
+      auto matched = find_device_id(match_list);
+      if (!matched) {
+        BOOST_LOG(warning) << "Mic passthrough: couldn't find output device \""sv << device_name << "\". Is VB-Audio CABLE installed?"sv;
+        return nullptr;
+      }
+
+      auto spk = std::make_unique<speaker_wasapi_t>();
+      if (spk->init(matched->second, channels, sample_rate)) {
+        return nullptr;
+      }
+
+      return spk;
     }
 
     /**
@@ -1143,8 +1277,91 @@ namespace platf::audio {
       return 0;
     }
 
-    ~audio_control_t() override {
+    std::wstring find_capture_device_id(const std::wstring &name) {
+      collection_t collection;
+      auto status = device_enum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &collection);
+      if (FAILED(status)) return {};
+      UINT count = 0;
+      collection->GetCount(&count);
+      for (UINT i = 0; i < count; ++i) {
+        device_t device;
+        if (FAILED(collection->Item(i, &device))) continue;
+        prop_t prop;
+        if (FAILED(device->OpenPropertyStore(STGM_READ, &prop))) continue;
+        prop_var_t pv;
+        if (SUCCEEDED(prop->GetValue(PKEY_Device_FriendlyName, &pv.prop)) &&
+            pv.prop.vt == VT_LPWSTR && std::wcscmp(pv.prop.pwszVal, name.c_str()) == 0) {
+          wstring_t id;
+          if (SUCCEEDED(device->GetId(&id)))
+            return std::wstring(id.get());
+        }
+      }
+      return {};
     }
+
+    std::string switch_default_capture_device(const std::string &device_name) override {
+      device_t prev_dev;
+      std::wstring prev_id;
+      if (SUCCEEDED(device_enum->GetDefaultAudioEndpoint(eCapture, eConsole, &prev_dev))) {
+        wstring_t id;
+        if (SUCCEEDED(prev_dev->GetId(&id))) prev_id = id.get();
+      }
+      auto target_id = find_capture_device_id(from_utf8(device_name));
+      if (target_id.empty()) {
+        BOOST_LOG(warning) << "switch_default_capture_device: not found: " << device_name;
+        return {};
+      }
+      if (target_id == prev_id) return to_utf8(prev_id);
+      for (int x = 0; x < (int) ERole_enum_count; ++x)
+        policy->SetDefaultEndpoint(target_id.c_str(), (ERole) x);
+      BOOST_LOG(info) << "Switched default audio input to: " << device_name;
+      return to_utf8(prev_id);
+    }
+
+    void restore_default_capture_device(const std::string &prev_id) override {
+      if (prev_id.empty()) return;
+      auto wide = from_utf8(prev_id);
+      for (int x = 0; x < (int) ERole_enum_count; ++x)
+        policy->SetDefaultEndpoint(wide.c_str(), (ERole) x);
+      BOOST_LOG(info) << "Restored default audio input device";
+    }
+
+    bool install_vbcable() {
+      static std::atomic_bool attempted {false};
+      if (attempted.exchange(true, std::memory_order_acq_rel)) return false;
+      wchar_t module_path[MAX_PATH] = {};
+      if (!GetModuleFileNameW(nullptr, module_path, _countof(module_path))) return false;
+      namespace fs = std::filesystem;
+      fs::path exe_dir = fs::path(module_path).parent_path();
+      fs::path script_path = exe_dir / L"drivers" / L"vbcable" / L"install.ps1";
+      if (!fs::exists(script_path)) {
+        BOOST_LOG(warning) << "VB-Cable install: script not found at " << platf::to_utf8(script_path.wstring());
+        return false;
+      }
+      BOOST_LOG(info) << "VB-Audio CABLE not found; running installer...";
+      std::wstring cmd = L"powershell.exe -NoLogo -NonInteractive -NoProfile -ExecutionPolicy Bypass"
+                         L" -WindowStyle Hidden -File \"" + script_path.wstring() + L"\"";
+      STARTUPINFOW si {}; si.cb = sizeof(si); si.dwFlags = STARTF_USESHOWWINDOW; si.wShowWindow = SW_HIDE;
+      PROCESS_INFORMATION pi {};
+      if (!CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW,
+                          nullptr, exe_dir.wstring().c_str(), &si, &pi)) {
+        BOOST_LOG(warning) << "VB-Cable install: failed to launch (error=" << GetLastError() << ")";
+        return false;
+      }
+      DWORD wait = WaitForSingleObject(pi.hProcess, 120000);
+      DWORD ec = 1;
+      if (wait == WAIT_OBJECT_0) GetExitCodeProcess(pi.hProcess, &ec);
+      CloseHandle(pi.hThread); CloseHandle(pi.hProcess);
+      if (wait != WAIT_OBJECT_0 || ec != 0) {
+        BOOST_LOG(warning) << "VB-Cable install: script exited with code " << ec;
+        return false;
+      }
+      BOOST_LOG(info) << "VB-Audio CABLE installed successfully.";
+      Sleep(3000);
+      return true;
+    }
+
+    ~audio_control_t() override {}
 
     policy_t policy;
     audio::device_enum_t device_enum;
@@ -1171,6 +1388,13 @@ namespace platf {
     if (config::audio.install_steam_drivers && !control->find_device_id(control->match_steam_speakers())) {
       // This is best effort. Don't fail if it doesn't work.
       control->install_steam_audio_drivers();
+    }
+
+    // Install VB-Audio CABLE if mic passthrough is configured and CABLE Input (render) is not present.
+    if (config::audio.install_vbcable && !config::audio.mic_sink.empty()) {
+      if (!control->find_device_id(control->match_all_fields(from_utf8(config::audio.mic_sink)))) {
+        control->install_vbcable();
+      }
     }
 
     return control;

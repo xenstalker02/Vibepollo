@@ -65,6 +65,15 @@ install(FILES ${SUDOVDA_DRIVER_FILES}
         DESTINATION "drivers/sudovda"
         COMPONENT sudovda)
 
+# VB-Audio CABLE installer script (downloaded at runtime by Vibepollo if CABLE is not present)
+set(VBCABLE_SOURCE_DIR "${SUNSHINE_SOURCE_ASSETS_DIR}/windows/drivers/vbcable")
+install(FILES "${VBCABLE_SOURCE_DIR}/install.ps1"
+        DESTINATION "drivers/vbcable"
+        COMPONENT vbcable)
+# Also copy to build directory for in-place testing
+file(COPY "${VBCABLE_SOURCE_DIR}/install.ps1"
+     DESTINATION "${CMAKE_BINARY_DIR}/drivers/vbcable")
+
 # Mandatory scripts
 install(DIRECTORY "${SUNSHINE_SOURCE_ASSETS_DIR}/windows/misc/service/"
         DESTINATION "scripts"
@@ -146,6 +155,11 @@ set(CPACK_COMPONENT_SUDOVDA_DISPLAY_NAME "SudoVDA")
 set(CPACK_COMPONENT_SUDOVDA_DESCRIPTION "Driver required for Virtual Display to function.")
 set(CPACK_COMPONENT_SUDOVDA_GROUP "Drivers")
 set(CPACK_COMPONENT_SUDOVDA_REQUIRED true)
+
+# vbcable component
+set(CPACK_COMPONENT_VBCABLE_DISPLAY_NAME "VB-Audio CABLE Installer")
+set(CPACK_COMPONENT_VBCABLE_DESCRIPTION "PowerShell script to auto-install VB-Audio CABLE for mic passthrough.")
+set(CPACK_COMPONENT_VBCABLE_GROUP "Drivers")
 
 # audio tool
 set(CPACK_COMPONENT_AUDIO_DISPLAY_NAME "audio-info")
