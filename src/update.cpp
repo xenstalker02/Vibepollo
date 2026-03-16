@@ -3,15 +3,29 @@
  * @brief Definitions for update checking, notification, and command execution.
  */
 
+// Windows socket headers must come first to avoid the WinSock.h / WinSock2.h
+// conflict that arises when windows.h is included after Boost.Asio headers.
+#ifdef _WIN32
+  #ifndef WIN32_LEAN_AND_MEAN
+    #define WIN32_LEAN_AND_MEAN
+  #endif
+  #include <winsock2.h>
+  #include <windows.h>
+#endif
+
 #include "update.h"
 
 // standard includes
 #include <algorithm>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <future>
 #include <sstream>
 #include <thread>
 #include <variant>
+
+namespace fs = std::filesystem;
 
 // lib includes
 #include <nlohmann/json.hpp>
@@ -30,6 +44,168 @@
 using namespace std::literals;
 
 namespace update {
+
+  // Returns path to the pending-update marker file (lives in the same dir as apps.json).
+  static fs::path pending_update_marker_path() {
+    return fs::path(config::stream.file_apps).parent_path() / "pending_update.txt";
+  }
+
+  // CURL write callback: appends received data to a FILE*.
+  static size_t write_to_file_cb(void *contents, size_t size, size_t nmemb, void *userp) {
+    return fwrite(contents, size, nmemb, static_cast<FILE *>(userp));
+  }
+
+  // Download url to dest_path on disk. Returns true on success.
+  static bool download_url_to_file(const std::string &url, const std::string &dest_path) {
+    FILE *fp = fopen(dest_path.c_str(), "wb");
+    if (!fp) {
+      BOOST_LOG(error) << "Auto-update: cannot open dest file for writing: "sv << dest_path;
+      return false;
+    }
+
+    CURL *curl = curl_easy_init();
+    if (!curl) {
+      fclose(fp);
+      BOOST_LOG(error) << "Auto-update: CURL init failed"sv;
+      return false;
+    }
+
+    struct curl_slist *headers = nullptr;
+    headers = curl_slist_append(headers, "User-Agent: Sunshine-Updater/1.0");
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    http::configure_curl_tls(curl);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_to_file_cb);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
+
+    CURLcode res = curl_easy_perform(curl);
+    long code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &code);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+    fclose(fp);
+
+    if (res != CURLE_OK || code < 200 || code >= 300) {
+      BOOST_LOG(error) << "Auto-update: download failed (curl="sv << res << " http="sv << code << "): "sv << url;
+      fs::remove(dest_path);
+      return false;
+    }
+    return true;
+  }
+
+  // Kick off a background download of the stable release installer.
+  // Looks for the first .exe asset in the release. No-op if already downloading or downloaded.
+  static void start_auto_download(const release_info_t &release) {
+    if (state.download_in_progress.exchange(true)) {
+      return;  // already in progress
+    }
+    if (!state.downloaded_version.empty() && state.downloaded_version == release.version) {
+      state.download_in_progress.store(false);
+      return;  // already downloaded this version
+    }
+
+    std::thread([release]() {
+      auto fg = util::fail_guard([]() { state.download_in_progress.store(false); });
+
+      // Find the Windows installer asset (.exe, not .pdb)
+      std::string asset_url;
+      std::string asset_name;
+      for (const auto &a : release.assets) {
+        if (a.name.size() > 4 &&
+            a.name.substr(a.name.size() - 4) == ".exe" &&
+            a.name.find(".pdb") == std::string::npos) {
+          asset_url = a.download_url;
+          asset_name = a.name;
+          break;
+        }
+      }
+      if (asset_url.empty()) {
+        BOOST_LOG(info) << "Auto-update: no .exe asset found in release "sv << release.version << ", skipping auto-download"sv;
+        return;
+      }
+
+      BOOST_LOG(info) << "Auto-update: downloading "sv << asset_name << " ("sv << release.version << ")"sv;
+
+      fs::path dest = fs::temp_directory_path() / asset_name;
+      if (!download_url_to_file(asset_url, dest.string())) {
+        return;
+      }
+
+      BOOST_LOG(info) << "Auto-update: download complete → "sv << dest.string();
+
+      // Write marker file so we apply on next restart
+      auto marker = pending_update_marker_path();
+      try {
+        std::ofstream mf(marker);
+        mf << dest.string() << "\n" << release.version << "\n";
+      } catch (...) {
+        BOOST_LOG(error) << "Auto-update: failed to write marker file "sv << marker.string();
+        fs::remove(dest);
+        return;
+      }
+
+      state.downloaded_version = release.version;
+      state.downloaded_path = dest.string();
+
+      // Tray notification
+#if defined SUNSHINE_TRAY && SUNSHINE_TRAY >= 1
+      system_tray::tray_notify(
+        "Update downloaded",
+        ("Version " + release.version + " will be applied on restart").c_str(),
+        nullptr);
+#endif
+      BOOST_LOG(info) << "Auto-update: ready to install "sv << release.version << " on next restart"sv;
+    }).detach();
+  }
+
+  bool apply_pending_update_if_ready() {
+#ifdef _WIN32
+    auto marker = pending_update_marker_path();
+    if (!fs::exists(marker)) {
+      return false;
+    }
+
+    std::string installer_path, version;
+    try {
+      std::ifstream mf(marker);
+      std::getline(mf, installer_path);
+      std::getline(mf, version);
+    } catch (...) {
+      BOOST_LOG(warning) << "Auto-update: failed to read marker file"sv;
+      fs::remove(marker);
+      return false;
+    }
+
+    if (installer_path.empty() || !fs::exists(installer_path)) {
+      BOOST_LOG(info) << "Auto-update: marker found but installer missing, cleaning up"sv;
+      fs::remove(marker);
+      return false;
+    }
+
+    BOOST_LOG(info) << "Auto-update: applying pending update "sv << version << " from "sv << installer_path;
+    fs::remove(marker);
+
+    // Launch installer silently. /S is the NSIS silent flag; most Sunshine-family
+    // installers also accept /SILENT. We pass both for compatibility.
+    std::wstring cmd = L"\"" + fs::path(installer_path).wstring() + L"\" /S /SILENT /CLOSEAPPLICATIONS";
+    STARTUPINFOW si {};
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;
+    PROCESS_INFORMATION pi {};
+    if (CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+      CloseHandle(pi.hProcess);
+      CloseHandle(pi.hThread);
+      BOOST_LOG(info) << "Auto-update: installer launched, exiting"sv;
+      return true;
+    }
+    BOOST_LOG(error) << "Auto-update: failed to launch installer (err="sv << GetLastError() << ")"sv;
+#endif
+    return false;
+  }
+
+
   state_t state;
 
   static size_t write_to_string(void *contents, size_t size, size_t nmemb, void *userp) {
@@ -428,10 +604,18 @@ namespace update {
         BOOST_LOG(info) << "Update check: prerelease available tag="sv << state.latest_prerelease.version
                         << ", installed="sv << installed_version_tag;
         notify_new_version(state.latest_prerelease.version, true);
+        // Never auto-download prerelease builds — notification only.
       } else if (stable_available) {
         BOOST_LOG(info) << "Update check: stable available tag="sv << state.latest_release.version
                         << ", installed="sv << installed_version_tag;
         notify_new_version(state.latest_release.version, false);
+        // Auto-download the stable installer in the background, but only when no
+        // stream is active (we never interrupt a running session).
+        if (rtsp_stream::session_count() == 0) {
+          start_auto_download(state.latest_release);
+        } else {
+          BOOST_LOG(info) << "Auto-update download deferred: stream session is active"sv;
+        }
       } else {
         BOOST_LOG(info) << "Update check (tag-based): up-to-date. installed="sv << installed_version_tag
                         << ", stable="sv << latest_stable_tag

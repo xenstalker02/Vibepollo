@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file src/platform/windows/audio.cpp
  * @brief Definitions for Windows audio capture.
  */
@@ -594,7 +594,14 @@ namespace platf::audio {
         return capture_e::reinit;
       }
 
-      status = WaitForSingleObjectEx(audio_event.get(), default_latency_ms, FALSE);
+      // Cap the wait to 100 ms regardless of what the device reports.
+      // default_latency_ms is REFERENCE_TIME/1000 (100-ns → μs, then used as ms),
+      // which can be arbitrarily large for virtual audio devices (e.g. VB-CABLE).
+      // Without the cap, WaitForSingleObjectEx can block longer than the 10-second
+      // session-teardown watchdog, causing a forced crash on every clean disconnect.
+      constexpr DWORD MAX_CAPTURE_WAIT_MS = 100;
+      status = WaitForSingleObjectEx(audio_event.get(),
+        std::min<DWORD>(static_cast<DWORD>(default_latency_ms), MAX_CAPTURE_WAIT_MS), FALSE);
       switch (status) {
         case WAIT_OBJECT_0:
           break;
@@ -694,27 +701,38 @@ namespace platf::audio {
       UINT32 padding;
       auto status = audio_client->GetCurrentPadding(&padding);
       if (FAILED(status)) {
-        BOOST_LOG(error) << "Couldn't get audio render padding [0x"sv << util::hex(status).to_string_view() << ']';
+        BOOST_LOG(error) << "Mic render: GetCurrentPadding failed [0x"sv << util::hex(status).to_string_view() << ']';
         return -1;
       }
 
       auto available = buffer_frames - padding;
-      auto to_write = std::min(frame_count, available);
-      if (to_write == 0) {
-        // Render buffer is full; drop this frame rather than block.
+      // Drop the ENTIRE frame rather than a partial write.
+      // A partial write causes chopped/pitch-shifted audio because the Opus decoder
+      // produced exactly frame_count samples; writing fewer distorts timing.
+      // With a 200ms buffer this branch should be extremely rare.
+      if (available < frame_count) {
+        BOOST_LOG(warning) << "Mic render: buffer full (padding="sv << padding
+                           << '/' << buffer_frames << "), dropping "sv << frame_count << " frames"sv;
         return 0;
       }
+      auto to_write = frame_count;
 
       BYTE *buf;
       status = audio_render->GetBuffer(to_write, &buf);
       if (FAILED(status)) {
-        BOOST_LOG(error) << "Couldn't get render buffer [0x"sv << util::hex(status).to_string_view() << ']';
+        BOOST_LOG(error) << "Mic render: GetBuffer failed [0x"sv << util::hex(status).to_string_view() << ']';
         return -1;
       }
 
       std::memcpy(buf, samples, to_write * channels * sizeof(float));
-      audio_render->ReleaseBuffer(to_write, 0);
+      status = audio_render->ReleaseBuffer(to_write, 0);
+      if (FAILED(status)) {
+        BOOST_LOG(error) << "Mic render: ReleaseBuffer failed [0x"sv << util::hex(status).to_string_view() << ']';
+        return -1;
+      }
 
+      BOOST_LOG(verbose) << "Mic render: wrote "sv << to_write << " frames ("sv
+                         << (to_write * channels * sizeof(float)) << " bytes) to CABLE Input"sv;
       return 0;
     }
 
@@ -750,10 +768,18 @@ namespace platf::audio {
       DWORD channel_mask = (channel_count == 2) ? waveformat_mask_stereo : SPEAKER_FRONT_CENTER;
       WAVEFORMATEXTENSIBLE waveformat = create_waveformat(sample_format_e::f32, (WORD) channel_count, channel_mask);
 
+      // Request a 200ms buffer so we always have headroom for a full Opus frame (960 samples =
+      // 20ms).  With hnsBufferDuration=0 WASAPI picks the device minimum (often 10ms / 480
+      // frames for VB-CABLE), which means GetCurrentPadding() returns values that leave fewer
+      // than 960 available frames, forcing partial or dropped writes on every packet.
+      // 200ms = 2,000,000 × 100-nanosecond units.  WASAPI rounds up to the next device period
+      // so the actual allocation may be slightly larger; we only write exactly frame_count
+      // frames at a time so this adds no perceptible latency in steady state.
+      constexpr REFERENCE_TIME k_mic_buffer_duration = 2000000LL;
       status = audio_client->Initialize(
         AUDCLNT_SHAREMODE_SHARED,
         AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY,
-        0, 0,
+        k_mic_buffer_duration, 0,
         (LPWAVEFORMATEX) &waveformat,
         nullptr
       );
@@ -1300,6 +1326,26 @@ namespace platf::audio {
     }
 
     std::string switch_default_capture_device(const std::string &device_name) override {
+      // Enumerate all active capture devices for diagnostics
+      {
+        collection_t dbg_collection;
+        if (SUCCEEDED(device_enum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &dbg_collection))) {
+          UINT dbg_count = 0;
+          dbg_collection->GetCount(&dbg_count);
+          BOOST_LOG(info) << "switch_default_capture_device: enumerating " << dbg_count
+                          << " active capture device(s), looking for: \"" << device_name << "\"";
+          for (UINT i = 0; i < dbg_count; ++i) {
+            device_t dbg_dev;
+            if (FAILED(dbg_collection->Item(i, &dbg_dev))) continue;
+            prop_t dbg_prop;
+            if (FAILED(dbg_dev->OpenPropertyStore(STGM_READ, &dbg_prop))) continue;
+            prop_var_t dbg_pv;
+            if (SUCCEEDED(dbg_prop->GetValue(PKEY_Device_FriendlyName, &dbg_pv.prop)) && dbg_pv.prop.vt == VT_LPWSTR)
+              BOOST_LOG(info) << "  capture device[" << i << "]: \"" << to_utf8(dbg_pv.prop.pwszVal) << "\"";
+          }
+        }
+      }
+
       device_t prev_dev;
       std::wstring prev_id;
       if (SUCCEEDED(device_enum->GetDefaultAudioEndpoint(eCapture, eConsole, &prev_dev))) {

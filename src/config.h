@@ -190,6 +190,7 @@ namespace config {
     std::string sink;
     std::string virtual_sink;
     std::string mic_sink;  ///< Device name for upstream mic passthrough output (e.g. "CABLE Input")
+    std::string mic_capture_device;  ///< Capture device to set as Windows default input during mic passthrough (e.g. "CABLE Output")
     bool stream;
     bool install_steam_drivers;
     bool install_vbcable;  ///< Auto-install VB-Audio CABLE if not present

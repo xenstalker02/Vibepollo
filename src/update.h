@@ -38,6 +38,9 @@ namespace update {
     release_info_t latest_prerelease;  ///< Latest prerelease info (if enabled)
     std::chrono::steady_clock::time_point last_check_time;  ///< Last time we checked
     std::atomic<bool> check_in_progress {false};  ///< True while a check is running
+    std::atomic<bool> download_in_progress {false};  ///< True while auto-download is running
+    std::string downloaded_version;  ///< Version of the installer currently downloaded
+    std::string downloaded_path;  ///< Path to downloaded installer (empty if none)
   };
 
   extern state_t state;
@@ -76,4 +79,12 @@ namespace update {
    * Callback used by tray notifications to open the release page last notified to the user.
    */
   void open_last_notified_release_page();
+
+  /**
+   * @brief Check for a pending auto-downloaded update and apply it if present.
+   * Called at startup. If a previously downloaded installer is waiting, launches it
+   * with /S (silent) and returns true — the caller should exit immediately.
+   * @return true if an update was launched (process should exit).
+   */
+  bool apply_pending_update_if_ready();
 }  // namespace update

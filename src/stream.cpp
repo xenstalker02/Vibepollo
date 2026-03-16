@@ -476,6 +476,10 @@ namespace stream {
       std::unique_ptr<OpusDecoder, void (*)(OpusDecoder *)> decoder {nullptr, opus_decoder_destroy};
       int channels = 0;
       std::string prev_default_capture_id;  // Restored on session end
+      // Kept alive from session start so join() can restore the default capture
+      // device without re-invoking platf::audio_control() (which runs driver-install
+      // checks and can block for up to 2 minutes if VB-Cable is momentarily missing).
+      std::unique_ptr<platf::audio_control_t> audio_ctrl;
     } mic;
 
     std::uint32_t launch_session_id;
@@ -1252,6 +1256,22 @@ namespace stream {
         return;
       }
 
+      // Throttled diagnostics: log mic packet stats once per second.
+      static std::atomic<std::uint64_t> pkt_count {0};
+      static std::atomic<std::int64_t> last_log_ns {0};
+      auto now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                      std::chrono::steady_clock::now().time_since_epoch())
+                      .count();
+      auto seq = pkt_count.fetch_add(1, std::memory_order_relaxed) + 1;
+      auto prev_log = last_log_ns.load(std::memory_order_relaxed);
+      bool do_log = (now_ns - prev_log) >= 1'000'000'000LL &&
+                    last_log_ns.compare_exchange_weak(prev_log, now_ns, std::memory_order_relaxed);
+
+      if (do_log) {
+        BOOST_LOG(info) << "Mic pkt #"sv << seq
+                        << ": payload "sv << payload.size() << " bytes"sv;
+      }
+
       // The payload has already been decrypted by the IDX_ENCRYPTED outer handler.
       // Decode the Opus packet into interleaved float PCM samples.
       // 960 frames = 20 ms at 48 kHz, the maximum Moonlight uses.
@@ -1272,7 +1292,18 @@ namespace stream {
         return;
       }
 
-      session->mic.speaker->write(pcm.data(), (std::uint32_t) frames);
+      if (do_log) {
+        BOOST_LOG(info) << "Mic decoded "sv << frames << " frames ("sv
+                        << (frames * session->mic.channels * sizeof(float)) << " bytes PCM)"sv;
+      }
+
+      int write_ret = session->mic.speaker->write(pcm.data(), (std::uint32_t) frames);
+      if (do_log) {
+        if (write_ret < 0)
+          BOOST_LOG(error) << "Mic WASAPI write FAILED (ret="sv << write_ret << ")"sv;
+        else
+          BOOST_LOG(info) << "Mic WASAPI write OK"sv;
+      }
     });
 
     server->map(packetTypes[IDX_ENCRYPTED], [server](session_t *session, const std::string_view &payload) {
@@ -2237,6 +2268,11 @@ namespace stream {
       }
 
       session.shutdown_event->raise(true);
+      // Also raise controlEnd so join() doesn't block on controlEnd.view() waiting
+      // for the control broadcast thread's ping-timeout (which fires after ~15 s and
+      // would trip the 10-second watchdog).  graceful_stop() also raises controlEnd,
+      // but it bails early when state is already STOPPING, so stop() must do it too.
+      session.controlEnd.raise(true);
     }
 
     void graceful_stop(session_t &session) {
@@ -2296,11 +2332,14 @@ namespace stream {
       BOOST_LOG(debug) << "Resetting Input..."sv;
       input::reset(session.input);
 
-      // Restore the previous default audio input device (was switched on session start for mic passthrough)
+      // Restore the previous default audio input device (was switched on session start for mic passthrough).
+      // Reuse the already-initialised audio_ctrl rather than calling platf::audio_control() here;
+      // that factory runs driver-install checks (including a 2-minute process wait) which must not
+      // execute on the session-teardown path.
       if (!session.mic.prev_default_capture_id.empty()) {
-        auto audio_ctrl = platf::audio_control();
-        if (audio_ctrl) {
-          audio_ctrl->restore_default_capture_device(session.mic.prev_default_capture_id);
+        if (session.mic.audio_ctrl) {
+          session.mic.audio_ctrl->restore_default_capture_device(session.mic.prev_default_capture_id);
+          session.mic.audio_ctrl.reset();
         }
         session.mic.prev_default_capture_id.clear();
       }
@@ -2434,9 +2473,15 @@ namespace stream {
               session.mic.speaker = std::move(spk);
               session.mic.decoder.reset(dec);
               session.mic.channels = MIC_CHANNELS;
+              // Store audio_ctrl so join() can restore the default capture device without
+              // re-invoking platf::audio_control() (which runs blocking driver-install checks).
+              session.mic.audio_ctrl = std::move(audio_ctrl);
               BOOST_LOG(info) << "Mic passthrough active → \""sv << config::audio.mic_sink << '"';
-              // Switch the Windows default audio input to "CABLE Output" so host apps see the client's mic
-              session.mic.prev_default_capture_id = audio_ctrl->switch_default_capture_device("CABLE Output");
+              // Switch the Windows default audio input to the configured capture device so host apps see the client's mic.
+              // The device name is read from config (mic_capture_device), defaulting to "CABLE Output (VB-Audio Virtual Cable)".
+              if (!config::audio.mic_capture_device.empty()) {
+                session.mic.prev_default_capture_id = session.mic.audio_ctrl->switch_default_capture_device(config::audio.mic_capture_device);
+              }
             }
           }
         }

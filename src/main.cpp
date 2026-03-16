@@ -277,6 +277,14 @@ int main(int argc, char *argv[]) {
 
   task_pool.start(1);
 
+  // Apply any pending auto-downloaded update before normal startup.
+  // If a downloaded installer is ready, launch it silently and exit so the installer
+  // can replace running binaries. Never auto-apply during a stream (session_count > 0
+  // at this point would be unusual, but guard anyway).
+  if (update::apply_pending_update_if_ready()) {
+    return 0;
+  }
+
 #if defined SUNSHINE_TRAY && SUNSHINE_TRAY >= 1
   // create tray thread and detach it if enabled in config
   if (config::sunshine.system_tray) {
