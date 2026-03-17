@@ -768,14 +768,8 @@ namespace platf::audio {
       DWORD channel_mask = (channel_count == 2) ? waveformat_mask_stereo : SPEAKER_FRONT_CENTER;
       WAVEFORMATEXTENSIBLE waveformat = create_waveformat(sample_format_e::f32, (WORD) channel_count, channel_mask);
 
-      // Request a 200ms buffer so we always have headroom for a full Opus frame (960 samples =
-      // 20ms).  With hnsBufferDuration=0 WASAPI picks the device minimum (often 10ms / 480
-      // frames for VB-CABLE), which means GetCurrentPadding() returns values that leave fewer
-      // than 960 available frames, forcing partial or dropped writes on every packet.
-      // 200ms = 2,000,000 × 100-nanosecond units.  WASAPI rounds up to the next device period
-      // so the actual allocation may be slightly larger; we only write exactly frame_count
-      // frames at a time so this adds no perceptible latency in steady state.
-      constexpr REFERENCE_TIME k_mic_buffer_duration = 2000000LL;
+      // 100ms buffer — 5x headroom for Opus frames (20ms each)
+      constexpr REFERENCE_TIME k_mic_buffer_duration = 1000000LL;
       status = audio_client->Initialize(
         AUDCLNT_SHAREMODE_SHARED,
         AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY,
@@ -1370,6 +1364,41 @@ namespace platf::audio {
       for (int x = 0; x < (int) ERole_enum_count; ++x)
         policy->SetDefaultEndpoint(wide.c_str(), (ERole) x);
       BOOST_LOG(info) << "Restored default audio input device";
+    }
+
+    std::string get_current_default_capture_name() override {
+      device_t dev;
+      if (FAILED(device_enum->GetDefaultAudioEndpoint(eCapture, eConsole, &dev))) return {};
+      prop_t prop;
+      if (FAILED(dev->OpenPropertyStore(STGM_READ, &prop))) return {};
+      prop_var_t pv;
+      if (SUCCEEDED(prop->GetValue(PKEY_Device_FriendlyName, &pv.prop)) && pv.prop.vt == VT_LPWSTR)
+        return to_utf8(pv.prop.pwszVal);
+      return {};
+    }
+
+    void reset_default_capture_to_first_real() override {
+      collection_t collection;
+      if (FAILED(device_enum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &collection))) return;
+      UINT count = 0;
+      collection->GetCount(&count);
+      for (UINT i = 0; i < count; ++i) {
+        device_t dev;
+        if (FAILED(collection->Item(i, &dev))) continue;
+        prop_t prop;
+        if (FAILED(dev->OpenPropertyStore(STGM_READ, &prop))) continue;
+        prop_var_t pv;
+        if (FAILED(prop->GetValue(PKEY_Device_FriendlyName, &pv.prop)) || pv.prop.vt != VT_LPWSTR) continue;
+        std::string name = to_utf8(pv.prop.pwszVal);
+        if (name.find("CABLE") != std::string::npos) continue;
+        wstring_t id;
+        if (FAILED(dev->GetId(&id))) continue;
+        for (int x = 0; x < (int) ERole_enum_count; ++x)
+          policy->SetDefaultEndpoint(id.get(), (ERole) x);
+        BOOST_LOG(info) << "Startup crash recovery: reset default capture to: " << name;
+        return;
+      }
+      BOOST_LOG(warning) << "Startup crash recovery: no non-CABLE capture device found";
     }
 
     bool install_vbcable() {

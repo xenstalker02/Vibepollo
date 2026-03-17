@@ -588,6 +588,20 @@ namespace platf {
       (void) prev_id;
     }
 
+    /**
+     * @brief Get the friendly name of the current Windows default capture endpoint.
+     * Returns empty string on non-Windows or on failure.
+     */
+    virtual std::string get_current_default_capture_name() {
+      return {};
+    }
+
+    /**
+     * @brief Reset the default audio capture device to the first real (non-CABLE)
+     * capture device found. Used for crash recovery at startup. No-op on non-Windows.
+     */
+    virtual void reset_default_capture_to_first_real() {}
+
     virtual ~audio_control_t() = default;
   };
 
