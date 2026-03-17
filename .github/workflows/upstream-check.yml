@@ -1,0 +1,27 @@
+name: Check upstream for new commits
+on:
+  schedule:
+    - cron: '0 9 * * 1'  # Every Monday at 9am UTC
+  workflow_dispatch:
+
+jobs:
+  check-upstream:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Add upstream remote
+        run: git remote add upstream https://github.com/Nonary/vibepollo.git
+      - name: Fetch upstream
+        run: git fetch upstream
+      - name: Check for new upstream commits
+        run: |
+          NEW=$(git log upstream/master ^origin/master --oneline | wc -l)
+          echo "New upstream commits: $NEW"
+          if [ "$NEW" -gt "0" ]; then
+            echo "::warning::$NEW new commit(s) from Nonary/vibepollo upstream not yet merged"
+            git log upstream/master ^origin/master --oneline
+          else
+            echo "Fork is up to date with upstream"
+          fi
