@@ -1476,6 +1476,51 @@ namespace platf {
       }
     }
 
+    // Log VB-Audio CABLE version at startup for diagnostics.
+    if (!config::audio.mic_sink.empty()) {
+      // Read driver version from HKLM\SYSTEM\CurrentControlSet\services\VBAudioVACMME
+      std::string cable_version = "unknown";
+      HKEY hKey;
+      if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+            L"SYSTEM\\CurrentControlSet\\services\\VBAudioVACMME",
+            0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        wchar_t image_path[MAX_PATH] = {};
+        DWORD sz = sizeof(image_path);
+        DWORD type = 0;
+        if (RegQueryValueExW(hKey, L"ImagePath", nullptr, &type,
+              reinterpret_cast<LPBYTE>(image_path), &sz) == ERROR_SUCCESS) {
+          // Resolve SystemRoot variable in path
+          std::wstring path(image_path);
+          WCHAR sys_root[MAX_PATH];
+          if (ExpandEnvironmentStringsW(path.c_str(), sys_root, MAX_PATH)) {
+            DWORD handle = 0;
+            DWORD info_size = GetFileVersionInfoSizeW(sys_root, &handle);
+            if (info_size > 0) {
+              std::vector<BYTE> buf(info_size);
+              if (GetFileVersionInfoW(sys_root, handle, info_size, buf.data())) {
+                VS_FIXEDFILEINFO *ffi = nullptr;
+                UINT ffi_len = 0;
+                if (VerQueryValueW(buf.data(), L"\\",
+                      reinterpret_cast<LPVOID *>(&ffi), &ffi_len) && ffi) {
+                  cable_version =
+                    std::to_string(HIWORD(ffi->dwFileVersionMS)) + "." +
+                    std::to_string(LOWORD(ffi->dwFileVersionMS)) + "." +
+                    std::to_string(HIWORD(ffi->dwFileVersionLS)) + "." +
+                    std::to_string(LOWORD(ffi->dwFileVersionLS));
+                }
+              }
+            }
+          }
+        }
+        RegCloseKey(hKey);
+      }
+      if (cable_version != "unknown") {
+        BOOST_LOG(info) << "VB-Audio Virtual Cable version " << cable_version << " detected";
+      } else if (control->find_device_id(control->match_all_fields(from_utf8(config::audio.mic_sink)))) {
+        BOOST_LOG(info) << "VB-Audio Virtual Cable detected (version unknown)";
+      }
+    }
+
     return control;
   }
 

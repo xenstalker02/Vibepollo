@@ -62,3 +62,26 @@ venv/
 _codeql_detected_source_root
 
 build-msvc
+
+# Project-local scripts (not for distribution)
+fix_apps.ps1
+fix_firewall.ps1
+cleanup_apollo.ps1
+watchdog.vbs
+*.bak
+audio_errors.txt
+build_out.txt
+build_output.txt
+bundle_drivers.ps1
+diag.ps1
+elevate_copy.ps1
+elevate_copy2.ps1
+elevate_done.txt
+extract_vbcable.ps1
+inspect_vbcable.ps1
+patch_audio.ps1
+sched_copy.ps1
+tmp_install.ps1
+verify_deploy.ps1
+verify_match.ps1
+sunshine_err.txt

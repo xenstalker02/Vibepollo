@@ -1,7 +1,11 @@
 # common target definitions
 # this file will also load platform specific macros
 
-add_executable(sunshine ${SUNSHINE_TARGET_FILES})
+if(WIN32)
+    add_executable(sunshine WIN32 ${SUNSHINE_TARGET_FILES})
+else()
+    add_executable(sunshine ${SUNSHINE_TARGET_FILES})
+endif()
 foreach(dep ${SUNSHINE_TARGET_DEPENDENCIES})
     add_dependencies(sunshine ${dep})  # compile these before sunshine
 endforeach()

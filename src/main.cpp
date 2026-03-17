@@ -37,6 +37,7 @@
   #include "platform/windows/misc.h"
   #include "platform/windows/display_helper_integration.h"
   #include "platform/windows/virtual_display.h"
+  #include <shellapi.h>
 #endif
 
 #define PROBE_DISPLAY_UUID "38F72B96-B00C-4F21-8B6C-E1BFF1602B0E"
@@ -155,6 +156,27 @@ int main(int argc, char *argv[]) {
   // if anything is logged prior to this point, it will appear in stdout, but not in the log viewer in the UI
   // the version should be printed to the log before anything else
   BOOST_LOG(info) << PROJECT_NAME << " version: " << PROJECT_VERSION << " commit: " << PROJECT_VERSION_COMMIT;
+
+  // Log rotation: keep the 10 most recent log files, delete the rest.
+  {
+    namespace fs = std::filesystem;
+    auto log_dir = platf::appdata() / "logs";
+    if (fs::exists(log_dir)) {
+      std::vector<fs::directory_entry> log_files;
+      for (auto &entry : fs::directory_iterator(log_dir)) {
+        if (entry.is_regular_file()) log_files.push_back(entry);
+      }
+      std::sort(log_files.begin(), log_files.end(), [](const fs::directory_entry &a, const fs::directory_entry &b) {
+        return a.last_write_time() > b.last_write_time();
+      });
+      constexpr std::size_t k_max_logs = 10;
+      for (std::size_t i = k_max_logs; i < log_files.size(); ++i) {
+        std::error_code ec;
+        fs::remove(log_files[i].path(), ec);
+        if (!ec) BOOST_LOG(debug) << "Log rotation: removed " << log_files[i].path().filename().string();
+      }
+    }
+  }
 
   // Log publisher metadata
   log_publisher_data();
@@ -290,6 +312,16 @@ int main(int argc, char *argv[]) {
   if (config::sunshine.system_tray) {
     system_tray::run_tray();
   }
+
+#ifdef _WIN32
+  // First-run: open web UI in browser so users can complete initial setup
+  // (set credentials, configure apps, etc.) without manually navigating there.
+  if (!std::filesystem::exists(config::sunshine.credentials_file)) {
+    BOOST_LOG(info) << "First run detected — opening web UI in browser";
+    ShellExecuteW(nullptr, L"open", L"https://localhost:47990", nullptr, nullptr, SW_SHOWNORMAL);
+  }
+#endif
+
   // Schedule periodic update checks if configured
   if (config::sunshine.update_check_interval_seconds > 0) {
     // Trigger an immediate update check on startup so users don't wait
