@@ -10,6 +10,30 @@ Built with [Claude Code](https://claude.ai/claude-code).
 
 ---
 
+## Quick Install
+
+See [INSTALL.md](INSTALL.md) for a step-by-step guide, or:
+
+1. Download the latest release from [Releases](https://github.com/xenstalker02/Vibepollo/releases)
+2. Extract and run `sunshine.exe`
+3. Open `https://localhost:47990` to set up admin credentials
+4. Pair from your Vibelight/Moonlight client
+
+---
+
+## What's Different from Sunshine/Apollo
+
+Vibepollo is a fork of Apollo/Sunshine with the following additions:
+
+- **Mic passthrough**: real-time forwarding of client microphone audio to the Windows host via VB-Cable, so apps like Discord, voice chat in games, etc. can use the client's mic as if it were local
+- **Graceful no-mic handling**: clean warnings and session continuation when no capture device is present
+- **WASAPI device recovery**: automatic detection and clean shutdown when audio devices disappear mid-session
+- **Startup config validation**: enumerates WASAPI capture devices at launch and warns if the configured mic device is not found
+- **Auto-update**: checks `xenstalker02/Vibepollo` releases and downloads stable versions in the background
+- **VB-Cable auto-install**: installs the virtual audio cable driver on first run if not present
+
+---
+
 ## Features
 
 - All standard Sunshine/Apollo game streaming features (NVENC/VAAPI/software encoding, HDR, adaptive bitrate, etc.)
@@ -73,6 +97,8 @@ Start-Process -FilePath '.\sunshine.exe' -WorkingDirectory (Get-Location)
 ---
 
 ## Configuration
+
+See [`sunshine.conf.template`](sunshine.conf.template) for all available options with descriptions.
 
 Vibepollo reads its config from `config\sunshine.conf` (relative to the working directory).
 
