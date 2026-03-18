@@ -107,6 +107,9 @@ using namespace std::literals;
 
 namespace stream {
 
+  // Tracks whether any mic packet has been received (for timeout diagnostics)
+  std::atomic<bool> mic_first_packet_received {false};
+
   enum class socket_e : int {
     video,  ///< Video
     audio  ///< Audio
@@ -1256,6 +1259,11 @@ namespace stream {
         return;
       }
 
+      // Track first mic packet arrival for timeout diagnostics
+      if (!stream::mic_first_packet_received.exchange(true, std::memory_order_relaxed)) {
+        BOOST_LOG(info) << "[mic] First mic packet received from client"sv;
+      }
+
       // Throttled diagnostics: log mic packet stats once per second.
       static std::atomic<std::uint64_t> pkt_count {0};
       static std::atomic<std::int64_t> last_log_ns {0};
@@ -1298,6 +1306,12 @@ namespace stream {
       }
 
       int write_ret = session->mic.speaker->write(pcm.data(), (std::uint32_t) frames);
+      if (write_ret == -2) {
+        // WASAPI device invalidated — stop mic render for this session
+        BOOST_LOG(error) << "[mic] WASAPI device disappeared — disabling mic render for this session"sv;
+        session->mic.speaker.reset();
+        return;
+      }
       if (do_log) {
         if (write_ret < 0)
           BOOST_LOG(error) << "Mic WASAPI write FAILED (ret="sv << write_ret << ")"sv;
@@ -2483,8 +2497,24 @@ namespace stream {
                 session.mic.prev_default_capture_id = session.mic.audio_ctrl->switch_default_capture_device(config::audio.mic_capture_device);
               }
             }
+          } else {
+            BOOST_LOG(warning) << "[mic] No capture device found — mic passthrough disabled for this session"sv;
           }
+        } else {
+          BOOST_LOG(warning) << "[mic] No capture device found — mic passthrough disabled for this session"sv;
         }
+      } else {
+        BOOST_LOG(info) << "[mic] mic_sink not configured — mic passthrough disabled for this session"sv;
+      }
+
+      // Mic packet timeout: if mic passthrough is active but no packets arrive within 10 seconds, log info.
+      if (session.mic.speaker && session.mic.decoder) {
+        std::thread([]{
+          std::this_thread::sleep_for(10s);
+          if (!stream::mic_first_packet_received.load(std::memory_order_relaxed)) {
+            BOOST_LOG(info) << "[mic] No mic packets received — client may not support mic passthrough"sv;
+          }
+        }).detach();
       }
 
       session.audioThread = std::thread {audioThread, &session};

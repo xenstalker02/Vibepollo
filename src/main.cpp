@@ -10,6 +10,7 @@
 #include <iostream>
 
 // local includes
+#include "config.h"
 #include "confighttp.h"
 #include "entry_handler.h"
 #include "globals.h"
@@ -38,6 +39,8 @@
   #include "platform/windows/display_helper_integration.h"
   #include "platform/windows/virtual_display.h"
   #include <shellapi.h>
+  #include <mmdeviceapi.h>
+  #include <functiondiscoverykeys_devpkey.h>
 #endif
 
 #define PROBE_DISPLAY_UUID "38F72B96-B00C-4F21-8B6C-E1BFF1602B0E"
@@ -155,7 +158,65 @@ int main(int argc, char *argv[]) {
   // logging can begin at this point
   // if anything is logged prior to this point, it will appear in stdout, but not in the log viewer in the UI
   // the version should be printed to the log before anything else
-  BOOST_LOG(info) << PROJECT_NAME << " version: " << PROJECT_VERSION << " commit: " << PROJECT_VERSION_COMMIT;
+  BOOST_LOG(info) << "[vibepollo] Version " << PROJECT_VERSION << " starting (commit: " << PROJECT_VERSION_COMMIT << ")";
+
+  // Log mic passthrough configuration for diagnostics
+  if (!config::audio.mic_sink.empty()) {
+    BOOST_LOG(info) << "[mic] mic_sink = \"" << config::audio.mic_sink << "\"";
+    BOOST_LOG(info) << "[mic] mic_capture_device = \"" << config::audio.mic_capture_device << "\"";
+  } else {
+    BOOST_LOG(info) << "[mic] mic_sink not configured — mic passthrough will be disabled";
+  }
+
+#ifdef _WIN32
+  // Validate mic_capture_device against available WASAPI capture devices at startup.
+  // Uses CoInitializeEx for a short-lived COM scope to enumerate capture devices.
+  if (!config::audio.mic_capture_device.empty()) {
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    IMMDeviceEnumerator *pEnum = nullptr;
+    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void **) &pEnum);
+    if (SUCCEEDED(hr) && pEnum) {
+      IMMDeviceCollection *pCollection = nullptr;
+      hr = pEnum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &pCollection);
+      if (SUCCEEDED(hr) && pCollection) {
+        UINT count = 0;
+        pCollection->GetCount(&count);
+        bool found = false;
+        std::string device_list;
+        for (UINT i = 0; i < count; ++i) {
+          IMMDevice *pDev = nullptr;
+          if (SUCCEEDED(pCollection->Item(i, &pDev)) && pDev) {
+            IPropertyStore *pProps = nullptr;
+            if (SUCCEEDED(pDev->OpenPropertyStore(STGM_READ, &pProps)) && pProps) {
+              PROPVARIANT varName;
+              PropVariantInit(&varName);
+              if (SUCCEEDED(pProps->GetValue(PKEY_Device_FriendlyName, &varName)) && varName.pwszVal) {
+                int len = WideCharToMultiByte(CP_UTF8, 0, varName.pwszVal, -1, nullptr, 0, nullptr, nullptr);
+                std::string name(len - 1, '\0');
+                WideCharToMultiByte(CP_UTF8, 0, varName.pwszVal, -1, name.data(), len, nullptr, nullptr);
+                if (!device_list.empty()) device_list += ", ";
+                device_list += "\"" + name + "\"";
+                if (name.find(config::audio.mic_capture_device) != std::string::npos) found = true;
+              }
+              PropVariantClear(&varName);
+              pProps->Release();
+            }
+            pDev->Release();
+          }
+        }
+        if (!found) {
+          BOOST_LOG(warning) << "[mic] WARNING: mic_capture_device '" << config::audio.mic_capture_device
+                             << "' not found. Available devices: [" << device_list << "]";
+        } else {
+          BOOST_LOG(info) << "[mic] mic_capture_device '" << config::audio.mic_capture_device << "' found among capture devices";
+        }
+        pCollection->Release();
+      }
+      pEnum->Release();
+    }
+    CoUninitialize();
+  }
+#endif
 
   // Log rotation: keep the 10 most recent log files, delete the rest.
   {

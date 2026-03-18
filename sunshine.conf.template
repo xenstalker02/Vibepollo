@@ -1,0 +1,90 @@
+# ============================================================================
+# Vibepollo Configuration Template (sunshine.conf)
+# ============================================================================
+# Copy this file to your Vibepollo config directory as sunshine.conf and
+# uncomment/edit the options you want to change.
+#
+# Config directory (Windows): %PROGRAMDATA%\Vibepollo\config\
+# ============================================================================
+
+# ---- General ----
+
+# The name this host advertises to Moonlight/Vibelight clients.
+# Default: your computer's hostname
+# sunshine_name = MyPC
+
+# ---- Audio ----
+
+# Primary audio sink device name (speakers/headphones).
+# Leave empty for the system default.
+# audio_sink =
+
+# Virtual audio sink for when host audio playback is disabled.
+# audio_sink is preferred when set.
+# virtual_sink =
+
+# ---- Mic Passthrough (Vibepollo-specific) ----
+
+# Device name for upstream mic passthrough output.
+# This is the WASAPI render endpoint where decoded client mic audio is written.
+# For VB-Cable, use "CABLE Input".
+# Set to empty string to disable mic passthrough entirely.
+# mic_sink = CABLE Input
+
+# Capture device to set as Windows default input during mic passthrough.
+# This should be the recording side of the virtual cable so that host apps
+# (Discord, etc.) pick up the client's mic audio.
+# For VB-Cable, use "CABLE Output (VB-Audio Virtual Cable)".
+# mic_capture_device = CABLE Output (VB-Audio Virtual Cable)
+
+# Automatically switch audio capture device when stream starts.
+# auto_capture_sink = enabled
+
+# Enable or disable audio streaming entirely.
+# stream_audio = enabled
+
+# Install VB-Cable virtual audio driver if not already present.
+# install_vbcable = enabled
+
+# ---- Network ----
+
+# Port for the HTTPS web UI.
+# port = 47990
+
+# Ping timeout in milliseconds.
+# ping_timeout = 10000
+
+# ---- Video ----
+
+# Limit framerate to the client-requested value.
+# limit_framerate = enabled
+
+# Quantization parameter for software encoding.
+# qp = 28
+
+# Minimum encoder threads.
+# min_threads = 2
+
+# Software encoder preset (ultrafast, superfast, veryfast, faster, fast, medium).
+# sw_preset = superfast
+
+# ---- NVENC (NVIDIA) ----
+
+# Enable spatial adaptive quantization for NVENC.
+# nvenc_spatial_aq = disabled
+
+# Use CAVLC instead of CABAC for H.264 (lower quality, lower latency).
+# nvenc_h264_cavlc = disabled
+
+# ---- Input ----
+
+# Keybinding to toggle mouse capture.
+# keybinding = 0x10+0x12+0x4e
+
+# ---- Miscellaneous ----
+
+# Minimum log level: verbose, debug, info, warning, error, fatal, none
+# min_log_level = info
+
+# Log file path. Empty = default location.
+# log_path =

@@ -700,6 +700,10 @@ namespace platf::audio {
     int write(const float *samples, std::uint32_t frame_count) override {
       UINT32 padding;
       auto status = audio_client->GetCurrentPadding(&padding);
+      if (status == AUDCLNT_E_DEVICE_INVALIDATED) {
+        BOOST_LOG(error) << "[mic] WASAPI device invalidated (disconnected) — stopping mic render"sv;
+        return -2;
+      }
       if (FAILED(status)) {
         BOOST_LOG(error) << "Mic render: GetCurrentPadding failed [0x"sv << util::hex(status).to_string_view() << ']';
         return -1;
@@ -719,6 +723,10 @@ namespace platf::audio {
 
       BYTE *buf;
       status = audio_render->GetBuffer(to_write, &buf);
+      if (status == AUDCLNT_E_DEVICE_INVALIDATED) {
+        BOOST_LOG(error) << "[mic] WASAPI device invalidated during GetBuffer — stopping mic render"sv;
+        return -2;
+      }
       if (FAILED(status)) {
         BOOST_LOG(error) << "Mic render: GetBuffer failed [0x"sv << util::hex(status).to_string_view() << ']';
         return -1;
@@ -726,6 +734,10 @@ namespace platf::audio {
 
       std::memcpy(buf, samples, to_write * channels * sizeof(float));
       status = audio_render->ReleaseBuffer(to_write, 0);
+      if (status == AUDCLNT_E_DEVICE_INVALIDATED) {
+        BOOST_LOG(error) << "[mic] WASAPI device invalidated during ReleaseBuffer — stopping mic render"sv;
+        return -2;
+      }
       if (FAILED(status)) {
         BOOST_LOG(error) << "Mic render: ReleaseBuffer failed [0x"sv << util::hex(status).to_string_view() << ']';
         return -1;
