@@ -135,3 +135,14 @@ mic_capture_device = CABLE Output (VB-Audio Virtual Cable)
 - Multi-platform client support (Windows, macOS, Android via Vibelight)
 - Configurable Opus codec settings (bitrate, channels)
 - End-to-end latency display in tray
+
+---
+
+## Related Projects
+- [logabell/Apollo](https://github.com/logabell/Apollo) -- parallel server-side mic passthrough implementation
+- [logabell/moonlight-qt-mic](https://github.com/logabell/moonlight-qt-mic) -- parallel client-side mic passthrough
+- [Nonary/vibepollo](https://github.com/Nonary/vibepollo) -- our direct upstream
+- [LizardByte/Sunshine](https://github.com/LizardByte/Sunshine) -- main Sunshine project
+
+## Contributing
+PRs are welcome. Our goal is to contribute mic passthrough upstream to Nonary/vibepollo after community testing. See [CONTRIBUTING.md](CONTRIBUTING.md) and [UPSTREAM.md](UPSTREAM.md).

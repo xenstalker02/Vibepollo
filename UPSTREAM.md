@@ -1,13 +1,17 @@
-# Upstream Sync
+# Upstream Sync Guide
 
-This fork is based on [Nonary/vibepollo](https://github.com/Nonary/vibepollo).
+Vibepollo is a fork of [Nonary/vibepollo](https://github.com/Nonary/vibepollo).
+
+## Automated Sync
+A GitHub Actions workflow runs every Monday and opens an issue if new upstream commits exist.
+Check for the `upstream-sync` label in Issues.
 
 ## Our changes (on top of upstream)
 
 All mic passthrough functionality lives in:
 - `src/stream.cpp` — 0x3003 packet handler, mic render thread, session teardown
 - `src/platform/windows/audio.cpp` — WASAPI mic render client, VB-Cable version logging
-- `src/config.h` / `src/config.cpp` — mic_sink, mic_capture_device config options
+- `src/config.h` / `src/config.cpp` — mic_sink, mic_capture_device, mic_buffer_ms config options
 - `src/update.cpp` / `src/update.h` — auto-update targeting xenstalker02/Vibepollo
 - `src/main.cpp` — log rotation, first-run browser launch
 - `cmake/targets/common.cmake` — WIN32 subsystem (no console window)
