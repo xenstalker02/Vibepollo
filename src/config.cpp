@@ -801,6 +801,7 @@ namespace config {
     {},  // virtual_sink
     "CABLE Input",  // mic_sink
     "CABLE Output (VB-Audio Virtual Cable)",  // mic_capture_device
+    30,  // mic_buffer_ms
     true,  // stream audio
     true,  // install_steam_drivers
     true,  // install_vbcable
@@ -1650,6 +1651,7 @@ namespace config {
     string_f(vars, "virtual_sink", audio.virtual_sink);
     string_f(vars, "mic_sink", audio.mic_sink);
     string_f(vars, "mic_capture_device", audio.mic_capture_device);
+    int_between_f(vars, "mic_buffer_ms", audio.mic_buffer_ms, {10, 200});
     bool_f(vars, "stream_audio", audio.stream);
     bool_f(vars, "install_steam_audio_drivers", audio.install_steam_drivers);
     bool_f(vars, "install_vbcable", audio.install_vbcable);

@@ -780,8 +780,9 @@ namespace platf::audio {
       DWORD channel_mask = (channel_count == 2) ? waveformat_mask_stereo : SPEAKER_FRONT_CENTER;
       WAVEFORMATEXTENSIBLE waveformat = create_waveformat(sample_format_e::f32, (WORD) channel_count, channel_mask);
 
-      // 100ms buffer — 5x headroom for Opus frames (20ms each)
-      constexpr REFERENCE_TIME k_mic_buffer_duration = 1000000LL;
+      // Buffer duration from config (default 30ms). REFERENCE_TIME is in 100-ns units.
+      REFERENCE_TIME k_mic_buffer_duration = (REFERENCE_TIME) config::audio.mic_buffer_ms * 10000LL;
+      BOOST_LOG(info) << "[mic] WASAPI buffer: "sv << config::audio.mic_buffer_ms << "ms"sv;
       status = audio_client->Initialize(
         AUDCLNT_SHAREMODE_SHARED,
         AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY,
@@ -933,10 +934,23 @@ namespace platf::audio {
     std::unique_ptr<platf::speaker_t> virtual_microphone(const std::string &device_name, int channels, std::uint32_t sample_rate) override {
       // "CABLE Input" is a render (playback) endpoint from WASAPI's perspective,
       // so find_device_id (which enumerates eRender) will locate it correctly.
+      //
+      // Fallback priority chain:
+      //   1. Configured mic_sink (e.g. "CABLE Input")
+      //   2. Steam Streaming Microphone (3-field match)
+      //   3. Give up — log and return nullptr
       auto match_list = match_all_fields(from_utf8(device_name));
       auto matched = find_device_id(match_list);
       if (!matched) {
-        BOOST_LOG(warning) << "Mic passthrough: couldn't find output device \""sv << device_name << "\". Is VB-Audio CABLE installed?"sv;
+        BOOST_LOG(info) << "[mic] configured sink \""sv << device_name
+                        << "\" not found — trying Steam Streaming Microphone"sv;
+        matched = find_device_id(match_steam_microphone());
+        if (matched) {
+          BOOST_LOG(info) << "[mic] using Steam Streaming Microphone as mic sink fallback"sv;
+        }
+      }
+      if (!matched) {
+        BOOST_LOG(warning) << "[mic] WARNING: no suitable mic sink — mic passthrough disabled for this session"sv;
         return nullptr;
       }
 
@@ -1059,6 +1073,15 @@ namespace platf::audio {
     audio_control_t::match_fields_list_t match_steam_speakers() {
       return {
         {match_field_e::adapter_friendly_name, L"Steam Streaming Speakers"}
+      };
+    }
+
+    // Steam Streaming Microphone fallback matching (Logan's 3-field pattern)
+    audio_control_t::match_fields_list_t match_steam_microphone() {
+      return {
+        {match_field_e::device_friendly_name, L"Speakers (Steam Streaming Microphone)"},
+        {match_field_e::adapter_friendly_name, L"Steam Streaming Microphone"},
+        {match_field_e::device_description, L"Steam Streaming Microphone"},
       };
     }
 

@@ -37,6 +37,15 @@
 # For VB-Cable, use "CABLE Output (VB-Audio Virtual Cable)".
 # mic_capture_device = CABLE Output (VB-Audio Virtual Cable)
 
+# WASAPI render buffer duration in ms for mic passthrough.
+# Lower values reduce latency, higher values reduce underruns.
+# Range: 10-200, default: 30
+# mic_buffer_ms = 30
+
+# Mic sink fallback: if the configured mic_sink is not found, Vibepollo will
+# automatically try Steam Streaming Microphone (3-field match) before disabling
+# mic passthrough. No additional configuration is needed for this fallback.
+
 # Automatically switch audio capture device when stream starts.
 # auto_capture_sink = enabled
 
