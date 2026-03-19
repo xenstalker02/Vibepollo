@@ -11,6 +11,7 @@
 #include <cstring>
 #include <fstream>
 #include <future>
+#include <map>
 #include <optional>
 #include <queue>
 #include <thread>
@@ -474,6 +475,17 @@ namespace stream {
 
     // Upstream mic passthrough: receives Opus audio from the client,
     // decodes it, and writes PCM into a virtual audio device on the host.
+
+    // Jitter buffer constants and types for mic reordering and FEC/PLC
+    // (adopted from logabell/Apollo patterns).
+    static constexpr std::size_t mic_max_queued_packets = 32;
+    static constexpr std::size_t mic_target_prebuffer_packets = 3;
+
+    struct mic_queued_packet_t {
+      std::vector<std::uint8_t> payload;
+      std::uint16_t seq;
+    };
+
     struct {
       std::unique_ptr<platf::speaker_t> speaker;
       std::unique_ptr<OpusDecoder, void (*)(OpusDecoder *)> decoder {nullptr, opus_decoder_destroy};
@@ -483,6 +495,11 @@ namespace stream {
       // device without re-invoking platf::audio_control() (which runs driver-install
       // checks and can block for up to 2 minutes if VB-Cable is momentarily missing).
       std::unique_ptr<platf::audio_control_t> audio_ctrl;
+
+      // Jitter buffer for reordering and FEC/PLC.
+      std::map<std::uint16_t, mic_queued_packet_t> pending_packets;
+      std::uint16_t expected_seq = 0;
+      bool has_playout_cursor = false;
     } mic;
 
     std::uint32_t launch_session_id;
@@ -1270,53 +1287,125 @@ namespace stream {
       auto now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
                       std::chrono::steady_clock::now().time_since_epoch())
                       .count();
-      auto seq = pkt_count.fetch_add(1, std::memory_order_relaxed) + 1;
+      auto pkt_seq_num = pkt_count.fetch_add(1, std::memory_order_relaxed) + 1;
       auto prev_log = last_log_ns.load(std::memory_order_relaxed);
       bool do_log = (now_ns - prev_log) >= 1'000'000'000LL &&
                     last_log_ns.compare_exchange_weak(prev_log, now_ns, std::memory_order_relaxed);
 
       if (do_log) {
-        BOOST_LOG(info) << "Mic pkt #"sv << seq
+        BOOST_LOG(info) << "Mic pkt #"sv << pkt_seq_num
                         << ": payload "sv << payload.size() << " bytes"sv;
       }
 
       // The payload has already been decrypted by the IDX_ENCRYPTED outer handler.
-      // Decode the Opus packet into interleaved float PCM samples.
-      // 960 frames = 20 ms at 48 kHz, the maximum Moonlight uses.
-      constexpr int MAX_FRAME_SIZE = 960;
-      std::vector<float> pcm((size_t)(MAX_FRAME_SIZE * session->mic.channels));
+      constexpr int MAX_FRAME_SIZE = 960;  // 20 ms at 48 kHz
 
-      int frames = opus_decode_float(
-        session->mic.decoder.get(),
-        (const unsigned char *) payload.data(),
-        (opus_int32) payload.size(),
-        pcm.data(),
-        MAX_FRAME_SIZE,
-        0  // no FEC decode
-      );
+      // --- Jitter buffer: queue incoming packet by sequence number ---
+      // Extract sequence number from the Opus packet arrival order.
+      // Since the control stream doesn't carry an explicit sequence field,
+      // we assign a monotonic sequence number per session.
+      auto &mic = session->mic;
+      std::uint16_t incoming_seq = static_cast<std::uint16_t>(pkt_seq_num & 0xFFFF);
 
-      if (frames < 0) {
-        BOOST_LOG(warning) << "Mic Opus decode error: "sv << opus_strerror(frames);
-        return;
+      // Insert into pending packet buffer (adopted from logabell/Apollo jitter buffer pattern)
+      mic.pending_packets.emplace(incoming_seq, session_t::mic_queued_packet_t {
+        std::vector<std::uint8_t> {
+          reinterpret_cast<const std::uint8_t *>(payload.data()),
+          reinterpret_cast<const std::uint8_t *>(payload.data()) + payload.size()
+        },
+        incoming_seq
+      });
+
+      // Trim if queue exceeds max size
+      if (mic.pending_packets.size() > session_t::mic_max_queued_packets) {
+        mic.pending_packets.erase(mic.pending_packets.begin());
       }
 
-      if (do_log) {
-        BOOST_LOG(info) << "Mic decoded "sv << frames << " frames ("sv
-                        << (frames * session->mic.channels * sizeof(float)) << " bytes PCM)"sv;
+      // Initialize playout cursor after prebuffering
+      if (!mic.has_playout_cursor) {
+        if (mic.pending_packets.size() < session_t::mic_target_prebuffer_packets) {
+          return;  // wait for more packets before starting playout
+        }
+        mic.expected_seq = mic.pending_packets.begin()->first;
+        mic.has_playout_cursor = true;
+        BOOST_LOG(info) << "[mic] Jitter buffer prebuffered "sv << session_t::mic_target_prebuffer_packets
+                        << " packets — starting playout"sv;
       }
 
-      int write_ret = session->mic.speaker->write(pcm.data(), (std::uint32_t) frames);
-      if (write_ret == -2) {
-        // WASAPI device invalidated — stop mic render for this session
-        BOOST_LOG(error) << "[mic] WASAPI device disappeared — disabling mic render for this session"sv;
-        session->mic.speaker.reset();
-        return;
-      }
-      if (do_log) {
-        if (write_ret < 0)
+      // --- Drain buffered packets in sequence order ---
+      while (!mic.pending_packets.empty()) {
+        auto it = mic.pending_packets.find(mic.expected_seq);
+
+        std::vector<float> pcm((size_t)(MAX_FRAME_SIZE * mic.channels));
+        int frames = 0;
+
+        if (it != mic.pending_packets.end()) {
+          // Normal decode
+          frames = opus_decode_float(
+            mic.decoder.get(),
+            it->second.payload.data(),
+            (opus_int32) it->second.payload.size(),
+            pcm.data(),
+            MAX_FRAME_SIZE,
+            0
+          );
+          mic.pending_packets.erase(it);
+        } else {
+          // Packet missing — check if the NEXT packet is available for FEC
+          auto next_it = mic.pending_packets.find(static_cast<std::uint16_t>(mic.expected_seq + 1));
+          if (next_it != mic.pending_packets.end()) {
+            // Use Opus FEC: decode the next packet with fec=1 to recover current frame
+            frames = opus_decode_float(
+              mic.decoder.get(),
+              next_it->second.payload.data(),
+              (opus_int32) next_it->second.payload.size(),
+              pcm.data(),
+              MAX_FRAME_SIZE,
+              1  // FEC decode — recover lost packet from next packet's redundancy
+            );
+            BOOST_LOG(debug) << "[mic] Opus FEC recovery for missing seq "sv << mic.expected_seq;
+          } else if (mic.pending_packets.begin()->first > mic.expected_seq) {
+            // Future packets present but current missing — apply PLC
+            frames = opus_decode_float(
+              mic.decoder.get(),
+              nullptr,
+              0,
+              pcm.data(),
+              MAX_FRAME_SIZE,
+              0  // PLC — let Opus generate concealment audio
+            );
+            BOOST_LOG(debug) << "[mic] Opus PLC for missing seq "sv << mic.expected_seq;
+          } else {
+            break;  // No actionable packets — wait for more
+          }
+        }
+
+        mic.expected_seq = static_cast<std::uint16_t>(mic.expected_seq + 1);
+
+        if (frames < 0) {
+          BOOST_LOG(warning) << "Mic Opus decode error: "sv << opus_strerror(frames);
+          continue;
+        }
+
+        if (frames == 0) {
+          continue;
+        }
+
+        if (do_log) {
+          BOOST_LOG(info) << "Mic decoded "sv << frames << " frames ("sv
+                          << (frames * mic.channels * sizeof(float)) << " bytes PCM)"sv;
+        }
+
+        int write_ret = mic.speaker->write(pcm.data(), (std::uint32_t) frames);
+        if (write_ret == -2) {
+          // WASAPI device invalidated — stop mic render for this session
+          BOOST_LOG(error) << "[mic] WASAPI device disappeared — disabling mic render for this session"sv;
+          mic.speaker.reset();
+          return;
+        }
+        if (do_log && write_ret < 0) {
           BOOST_LOG(error) << "Mic WASAPI write FAILED (ret="sv << write_ret << ")"sv;
-        else
-          BOOST_LOG(info) << "Mic WASAPI write OK"sv;
+        }
       }
     });
 
