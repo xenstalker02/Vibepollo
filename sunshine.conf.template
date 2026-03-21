@@ -25,10 +25,10 @@
 
 # ---- Mic Passthrough (Vibepollo-specific) ----
 
-# Device name for upstream mic passthrough output.
+# Fallback device if Steam Streaming Mic not detected.
 # This is the WASAPI render endpoint where decoded client mic audio is written.
-# For VB-Cable, use "CABLE Input".
-# Set to empty string to disable mic passthrough entirely.
+# Leave empty (default) to auto-detect Steam Streaming Microphone (recommended).
+# Set to "CABLE Input" only as a VB-Cable fallback if Steam is not installed.
 # mic_sink = CABLE Input
 
 # Capture device to set as Windows default input during mic passthrough.
@@ -42,9 +42,9 @@
 # Range: 10-200, default: 30
 # mic_buffer_ms = 30
 
-# Mic sink fallback: if the configured mic_sink is not found, Vibepollo will
-# automatically try Steam Streaming Microphone (3-field match) before disabling
-# mic passthrough. No additional configuration is needed for this fallback.
+# Priority: Steam Streaming Microphone is always tried first (primary).
+# mic_sink is only used as fallback when Steam Streaming Mic is not found.
+# No additional configuration is needed when Steam is installed.
 
 # Automatically switch audio capture device when stream starts.
 # auto_capture_sink = enabled
