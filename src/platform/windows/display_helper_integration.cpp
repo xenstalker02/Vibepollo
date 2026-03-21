@@ -493,14 +493,16 @@ namespace {
     }
   }
 
-  void kill_all_helper_processes() {
+  // Returns true if any external helper processes were actually terminated (used to decide
+  // whether to add a post-kill stabilisation delay before launching a fresh instance).
+  bool kill_all_helper_processes() {
     helper_proc().terminate();
 
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snapshot == INVALID_HANDLE_VALUE) {
       DWORD err = GetLastError();
       BOOST_LOG(error) << "Display helper: failed to snapshot processes for cleanup (winerr=" << err << ").";
-      return;
+      return false;
     }
 
     PROCESSENTRY32W entry {};
@@ -523,6 +525,7 @@ namespace {
 
     CloseHandle(snapshot);
 
+    bool any_killed = false;
     for (DWORD pid : targets) {
       HANDLE h = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE | PROCESS_QUERY_INFORMATION, FALSE, pid);
       if (!h) {
@@ -539,6 +542,7 @@ namespace {
           DWORD err = GetLastError();
           BOOST_LOG(error) << "Display helper: TerminateProcess failed for pid=" << pid << " (winerr=" << err << ").";
         } else {
+          any_killed = true;
           DWORD wait_res = WaitForSingleObject(h, kHelperForceKillWaitMs);
           if (wait_res != WAIT_OBJECT_0) {
             BOOST_LOG(warning) << "Display helper: external instance pid=" << pid
@@ -549,6 +553,7 @@ namespace {
 
       CloseHandle(h);
     }
+    return any_killed;
   }
 
   struct session_dd_fields_t {
@@ -772,7 +777,14 @@ namespace {
       return false;
     }
 
-    kill_all_helper_processes();
+    const bool external_killed = kill_all_helper_processes();
+    // After killing a stale external helper, Windows holds the executable's image section
+    // for a brief period after process exit, causing CreateProcess to return ERROR_ACCESS_DENIED (5).
+    // Wait 500 ms to allow the kernel to fully release the file mapping before launching fresh.
+    if (external_killed) {
+      BOOST_LOG(debug) << "Display helper: waiting 500ms for image section release after external kill.";
+      std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    }
 
     // Compute path to sunshine_display_helper.exe inside the tools subdirectory next to Sunshine.exe
     wchar_t module_path[MAX_PATH] = {};
@@ -795,11 +807,22 @@ namespace {
     bool started = helper_proc().start(helper.wstring(), L"", allow_system_fallback);
     if (!started && force_restart) {
       // If we were asked to hard-restart, tolerate a brief overlap window where the old
-      // instance is still tearing down and retry quickly.
+      // instance is still tearing down and retry with longer delays.
+      // Use 300ms per attempt (up from 150ms) so Windows has time to release the image
+      // section after TerminateProcess — the kernel holds the file mapping briefly after
+      // process exit, causing CreateProcess ERROR_ACCESS_DENIED (error 5) on rapid restart.
       for (int attempt = 0; attempt < 5 && !started; ++attempt) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(150));
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
         started = helper_proc().start(helper.wstring(), L"", allow_system_fallback);
       }
+    }
+    if (!started) {
+      // Final safety-net: wait 800ms and try once more before giving up.
+      // This covers the rare case where an external helper wasn't caught by kill_all_helper_processes
+      // (e.g. still in tear-down when the snapshot was taken).
+      BOOST_LOG(debug) << "Display helper: all fast retries failed; waiting 800ms for full file-lock release.";
+      std::this_thread::sleep_for(std::chrono::milliseconds(800));
+      started = helper_proc().start(helper.wstring(), L"", allow_system_fallback);
     }
     if (!started) {
       BOOST_LOG(error) << "Failed to start display helper: " << platf::to_utf8(helper.wstring());

@@ -1319,6 +1319,7 @@ namespace stream {
       // Throttled diagnostics: log mic packet stats once per second.
       static std::atomic<std::uint64_t> pkt_count {0};
       static std::atomic<std::int64_t> last_log_ns {0};
+      static std::atomic<std::int64_t> last_stats_ns {0};
       auto now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
                       recv_time.time_since_epoch())
                       .count();
@@ -1330,6 +1331,18 @@ namespace stream {
       if (do_log) {
         BOOST_LOG(info) << "Mic pkt #"sv << pkt_seq_num
                         << ": payload "sv << payload.size() << " bytes"sv;
+      }
+
+      // 30-second stats summary: packets received, PLC events, and decode errors.
+      auto prev_stats = last_stats_ns.load(std::memory_order_relaxed);
+      bool do_stats = (now_ns - prev_stats) >= 30'000'000'000LL &&
+                      last_stats_ns.compare_exchange_weak(prev_stats, now_ns, std::memory_order_relaxed);
+      if (do_stats && prev_stats != 0) {
+        auto &m = session->mic;
+        BOOST_LOG(info) << "[mic] 30s stats — packets: "sv << m.packets_received
+                        << ", PLC: "sv << m.plc_events
+                        << ", decode_errors: "sv << m.decode_errors
+                        << ", frames_written: "sv << m.frames_written;
       }
 
       // The payload has already been decrypted by the IDX_ENCRYPTED outer handler.
@@ -2670,6 +2683,7 @@ namespace stream {
 
       // Mic packet timeout: if mic passthrough is active but no packets arrive within 10 seconds, log info.
       if (session.mic.speaker && session.mic.decoder) {
+        BOOST_LOG(info) << "[mic] session active — listening for 0x3003 packets"sv;
         std::thread([]{
           std::this_thread::sleep_for(10s);
           if (!stream::mic_first_packet_received.load(std::memory_order_relaxed)) {

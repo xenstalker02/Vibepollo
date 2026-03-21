@@ -5,6 +5,9 @@
 #define INITGUID
 
 // standard includes
+#include <atomic>
+#include <chrono>
+#include <cmath>
 #include <format>
 
 // platform includes
@@ -699,6 +702,16 @@ namespace platf::audio {
   class speaker_wasapi_t: public platf::speaker_t {
   public:
     int write(const float *samples, std::uint32_t frame_count) override {
+      // Health check: warn if no frame has been successfully written for 500ms.
+      if (!warned_stalled) {
+        auto ms_since_write = std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::steady_clock::now() - last_write_time).count();
+        if (ms_since_write >= 500) {
+          BOOST_LOG(warning) << "[mic] render thread health: no frame written for "sv << ms_since_write << "ms"sv;
+          warned_stalled = true;
+        }
+      }
+
       UINT32 padding;
       auto status = audio_client->GetCurrentPadding(&padding);
       if (status == AUDCLNT_E_DEVICE_INVALIDATED) {
@@ -734,6 +747,7 @@ namespace platf::audio {
       }
 
       std::memcpy(buf, samples, to_write * channels * sizeof(float));
+      update_level_monitor(samples, to_write);
       status = audio_render->ReleaseBuffer(to_write, 0);
       if (status == AUDCLNT_E_DEVICE_INVALIDATED) {
         BOOST_LOG(error) << "[mic] WASAPI device invalidated during ReleaseBuffer — stopping mic render"sv;
@@ -746,6 +760,8 @@ namespace platf::audio {
 
       BOOST_LOG(verbose) << "Mic render: wrote "sv << to_write << " frames ("sv
                          << (to_write * channels * sizeof(float)) << " bytes) to CABLE Input"sv;
+      last_write_time = std::chrono::steady_clock::now();
+      warned_stalled = false;
       return 0;
     }
 
@@ -830,6 +846,35 @@ namespace platf::audio {
     audio_render_t audio_render;
     UINT32 buffer_frames = 0;
     int channels = 0;
+
+    // Audio level monitoring: accumulate sum-of-squares and sample count for 5-second dBFS logging.
+    double level_sum_sq = 0.0;
+    std::uint64_t level_sample_count = 0;
+    std::chrono::steady_clock::time_point level_window_start = std::chrono::steady_clock::now();
+
+    // Health check: track last successful write time to detect stalled render.
+    std::chrono::steady_clock::time_point last_write_time = std::chrono::steady_clock::now();
+    bool warned_stalled = false;
+
+    void update_level_monitor(const float *samples, std::uint32_t frame_count) {
+      const std::uint64_t n = (std::uint64_t) frame_count * (std::uint64_t) channels;
+      for (std::uint64_t i = 0; i < n; ++i) {
+        double s = static_cast<double>(samples[i]);
+        level_sum_sq += s * s;
+      }
+      level_sample_count += n;
+
+      auto now = std::chrono::steady_clock::now();
+      auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - level_window_start).count();
+      if (elapsed >= 5000 && level_sample_count > 0) {
+        double rms = std::sqrt(level_sum_sq / static_cast<double>(level_sample_count));
+        double dbfs = (rms > 0.0) ? (20.0 * std::log10(rms)) : -120.0;
+        BOOST_LOG(info) << "[mic] audio level: "sv << std::format("{:.1f}", dbfs) << "dBFS"sv;
+        level_sum_sq = 0.0;
+        level_sample_count = 0;
+        level_window_start = now;
+      }
+    }
   };
 
   class audio_control_t: public ::platf::audio_control_t {
