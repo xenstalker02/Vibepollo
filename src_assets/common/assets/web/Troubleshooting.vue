@@ -96,6 +96,19 @@
           </n-button>
         </div>
       </section>
+      <section v-if="platform === 'windows'" class="troubleshoot-card">
+        <div>
+          <h2 class="text-base font-semibold text-dark dark:text-light">
+            {{ $t('troubleshooting.mic_passthrough') || 'Mic Passthrough' }}
+          </h2>
+          <p class="text-xs opacity-70 leading-snug mt-1">
+            {{
+              $t('troubleshooting.mic_passthrough_desc') ||
+              'Mic passthrough is active when a client with mic enabled connects. Steam Streaming Microphone is used automatically when Steam is installed (primary). VB-Audio CABLE Input is used as fallback if configured via the Audio/Video settings tab.'
+            }}
+          </p>
+        </div>
+      </section>
     </div>
 
     <section class="troubleshoot-card space-y-4">
