@@ -703,6 +703,20 @@ namespace platf::audio {
   public:
     int write(const float *samples, std::uint32_t frame_count) override {
       try {
+      // Deferred start: start the render client on the very first write so
+      // the WASAPI buffer is never prefilled with stale data before real
+      // decoded audio arrives. This eliminates garbled audio at stream start.
+      if (!started) {
+        auto start_status = audio_client->Start();
+        if (FAILED(start_status)) {
+          BOOST_LOG(error) << "speaker_wasapi_t: Couldn't start audio render client [0x"sv
+                           << util::hex(start_status).to_string_view() << ']';
+          return -1;
+        }
+        BOOST_LOG(info) << "[mic] Render client started on first write — deferred start OK"sv;
+        started = true;
+      }
+
       // Health check: warn if no frame has been successfully written for 500ms.
       if (!warned_stalled) {
         auto ms_since_write = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -922,14 +936,12 @@ namespace platf::audio {
         return -1;
       }
 
-      status = audio_client->Start();
-      if (FAILED(status)) {
-        BOOST_LOG(error) << "speaker_wasapi_t: Couldn't start audio render client [0x"sv << util::hex(status).to_string_view() << ']';
-        return -1;
-      }
+      // Defer Start() until the first real write so the buffer never fills
+      // with stale data before the first Opus packet arrives, which would
+      // cause garbled audio at stream start.
 
       channels = channel_count;
-      BOOST_LOG(info) << "Mic passthrough render client started ("sv << channel_count << "ch, "sv << sample_rate << " Hz)"sv;
+      BOOST_LOG(info) << "Mic passthrough render client ready ("sv << channel_count << "ch, "sv << sample_rate << " Hz) — will start on first write"sv;
       BOOST_LOG(info) << "[mic] WASAPI render format: "sv << channel_count << "ch "sv << sample_rate
                       << "Hz "sv << native_bits_per_sample << "-bit "sv
                       << (native_is_float ? "float"sv : "int"sv);
@@ -957,6 +969,10 @@ namespace platf::audio {
     double level_sum_sq = 0.0;
     std::uint64_t level_sample_count = 0;
     std::chrono::steady_clock::time_point level_window_start = std::chrono::steady_clock::now();
+
+    // Deferred start: audio_client->Start() is called on the first write() rather
+    // than in init(), so the render buffer is never prefilled with stale data.
+    bool started { false };
 
     // Health check: track last successful write time to detect stalled render.
     std::chrono::steady_clock::time_point last_write_time = std::chrono::steady_clock::now();
