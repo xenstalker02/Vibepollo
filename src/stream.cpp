@@ -2653,8 +2653,9 @@ namespace stream {
         try {
           auto audio_ctrl = platf::audio_control();
           if (audio_ctrl) {
-            constexpr int MIC_CHANNELS = 1;  // mono — decoded as mono, duplicated to L+R in render_loop
-            auto spk = audio_ctrl->virtual_microphone(config::audio.mic_sink, MIC_CHANNELS, 48000);
+            constexpr int MIC_CHANNELS = 1;      // Opus decoder: mono (1ch decoded, L+R duplication in render_loop)
+            constexpr int SPEAKER_CHANNELS = 2;  // WASAPI render device: always stereo (L+R float32)
+            auto spk = audio_ctrl->virtual_microphone(config::audio.mic_sink, SPEAKER_CHANNELS, 48000);
             if (spk) {
               int err = OPUS_OK;
               auto dec = opus_decoder_create(48000, MIC_CHANNELS, &err);
