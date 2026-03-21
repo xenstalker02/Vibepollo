@@ -1,13 +1,19 @@
 # Vibepollo Quick Reference
-Last updated: 2026-03-20
+Last updated: 2026-03-21
 
 ## Current State
 | Repo | Commit | Description |
 |------|--------|-------------|
-| Vibepollo | b90e002f | fix+docs: display helper stabilization, mic null safety, WASAPI exception handling, README rewrite |
-| Vibelight | 714dc82a | docs: complete README rewrite |
+| Vibepollo | 56f9372e | docs: README reflects Steam mic as primary, VB-Cable fallback |
+| Vibelight | f1cfb4a2 (flatpak) | SIGABRT fix: kMaxPacketSize=200, kDefaultBitrate=48000 |
 
 Both repos pushed to GitHub. Local PC and Deck in sync.
+
+### Mic Architecture
+- Steam Streaming Mic: **PRIMARY** (WASAPI enum at session init) — commit eecdfb2b
+- VB-Cable: **FALLBACK only** (mic_sink config, default "CABLE Input")
+- micDevice/micBitrate: fully wired to MicCapture in session.cpp (already implemented)
+- Vibelight SIGABRT fix: confirmed in binary f1cfb4a2 (kMaxPacketSize=200, kDefaultBitrate=48000)
 
 ## Known Fixed (2026-03-20)
 - Display helper error:5 (ACCESS_DENIED) storm: added 200ms unconditional stabilization delay + 3-retry loop on non-force_restart path
@@ -53,7 +59,7 @@ cd C:\Vibepollo && claude --dangerously-skip-permissions
 - Logan's PR #1428 to ClassicOldSong/Apollo: OPEN (not yet merged)
 
 ## moonlight_wake.sh
-Current MD5: c1d41731c6b7f53e9dc9878437b40db1
+Current MD5: c1d41731c6b7f53e9dc9878437b40bd1
 NEVER modify without updating this MD5 everywhere it appears.
 
 ## Device Quick Reference
@@ -61,7 +67,7 @@ NEVER modify without updating this MD5 everywhere it appears.
 |--------|--------|----------|
 | PC | local | C:\Vibepollo\ |
 | PC Tailscale | [see local notes] | Config: C:\Vibepollo\build\config\ |
-| Deck SSH | deck@steamdeck | Vibelight: /home/deck/vibelight |
+| Deck SSH | deck@[deck-hostname] | Vibelight: /home/deck/vibelight |
 | Pi SSH | xenstalker02@piwaker | WOL: /usr/local/bin/wake-pc |
 | Pi Tailscale | [see local notes] | |
 
@@ -85,18 +91,29 @@ Installer does:
 - Launches Vibepollo + opens web UI on first run
 - Preserves config on uninstall, removes firewall/task on uninstall
 
-## Pending Tasks (priority order)
-1. Set GitHub repo topics manually — copy from C:\Vibepollo\.github\topics.txt
-2. Reboot PC to apply hostname rename from hyp3r-f1uXx-fr4m3 to hyp3r
-3. Change Steam Deck SSH password (deck@steamdeck)
-4. Change Pi SSH password (xenstalker02@piwaker)
-5. End-to-end test: PC sleep → wake → stream → mic working in Discord or game
-6. AWAY path test: hotspot → Pi → Tailscale → stream with mic
-7. Update moonlight-common-c to version with LiSendMicrophoneOpusDataEx (currently 625a7d7)
-8. ~~Create Vibepollo installer (Inno Setup)~~ DONE — see Installer section above
-9. Record 60-second demo video
-10. Reply to Logan on PR #1428
-11. Open PR to ClassicOldSong/Apollo (ONLY after E2E test + installer done)
+## Tasks
+
+### DONE (2026-03-21 session)
+- Steam Streaming Mic as primary, VB-Cable fallback (audio.cpp — eecdfb2b)
+- Mic config (mic_sink) in web UI Audio/Video tab (already present from previous session)
+- Mic Passthrough placeholder section added to Troubleshooting page (69c2346d)
+- Nonary upstream sync: 0 new commits (already up to date)
+- micDevice/micBitrate: already fully wired to MicCapture in session.cpp (no changes needed)
+- sunshine.conf.template mic_sink comment updated to "fallback device" (56f9372e)
+- Vibepollo installer: Inno Setup — see Installer section above
+
+### STILL PENDING
+- Test AWAY path: hotspot → Pi → Tailscale → stream
+- Test Bluetooth Nothing (1) headphones as mic input
+- Reboot PC for hostname rename
+- Change Deck SSH password (currently [deck-pw])
+- Change Pi SSH passwords ([pi-pw])
+- Demo video (60 sec)
+- Reply to Logan on PR #1428 with test results
+- PR to ClassicOldSong/Apollo (after E2E test + demo)
+- LiSendMicrophoneOpusDataEx migration (waiting on moonlight-common-c PR #1)
+- Clipboard sync (needs Apollo protocol + Vibelight client side)
+- Set GitHub repo topics manually — copy from C:\Vibepollo\.github\topics.txt
 
 ## Reply to Logan (PR #1428)
 Post at: https://github.com/ClassicOldSong/Apollo/pull/1428
