@@ -10,6 +10,7 @@ interface Props {
   desc?: string | null;
   localePrefix?: string;
   inverseValues?: boolean;
+  disabled?: boolean;
   // Default backing value used to infer mapping when model is null/undefined
   default?: any;
 }
@@ -18,6 +19,7 @@ const props = withDefaults(defineProps<Props>(), {
   desc: null,
   localePrefix: 'missing-prefix',
   inverseValues: false,
+  disabled: false,
   default: null,
 });
 
@@ -108,31 +110,39 @@ const parsedDefaultPropValue = (() => {
 
 const labelField = props.label ?? `${props.localePrefix}.${props.id}`;
 const descField = props.desc ?? `${props.localePrefix}.${props.id}_desc`;
-const showDesc = props.desc !== '' || Object.entries(slots).length > 0;
+const showDesc = computed(() => props.desc !== '' || Boolean(slots['default']));
+const showActions = computed(() => Boolean(slots['actions']));
+const showMeta = computed(() => Boolean(slots['meta']));
 const showDefValue = parsedDefaultPropValue !== null;
 const defValue = parsedDefaultPropValue ? '_common.enabled_def_cbox' : '_common.disabled_def_cbox';
 </script>
 
 <template>
-  <div
-    class="form-check"
-    :id="props.id"
-    :data-search-label="$t(labelField)"
-    :data-search-desc="showDesc ? $t(descField) : ''"
-    :data-search-default="showDefValue ? $t(defValue) : ''"
-    :data-search-target="props.id"
-  >
-    <!-- Hidden label for search indexing -->
-    <label :for="`${props.id}_cb`" style="display: none">{{ $t(labelField) }}</label>
-    <n-checkbox :id="`${props.id}_cb`" v-model:checked="isChecked">
-      {{ $t(labelField) }}
-    </n-checkbox>
-    <div v-if="showDefValue" class="mt-0 form-text">
-      {{ $t(defValue) }}
-    </div>
-    <div v-if="showDesc" class="form-text">
-      {{ $t(descField) }}
-      <slot />
+  <div class="form-check" :id="props.id">
+    <div class="flex items-start justify-between gap-3">
+      <div class="flex min-w-0 flex-1 items-start gap-3">
+        <div class="pt-0.5">
+          <n-checkbox :id="`${props.id}_cb`" v-model:checked="isChecked" :disabled="props.disabled" />
+        </div>
+        <div class="min-w-0 flex-1 space-y-1">
+          <label :for="`${props.id}_cb`" class="form-label cursor-pointer leading-snug">
+            {{ $t(labelField) }}
+          </label>
+          <div v-if="showDesc" class="form-text mt-0">
+            {{ $t(descField) }}
+            <slot />
+          </div>
+          <div v-if="showDefValue" class="form-text mt-0">
+            {{ $t(defValue) }}
+          </div>
+          <div v-if="showMeta" class="mt-1 text-[11px] opacity-60">
+            <slot name="meta" />
+          </div>
+        </div>
+      </div>
+      <div v-if="showActions" class="shrink-0 pt-0.5">
+        <slot name="actions" />
+      </div>
     </div>
   </div>
 </template>

@@ -27,6 +27,8 @@
 #include "video.h"
 #include "webrtc_stream.h"
 #ifdef _WIN32
+  #include <shobjidl.h>
+
   #include "src/platform/windows/frame_limiter_nvcp.h"
   #include "src/platform/windows/playnite_integration.h"
   #include "src/platform/windows/rtss_integration.h"
@@ -52,6 +54,11 @@ extern "C" {
 using namespace std::literals;
 
 std::map<int, std::function<void()>> signal_handlers;
+
+#ifdef _WIN32
+  #define WIDEN_STRING_LITERAL_IMPL(value) L##value
+  #define WIDEN_STRING_LITERAL(value) WIDEN_STRING_LITERAL_IMPL(value)
+#endif
 
 void on_signal_forwarder(int sig) {
   signal_handlers.at(sig)();
@@ -120,7 +127,6 @@ int main(int argc, char *argv[]) {
   // Avoid searching the PATH in case a user has configured their system insecurely
   // by placing a user-writable directory in the system-wide PATH variable.
   SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_APPLICATION_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32);
-
   setlocale(LC_ALL, "C");
 #endif
 
@@ -144,6 +150,14 @@ int main(int argc, char *argv[]) {
     BOOST_LOG(error) << "Logging failed to initialize"sv;
   }
 
+#ifdef _WIN32
+  const auto app_user_model_id_status =
+    SetCurrentProcessExplicitAppUserModelID(WIDEN_STRING_LITERAL(PROJECT_APP_USER_MODEL_ID));
+  if (FAILED(app_user_model_id_status)) {
+    BOOST_LOG(warning) << "Failed to set explicit AppUserModelID; Windows may reuse legacy notification branding"sv;
+  }
+#endif
+
 #ifndef SUNSHINE_EXTERNAL_PROCESS
   // Setup third-party library logging
   logging::setup_av_logging(config::sunshine.min_log_level);
@@ -158,7 +172,13 @@ int main(int argc, char *argv[]) {
   // logging can begin at this point
   // if anything is logged prior to this point, it will appear in stdout, but not in the log viewer in the UI
   // the version should be printed to the log before anything else
-  BOOST_LOG(info) << "[vibepollo] Version " << PROJECT_VERSION << " starting (commit: " << PROJECT_VERSION_COMMIT << ")";
+  BOOST_LOG(info) << PROJECT_NAME << " version: " << PROJECT_VERSION << " commit: " << PROJECT_VERSION_COMMIT;
+#ifdef PROJECT_VERSION_PRERELEASE
+  if (std::string_view(PROJECT_VERSION_PRERELEASE).size() > 0) {
+    BOOST_LOG(info) << "Prerelease build detected; default min_log_level is debug unless overridden.";
+  }
+#endif
+  BOOST_LOG(info) << "Effective min_log_level=" << config::sunshine.min_log_level;
 
   // Log mic passthrough configuration for diagnostics
   if (!config::audio.mic_sink.empty()) {
@@ -170,7 +190,6 @@ int main(int argc, char *argv[]) {
 
 #ifdef _WIN32
   // Validate mic_capture_device against available WASAPI capture devices at startup.
-  // Uses CoInitializeEx for a short-lived COM scope to enumerate capture devices.
   if (!config::audio.mic_capture_device.empty()) {
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     IMMDeviceEnumerator *pEnum = nullptr;

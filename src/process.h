@@ -53,7 +53,7 @@ namespace proc {
 
   typedef config::prep_cmd_t cmd_t;
 
-  inline constexpr int kLosslessScalingDefaultLaunchDelaySeconds = 5;
+  inline constexpr int kLosslessScalingDefaultLaunchDelaySeconds = 8;
 
   struct active_session_guard_t {
     bool has_active_app {false};
@@ -133,7 +133,8 @@ namespace proc {
     std::chrono::seconds exit_timeout;
     bool gen1_framegen_fix;
     bool gen2_framegen_fix;
-    bool lossless_scaling_framegen;
+    bool lossless_scaling_enabled {false};
+    bool lossless_scaling_framegen {false};
     std::string frame_generation_provider {"lossless-scaling"};
     std::optional<double> lossless_scaling_target_fps;
     std::optional<int> lossless_scaling_rtss_limit;

@@ -566,7 +566,7 @@ namespace display_device {
       return false;
     }
     for (size_t i = 0; i < a.size(); ++i) {
-      if (std::tolower((unsigned char) a[i]) != std::tolower((unsigned char) b[i])) {
+      if (std::tolower(static_cast<unsigned char>(a[i])) != std::tolower(static_cast<unsigned char>(b[i]))) {
         return false;
       }
     }
@@ -819,7 +819,7 @@ namespace display_device {
     }
 
     SingleDisplayConfiguration config;
-    config.m_device_id = resolve_device_id(video_config.output_name);
+    config.m_device_id = resolve_device_id(config::get_active_output_name());
     config.m_device_prep = *device_prep;
     config.m_hdr_state = parse_hdr_option(video_config, session);
 

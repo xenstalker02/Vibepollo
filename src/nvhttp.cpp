@@ -283,15 +283,6 @@ namespace nvhttp {
         launch_session->virtual_display_ready_since.reset();
       };
 
-      // Snapshot current display state BEFORE any display enumeration.
-      // queryDisplayConfig(QueryType::All) in output_exists() and other calls can activate
-      // external dummy plugs, which would pollute the snapshot used for session restore.
-      if (no_active_sessions) {
-        if (!display_helper_integration::snapshot_current_display_state()) {
-          BOOST_LOG(warning) << "Display helper snapshot before session start was not accepted.";
-        }
-      }
-
       std::optional<std::string> app_output_override;
       if (launch_session->output_name_override && !launch_session->output_name_override->empty()) {
         app_output_override = boost::algorithm::trim_copy(*launch_session->output_name_override);
@@ -302,12 +293,7 @@ namespace nvhttp {
         launch_session->virtual_display = true;
         app_output_override.reset();
       }
-
-      if (app_output_override) {
-        config::set_runtime_output_name_override(*app_output_override);
-        pending_output_override = *app_output_override;
-        BOOST_LOG(info) << "App-specific display override requested: output_name=" << *app_output_override;
-      }
+      launch_session->virtual_display_recreated_on_demand = false;
 
       bool config_requests_virtual = config::video.virtual_display_mode != config::video_t::virtual_display_mode_e::disabled;
       if (launch_session->virtual_display_mode_override) {
@@ -315,13 +301,73 @@ namespace nvhttp {
           *launch_session->virtual_display_mode_override != config::video_t::virtual_display_mode_e::disabled;
       }
       const bool client_requests_virtual = launch_session->client_requests_virtual_display;
-      BOOST_LOG(debug) << "config_requests_virtual: " << config_requests_virtual;
       const bool session_requests_virtual = launch_session->app_metadata && launch_session->app_metadata->virtual_screen;
+      bool request_virtual_display =
+        launch_session->virtual_display || config_requests_virtual || client_requests_virtual || session_requests_virtual;
+      const bool has_app_output_override = app_output_override.has_value();
+      BOOST_LOG(debug) << "Display helper: session prep client='" << launch_session->client_name
+                       << "' allow_display_changes=" << allow_display_changes
+                       << " no_active_sessions=" << no_active_sessions
+                       << " request_virtual_display=" << request_virtual_display
+                       << " previous_virtual_device_id='" << launch_session->virtual_display_device_id
+                       << "' active_output='" << config::get_active_output_name()
+                       << "' app_output_override='" << (app_output_override ? *app_output_override : std::string {})
+                       << "'.";
+      if (has_app_output_override && !client_requests_virtual) {
+        request_virtual_display = false;
+        disable_virtual_display_request();
+      }
+
+      if (!allow_display_changes) {
+        if (request_virtual_display) {
+          if (auto existing_device =
+                VDISPLAY::resolveActiveVirtualDisplayDeviceId(launch_session->virtual_display_device_id, launch_session->client_name)) {
+            launch_session->virtual_display = true;
+            launch_session->virtual_display_failed = false;
+            launch_session->virtual_display_device_id = *existing_device;
+            launch_session->virtual_display_ready_since = std::chrono::steady_clock::now();
+            config::set_runtime_output_name_override(*existing_device);
+            pending_output_override = *existing_device;
+            BOOST_LOG(info) << "Display helper: preserving virtual display capture target for resume (device_id="
+                            << *existing_device << ").";
+            BOOST_LOG(debug) << "Display helper: skipping virtual display changes for resume; preserving capture target only.";
+            return;
+          }
+
+          BOOST_LOG(info) << "Display helper: resume requested virtual display capture but no active virtual display was found;"
+                          << " recreating one on demand.";
+          launch_session->virtual_display_recreated_on_demand = true;
+        } else {
+          if (app_output_override) {
+            config::set_runtime_output_name_override(*app_output_override);
+            pending_output_override = *app_output_override;
+            BOOST_LOG(info) << "Display helper: preserving output override for resume: " << *app_output_override;
+          } else {
+            BOOST_LOG(debug) << "Display helper: skipping virtual display changes for resume.";
+          }
+          return;
+        }
+      }
+
+      // Snapshot current display state BEFORE any display enumeration.
+      // queryDisplayConfig(QueryType::All) in output_exists() and other calls can activate
+      // external dummy plugs, which would pollute the snapshot used for session restore.
+      if (no_active_sessions) {
+        if (!display_helper_integration::snapshot_current_display_state()) {
+          BOOST_LOG(warning) << "Display helper snapshot before session start was not accepted.";
+        }
+      }
+
+      if (app_output_override) {
+        config::set_runtime_output_name_override(*app_output_override);
+        pending_output_override = *app_output_override;
+        BOOST_LOG(info) << "App-specific display override requested: output_name=" << *app_output_override;
+      }
+      BOOST_LOG(debug) << "config_requests_virtual: " << config_requests_virtual;
+      BOOST_LOG(debug) << "client_requests_virtual: " << client_requests_virtual;
       BOOST_LOG(debug) << "session_requests_virtual: " << session_requests_virtual;
-      bool request_virtual_display = client_requests_virtual || config_requests_virtual || session_requests_virtual;
       BOOST_LOG(debug) << "request_virtual_display: " << request_virtual_display;
       const auto requested_output_name = app_output_override ? *app_output_override : config::get_active_output_name();
-      const bool has_app_output_override = app_output_override.has_value();
       if (has_app_output_override && !client_requests_virtual) {
         request_virtual_display = false;
         disable_virtual_display_request();
@@ -346,7 +392,8 @@ namespace nvhttp {
           }
 
           if (!no_active_sessions) {
-            auto existing_device = VDISPLAY::resolveAnyVirtualDisplayDeviceId();
+            auto existing_device =
+              VDISPLAY::resolveActiveVirtualDisplayDeviceId(launch_session->virtual_display_device_id, launch_session->client_name);
             if (existing_device) {
               launch_session->virtual_display = true;
               launch_session->virtual_display_failed = false;
@@ -2390,7 +2437,11 @@ namespace nvhttp {
       );
       keep_runtime_overrides = true;
       tree.put("root.gamesession", 1);
+#ifdef _WIN32
       tree.put("root.VirtualDisplayDriverReady", proc::vDisplayDriverStatus == VDISPLAY::DRIVER_STATUS::OK);
+#else
+      tree.put("root.VirtualDisplayDriverReady", false);
+#endif
 
       rtsp_stream::launch_session_raise(launch_session);
 #ifdef _WIN32
@@ -2509,8 +2560,13 @@ namespace nvhttp {
       // We want to prepare display only if there are no active sessions at
       // the moment. This should be done before probing encoders as it could
       // change the active displays.
-      if (allow_display_changes) {
-        revert_display_configuration = true;
+      const bool should_apply_display_request =
+        allow_display_changes || launch_session->virtual_display_recreated_on_demand;
+      if (should_apply_display_request) {
+        BOOST_LOG(debug) << "Display helper: applying session display request on "
+                         << (allow_display_changes ? "normal start/resume" : "resume virtual-display recreation")
+                         << " for client '" << launch_session->client_name << "'.";
+        revert_display_configuration = allow_display_changes;
 
 #ifdef _WIN32
         const bool helper_session_available = display_helper_session_available();
@@ -2613,7 +2669,11 @@ namespace nvhttp {
       )
     );
     tree.put("root.resume", 1);
+#ifdef _WIN32
     tree.put("root.VirtualDisplayDriverReady", proc::vDisplayDriverStatus == VDISPLAY::DRIVER_STATUS::OK);
+#else
+    tree.put("root.VirtualDisplayDriverReady", false);
+#endif
 
     rtsp_stream::launch_session_raise(launch_session);
 #ifdef _WIN32

@@ -1,8 +1,8 @@
 <template>
-  <div class="dashboard-page space-y-8 px-2 md:px-4">
+  <div class="dashboard-page space-y-6 px-2 sm:space-y-8 md:px-4">
     <!-- Hero / Intro -->
     <section
-      class="rounded-xl border border-dark/10 dark:border-light/10 bg-light/70 dark:bg-surface/70 backdrop-blur p-5 md:p-6 shadow-sm"
+      class="rounded-xl border border-dark/10 bg-light/70 p-4 shadow-sm backdrop-blur dark:border-light/10 dark:bg-surface/70 sm:p-5 md:p-6"
     >
       <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div class="min-w-0">
@@ -13,10 +13,10 @@
             {{ $t('index.description') }}
           </p>
         </div>
-        <div class="flex items-center gap-2 shrink-0">
+        <div class="grid gap-2 sm:flex sm:flex-wrap sm:items-center shrink-0">
           <RouterLink to="/settings" custom v-slot="{ navigate, href }">
             <a :href="href" @click="navigate">
-              <n-button tag="span" type="primary" strong>
+              <n-button tag="span" type="primary" strong class="w-full justify-center sm:w-auto">
                 <i class="fas fa-sliders" />
                 <span>Settings</span>
               </n-button>
@@ -24,7 +24,7 @@
           </RouterLink>
           <RouterLink to="/applications" custom v-slot="{ navigate, href }">
             <a :href="href" @click="navigate">
-              <n-button tag="span" type="default" strong>
+              <n-button tag="span" type="default" strong class="w-full justify-center sm:w-auto">
                 <i class="fas fa-th" />
                 <span>Applications</span>
               </n-button>
@@ -37,12 +37,12 @@
     <!-- Fatal startup errors moved into Version card to avoid layout shift -->
 
     <!-- Main Grid -->
-    <n-grid cols="24" x-gap="16" y-gap="16" responsive="screen">
+    <div class="grid min-w-0 gap-4 sm:gap-5">
       <!-- Version Card -->
-      <n-gi :span="24" :xl="16">
+      <div class="min-w-0">
         <n-card v-if="installedVersion" :segmented="{ content: true, footer: true }">
           <template #header>
-            <h2 class="text-2xl font-semibold tracking-tight mx-auto text-center">
+            <h2 class="text-xl sm:text-2xl font-semibold tracking-tight mx-auto text-center break-words">
               {{ 'Version ' + displayVersion }}
             </h2>
           </template>
@@ -67,7 +67,7 @@
                     }}
                   </p>
                 </div>
-                <div class="flex items-center gap-2 shrink-0">
+                <div class="grid gap-2 sm:flex sm:flex-wrap sm:items-center shrink-0">
                   <PlayniteReinstallButton
                     size="small"
                     :strong="true"
@@ -75,6 +75,50 @@
                     :label="'Update Playnite Extension'"
                     @done="onPlayniteReinstallDone"
                   />
+                </div>
+              </div>
+            </n-alert>
+            <n-alert
+              v-if="showPlayniteMissingPluginBanner"
+              type="warning"
+              :show-icon="true"
+              class="rounded-xl"
+            >
+              <div
+                class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 w-full"
+              >
+                <div class="min-w-0">
+                  <p class="text-sm m-0 font-medium">Playnite Extension missing</p>
+                  <p class="text-xs opacity-80 m-0">
+                    {{ playniteMissingPluginBannerText }}
+                  </p>
+                </div>
+                <div class="grid gap-2 sm:flex sm:flex-wrap sm:items-center shrink-0">
+                  <n-button
+                    size="small"
+                    type="primary"
+                    strong
+                    class="w-full justify-center sm:w-auto"
+                    :loading="resolvingPlaynitePluginIssue"
+                    :disabled="resolvingPlaynitePluginIssue || purgingPlayniteApps"
+                    @click="resolvePlaynitePluginIssue"
+                  >
+                    <i class="fas fa-plug" />
+                    <span>Resolve Issue</span>
+                  </n-button>
+                  <n-button
+                    size="small"
+                    type="error"
+                    strong
+                    secondary
+                    class="w-full justify-center sm:w-auto"
+                    :loading="purgingPlayniteApps"
+                    :disabled="purgingPlayniteApps || resolvingPlaynitePluginIssue"
+                    @click="openPurgePlayniteGamesConfirm"
+                  >
+                    <i class="fas fa-trash" />
+                    <span>Purge Playnite Games</span>
+                  </n-button>
                 </div>
               </div>
             </n-alert>
@@ -98,12 +142,13 @@
                     {{ crashDumpDetails }}
                   </p>
                 </div>
-                <div class="flex items-center gap-2 shrink-0">
+                <div class="grid gap-2 sm:flex sm:flex-wrap sm:items-center shrink-0">
                   <n-button
                     tag="a"
                     type="default"
                     strong
                     size="small"
+                    class="w-full justify-center sm:w-auto"
                     href="https://github.com/Nonary/vibeshine/issues/new?template=bug_report.yml"
                     target="_blank"
                     rel="noopener noreferrer"
@@ -115,6 +160,7 @@
                     type="primary"
                     strong
                     size="small"
+                    class="w-full justify-center sm:w-auto"
                     :loading="exportCrashPending"
                     :disabled="exportCrashPending"
                     @click="exportCrashBundle"
@@ -131,7 +177,7 @@
                       }}
                     </span>
                   </n-button>
-                  <n-button tertiary size="small" @click="dismissCrashBundle">
+                  <n-button tertiary size="small" class="w-full justify-center sm:w-auto" @click="dismissCrashBundle">
                     <i class="fas fa-xmark" />
                     <span>{{ $t('config.crash_dump_dismiss') || 'Dismiss' }}</span>
                   </n-button>
@@ -160,11 +206,12 @@
                     </span>
                   </p>
                 </div>
-                <div class="flex items-center gap-2 shrink-0">
+                <div class="grid gap-2 sm:flex sm:flex-wrap sm:items-center shrink-0">
                   <n-button
                     tag="a"
                     type="primary"
                     strong
+                    class="w-full justify-center sm:w-auto"
                     href="https://github.com/nefarius/ViGEmBus/releases/latest"
                     target="_blank"
                     rel="noopener noreferrer"
@@ -202,7 +249,7 @@
                     }}
                   </p>
                 </div>
-                <div class="flex items-center gap-2 shrink-0">
+                <div class="grid gap-2 sm:flex sm:flex-wrap sm:items-center shrink-0">
                   <RouterLink
                     :to="{
                       path: '/settings',
@@ -212,13 +259,16 @@
                     v-slot="{ navigate, href }"
                   >
                     <a :href="href" @click="navigate">
-                      <n-button tag="span" type="primary" strong size="small">
+                      <n-button
+                        tag="span"
+                        type="primary"
+                        strong
+                        size="small"
+                        class="w-full justify-center sm:w-auto"
+                      >
                         <i class="fas fa-rotate-right" />
                         <span>{{
-                          translate(
-                            'config.golden_layout_upgrade_action',
-                            'Open Display Settings',
-                          )
+                          translate('config.golden_layout_upgrade_action', 'Open Display Settings')
                         }}</span>
                       </n-button>
                     </a>
@@ -280,14 +330,14 @@
             <n-alert
               v-if="notifyPreReleases && preReleaseBuildAvailable"
               type="warning"
-              :show-icon="true"
-              class="rounded-xl"
+              :show-icon="false"
+              class="rounded-xl dashboard-release-alert"
             >
               <div class="flex flex-col gap-3 w-full">
                 <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                  <div class="flex items-center gap-3">
+                  <div class="flex items-center gap-4 min-w-0">
                     <span
-                      class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-warning/20 text-warning"
+                      class="dashboard-release-alert__icon inline-flex items-center justify-center rounded-full bg-warning/20 text-warning"
                     >
                       <i class="fas fa-flask" />
                     </span>
@@ -298,11 +348,12 @@
                       </p>
                     </div>
                   </div>
-                  <div class="flex items-center gap-2 shrink-0">
+                  <div class="dashboard-release-alert__actions grid gap-2 sm:flex sm:flex-wrap sm:items-center shrink-0">
                     <n-button
                       type="default"
                       strong
                       size="small"
+                      class="w-full justify-center sm:w-auto"
                       @click="showPreNotes = !showPreNotes"
                     >
                       <i class="fas fa-bars-staggered" />
@@ -317,6 +368,7 @@
                       size="small"
                       type="primary"
                       strong
+                      class="w-full justify-center sm:w-auto"
                       :href="preReleaseRelease?.html_url"
                       target="_blank"
                     >
@@ -339,14 +391,14 @@
             <n-alert
               v-if="stableBuildAvailable"
               type="warning"
-              :show-icon="true"
-              class="rounded-xl"
+              :show-icon="false"
+              class="rounded-xl dashboard-release-alert"
             >
               <div class="flex flex-col gap-3 w-full">
                 <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                  <div class="flex items-center gap-3">
+                  <div class="flex items-center gap-4 min-w-0">
                     <span
-                      class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-warning/20 text-warning"
+                      class="dashboard-release-alert__icon inline-flex items-center justify-center rounded-full bg-warning/20 text-warning"
                     >
                       <i class="fas fa-bolt" />
                     </span>
@@ -357,11 +409,12 @@
                       </p>
                     </div>
                   </div>
-                  <div class="flex items-center gap-2 shrink-0">
+                  <div class="dashboard-release-alert__actions grid gap-2 sm:flex sm:flex-wrap sm:items-center shrink-0">
                     <n-button
                       type="default"
                       strong
                       size="small"
+                      class="w-full justify-center sm:w-auto"
                       @click="showStableNotes = !showStableNotes"
                     >
                       <i class="fas fa-bars-staggered" />
@@ -376,6 +429,7 @@
                       size="small"
                       type="primary"
                       strong
+                      class="w-full justify-center sm:w-auto"
                       :href="githubRelease?.html_url"
                       target="_blank"
                     >
@@ -395,32 +449,35 @@
             </n-alert>
           </div>
         </n-card>
-      </n-gi>
+      </div>
 
       <!-- Resources -->
-      <n-gi :span="24" :xl="8">
+      <div class="min-w-0">
         <n-card>
           <template #header>
-            <h2 class="text-2xl font-semibold tracking-tight mx-auto text-center">Web Links</h2>
+            <h2 class="text-xl sm:text-2xl font-semibold tracking-tight mx-auto text-center">
+              Web Links
+            </h2>
           </template>
           <div class="text-xs space-y-2">
             <ResourceCard />
           </div>
         </n-card>
-      </n-gi>
-    </n-grid>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { NCard, NAlert, NGrid, NGi, useMessage } from 'naive-ui';
+import { NCard, NAlert, useMessage, useDialog } from 'naive-ui';
 import ResourceCard from '@/ResourceCard.vue';
 import PlayniteReinstallButton from '@/components/PlayniteReinstallButton.vue';
 import VibepolloVersion, { GitHubRelease } from '@/sunshine_version';
 import { useConfigStore } from '@/stores/config';
 import { useAuthStore } from '@/stores/auth';
+import { useAppsStore } from '@/stores/apps';
 import { http } from '@/http';
 import type { CrashDumpStatus } from '@/utils/crashDump';
 import { isCrashDumpEligible, sanitizeCrashDumpStatus } from '@/utils/crashDump';
@@ -452,7 +509,7 @@ const vigemInstalled = ref<boolean | null>(null);
 const vigemVersion = ref('');
 // Playnite extension status
 type PlayniteStatus = {
-  installed: boolean;
+  installed: boolean | null;
   active: boolean;
   extensions_dir?: string;
   installed_version?: string;
@@ -467,22 +524,91 @@ type GoldenStatus = {
   needs_layout_upgrade?: boolean;
 };
 const playnite = ref<PlayniteStatus | null>(null);
-const updatingPlaynite = ref(false);
 
 const crashDump = ref<CrashDumpStatus | null>(null);
 const exportCrashPending = ref(false);
 const goldenStatus = ref<GoldenStatus | null>(null);
+const resolvingPlaynitePluginIssue = ref(false);
+const purgingPlayniteApps = ref(false);
 
 const configStore = useConfigStore();
 const auth = useAuthStore();
+const appsStore = useAppsStore();
 let started = false; // prevent duplicate concurrent checks
 const message = useMessage();
+const dialog = useDialog();
 const { t: $t } = useI18n();
 
 const translate = (key: string, fallback: string) => {
   const value = $t(key);
   return value === key ? fallback : value;
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object';
+}
+
+function isPlayniteFullscreenEntry(app: Record<string, unknown>): boolean {
+  if (app['playnite-fullscreen'] === true) {
+    return true;
+  }
+  if (typeof app.name === 'string' && app.name === 'Playnite (Fullscreen)') {
+    return true;
+  }
+  const cmdValue = app.cmd;
+  const cmdText = Array.isArray(cmdValue)
+    ? cmdValue.filter((v): v is string => typeof v === 'string').join(' ')
+    : typeof cmdValue === 'string'
+      ? cmdValue
+      : '';
+  const cmdLower = cmdText.toLowerCase();
+  return cmdLower.includes('playnite-launcher') && cmdLower.includes('--fullscreen');
+}
+
+function isPlayniteApp(app: Record<string, unknown>): boolean {
+  if (typeof app['playnite-id'] === 'string' && app['playnite-id'].length > 0) {
+    return true;
+  }
+  return isPlayniteFullscreenEntry(app);
+}
+
+function getAppsSnapshot(): Record<string, unknown>[] {
+  return (appsStore.apps || []).filter((app): app is Record<string, unknown> => isRecord(app));
+}
+
+async function refreshAppsSnapshot() {
+  try {
+    await appsStore.loadApps(true);
+  } catch {
+    appsStore.setApps([]);
+  }
+}
+
+async function refreshAppsSnapshotStrict() {
+  const r = await http.get('/api/apps', { validateStatus: () => true });
+  const apps = Array.isArray((r.data as any)?.apps) ? (r.data as any).apps : null;
+  if (r.status !== 200 || !apps) {
+    throw new Error(`HTTP ${r.status}`);
+  }
+  appsStore.setApps(apps);
+}
+
+async function refreshPlayniteStatus() {
+  try {
+    const r = await http.get('/api/playnite/status', { validateStatus: () => true });
+    if (r.status === 200 && r.data) {
+      playnite.value = r.data as PlayniteStatus;
+    } else {
+      playnite.value = null;
+    }
+  } catch {
+    playnite.value = null;
+  }
+}
+
+async function refreshPlayniteAndApps() {
+  await Promise.all([refreshPlayniteStatus(), refreshAppsSnapshot()]);
+}
 
 async function runVersionChecks() {
   if (started) return; // guard
@@ -576,15 +702,11 @@ async function runVersionChecks() {
     await refreshCrashDumpStatus(plat);
     await refreshGoldenStatus(plat);
     // Playnite status for extension version/update check
-    try {
-      const r = await http.get('/api/playnite/status', { validateStatus: () => true });
-      if (r.status === 200 && r.data) {
-        playnite.value = r.data as PlayniteStatus;
-      } else {
-        playnite.value = null;
-      }
-    } catch (e) {
-      playnite.value = null;
+    await refreshPlayniteStatus();
+    if (plat === 'windows') {
+      await refreshAppsSnapshot();
+    } else {
+      appsStore.setApps([]);
     }
   } catch (e) {
     // eslint-disable-next-line no-console
@@ -647,8 +769,7 @@ async function downloadCrashBundlePart(partIndex: number, filenameHint?: string)
     throw new Error('crash bundle download failed');
   }
   const headerName = parseContentDispositionFilename(r.headers?.['content-disposition']);
-  const filename =
-    filenameHint || headerName || `sunshine_crashbundle-part${partIndex}.zip`;
+  const filename = filenameHint || headerName || `sunshine_crashbundle-part${partIndex}.zip`;
   triggerDownload(r.data as Blob, filename);
 }
 
@@ -672,9 +793,7 @@ async function exportCrashBundleAsync() {
       await downloadCrashBundlePart(1);
     }
   } catch {
-    message.error(
-      translate('config.crash_dump_export_error', 'Failed to export crash bundle.'),
-    );
+    message.error(translate('config.crash_dump_export_error', 'Failed to export crash bundle.'));
   } finally {
     exportCrashPending.value = false;
   }
@@ -895,15 +1014,117 @@ const showVigemBanner = computed(() => {
 const showGoldenLayoutUpgradeBanner = computed(() => {
   const plat = (configStore.metadata?.platform || '').toLowerCase();
   if (plat !== 'windows') return false;
-  return (
-    goldenStatus.value?.exists === true &&
-    goldenStatus.value?.needs_layout_upgrade === true
-  );
+  return goldenStatus.value?.exists === true && goldenStatus.value?.needs_layout_upgrade === true;
 });
 
 const playniteUpdateAvailable = computed(() => {
   return !!(playnite.value && playnite.value.installed && playnite.value.update_available);
 });
+
+const playniteApps = computed(() => getAppsSnapshot().filter((app) => isPlayniteApp(app)));
+const playniteAutoSyncedAppsCount = computed(() => {
+  return playniteApps.value.filter((app) => app['playnite-managed'] === 'auto').length;
+});
+const hasPlayniteFullscreenApp = computed(() => {
+  return getAppsSnapshot().some((app) => isPlayniteFullscreenEntry(app));
+});
+const showPlayniteMissingPluginBanner = computed(() => {
+  const plat = (configStore.metadata?.platform || '').toLowerCase();
+  if (plat !== 'windows') return false;
+  if (!playnite.value || playnite.value.active === true || playnite.value.installed !== false)
+    return false;
+  return playniteAutoSyncedAppsCount.value > 0 || hasPlayniteFullscreenApp.value;
+});
+const playniteMissingPluginBannerText = computed(() => {
+  const details: string[] = [];
+  if (playniteAutoSyncedAppsCount.value > 0) {
+    const count = playniteAutoSyncedAppsCount.value;
+    details.push(`${count} auto-synced app${count === 1 ? '' : 's'}`);
+  }
+  if (hasPlayniteFullscreenApp.value) {
+    details.push('a Playnite (Fullscreen) launcher entry');
+  }
+  const detected =
+    details.length > 1 ? `${details[0]} and ${details[1]}` : (details[0] ?? 'Playnite entries');
+  return `Detected ${detected}, but the Playnite plugin is no longer installed. Reinstall the plugin to restore integration, or purge Playnite games to remove all Playnite entries from Vibeshine.`;
+});
+
+async function resolvePlaynitePluginIssue() {
+  if (resolvingPlaynitePluginIssue.value || purgingPlayniteApps.value) return;
+  resolvingPlaynitePluginIssue.value = true;
+  try {
+    const r = await http.post(
+      '/api/playnite/install',
+      { restart: true },
+      { validateStatus: () => true },
+    );
+    const body = r.data as any;
+    const ok = r.status >= 200 && r.status < 300 && body && body.status === true;
+    if (ok) {
+      message.success('Playnite plugin reinstalled.');
+      await refreshPlayniteAndApps();
+    } else {
+      const err = (body && (body.error || body.message)) || `HTTP ${r.status}`;
+      message.error(`Failed to reinstall Playnite plugin: ${err}`);
+    }
+  } catch (e: any) {
+    message.error(`Failed to reinstall Playnite plugin: ${e?.message || 'Request failed'}`);
+  } finally {
+    resolvingPlaynitePluginIssue.value = false;
+  }
+}
+
+async function purgePlayniteGames() {
+  if (purgingPlayniteApps.value || resolvingPlaynitePluginIssue.value) return;
+  purgingPlayniteApps.value = true;
+  try {
+    await refreshAppsSnapshotStrict();
+    const snapshot = getAppsSnapshot();
+    const indexes = snapshot
+      .map((app, index) => ({ app, index }))
+      .filter((item) => isPlayniteApp(item.app))
+      .map((item) => item.index)
+      .sort((a, b) => b - a);
+    if (!indexes.length) {
+      message.info('No Playnite apps found to purge.');
+      await refreshPlayniteAndApps();
+      return;
+    }
+    for (const index of indexes) {
+      const r = await http.delete(`./api/apps/${index}`, { validateStatus: () => true });
+      const body = r.data as any;
+      const ok = r.status >= 200 && r.status < 300 && body && body.status === true;
+      if (!ok) {
+        const err = (body && (body.error || body.message)) || `HTTP ${r.status}`;
+        throw new Error(err);
+      }
+    }
+    try {
+      await configStore.fetchConfig(true);
+    } catch {}
+    await refreshPlayniteAndApps();
+    const removed = indexes.length;
+    message.success(`Removed ${removed} Playnite app${removed === 1 ? '' : 's'}.`);
+  } catch (e: any) {
+    message.error(`Failed to purge Playnite apps: ${e?.message || 'Request failed'}`);
+    await refreshPlayniteAndApps();
+  } finally {
+    purgingPlayniteApps.value = false;
+  }
+}
+
+function openPurgePlayniteGamesConfirm() {
+  dialog.warning({
+    title: 'Purge Playnite games?',
+    content:
+      'This removes all Playnite entries from Vibeshine, including auto-synced games and the Playnite (Fullscreen) launcher.',
+    positiveText: 'Purge',
+    negativeText: 'Cancel',
+    onPositiveClick: async () => {
+      await purgePlayniteGames();
+    },
+  });
+}
 
 async function onPlayniteReinstallDone(res: { ok: boolean; error?: string }) {
   if (res.ok) {
@@ -911,10 +1132,7 @@ async function onPlayniteReinstallDone(res: { ok: boolean; error?: string }) {
   } else {
     message.error('Update failed' + (res.error ? `: ${res.error}` : ''));
   }
-  try {
-    const s = await http.get('/api/playnite/status', { validateStatus: () => true });
-    if (s.status === 200 && s.data) playnite.value = s.data as PlayniteStatus;
-  } catch {}
+  await refreshPlayniteAndApps();
 }
 </script>
 
@@ -947,5 +1165,25 @@ async function onPlayniteReinstallDone(res: { ok: boolean; error?: string }) {
 .dashboard-page :deep(.n-data-table-wrapper),
 .dashboard-page :deep(.n-table-wrapper) {
   border-radius: 0.8rem !important;
+}
+
+.dashboard-page :deep(.dashboard-release-alert .n-alert-body__content) {
+  min-width: 0;
+  width: 100%;
+}
+
+.dashboard-page :deep(.dashboard-release-alert__icon) {
+  width: 2rem;
+  height: 2rem;
+  font-size: 0.95rem;
+}
+
+@media (min-width: 768px) {
+  .dashboard-page :deep(.dashboard-release-alert__actions) {
+    margin-left: auto;
+    flex: 1 1 auto;
+    justify-content: flex-end;
+    transform: translateY(-8px);
+  }
 }
 </style>

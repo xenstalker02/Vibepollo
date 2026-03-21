@@ -5,6 +5,9 @@
 #ifdef _WIN32
   #include "hotkey_manager.h"
 
+  #include <winsock2.h>
+  #include <Windows.h>
+
   #include "display_helper_integration.h"
   #include "src/logging.h"
   #include "src/platform/windows/misc.h"
@@ -15,8 +18,6 @@
   #include <ios>
   #include <mutex>
   #include <thread>
-  #include <Windows.h>
-  #include <winsock2.h>
 
 using namespace std::literals;
 
@@ -67,7 +68,12 @@ namespace {
 
   void trigger_restore() {
     BOOST_LOG(info) << "Restore hotkey triggered; reverting display configuration.";
-    const auto cleanup = platf::virtual_display_cleanup::run("restore_hotkey", true);
+    const auto cleanup = platf::virtual_display_cleanup::run(
+      "restore_hotkey",
+      true,
+      platf::virtual_display_cleanup::revert_order_t::restore_before_remove,
+      true
+    );
     if (!cleanup.virtual_displays_removed) {
       BOOST_LOG(warning) << "Restore hotkey cleanup: no virtual display was removed.";
     }

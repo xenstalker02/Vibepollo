@@ -85,3 +85,4 @@ tmp_install.ps1
 verify_deploy.ps1
 verify_match.ps1
 sunshine_err.txt
+.cache/

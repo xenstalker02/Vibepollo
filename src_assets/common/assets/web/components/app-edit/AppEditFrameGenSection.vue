@@ -27,7 +27,9 @@ const losslessProfileModel = defineModel<LosslessProfileKey>('losslessProfile', 
 const losslessTargetModel = defineModel<number | null>('losslessTargetFps', { default: null });
 const losslessRtssModel = defineModel<number | null>('losslessRtssLimit', { default: null });
 const losslessFlowModel = defineModel<number | null>('losslessFlowScale', { default: null });
-const losslessLaunchDelayModel = defineModel<number | null>('losslessLaunchDelay', { default: null });
+const losslessLaunchDelayModel = defineModel<number | null>('losslessLaunchDelay', {
+  default: null,
+});
 
 const props = defineProps<{
   health: FrameGenHealth | null;
@@ -53,6 +55,25 @@ const frameGenOptions = computed(() => [
 ]);
 const isLosslessMode = computed(() => modeModel.value === 'lossless-scaling');
 const hasFrameGenSelection = computed(() => modeModel.value !== 'off');
+const captureFixModel = computed<boolean>({
+  get: () => gen1Model.value || gen2Model.value,
+  set: (enabled) => {
+    gen1Model.value = enabled;
+    gen2Model.value = false;
+  },
+});
+const captureFixDescription = computed(() => {
+  if (modeModel.value === 'lossless-scaling') {
+    return 'Uses RTSS Front Edge Sync for Lossless Scaling frame generation. Not required for pure upscaling.';
+  }
+  if (modeModel.value === 'nvidia-smooth-motion') {
+    return 'Uses RTSS Front Edge Sync while NVIDIA Smooth Motion is active.';
+  }
+  if (modeModel.value === 'game-provided') {
+    return 'Uses NVIDIA Reflex for game-provided frame generation on NVIDIA systems, and falls back to RTSS Front Edge Sync on AMD systems.';
+  }
+  return 'Enable when the app uses frame generation. Lossless Scaling and NVIDIA Smooth Motion use RTSS Front Edge Sync, while Game Provided uses NVIDIA Reflex unless an AMD GPU is present.';
+});
 const losslessAdvancedTargets = ref(
   losslessTargetModel.value !== null || losslessRtssModel.value !== null,
 );
@@ -343,19 +364,20 @@ const displayTargets = computed(() => props.health?.display.targets || []);
             <label class="text-xs font-semibold uppercase tracking-wide opacity-70">
               Lossless Launch Delay (seconds)
             </label>
-            <n-input-number
-              v-model:value="losslessLaunchDelayModel"
-              :min="0"
-              :max="600"
-              :step="1"
-              :precision="0"
-              placeholder="0"
-              size="small"
-            />
-            <p class="text-[12px] opacity-60 leading-relaxed">
-              Wait additional seconds after the game starts before opening Lossless Scaling.
-            </p>
-          </div>
+             <n-input-number
+               v-model:value="losslessLaunchDelayModel"
+               :min="0"
+               :max="600"
+               :step="1"
+               :precision="0"
+               placeholder="8"
+               size="small"
+             />
+             <p class="text-[12px] opacity-60 leading-relaxed">
+               Wait additional seconds after the game starts before opening Lossless Scaling.
+               Leave blank to use the default 8-second delay.
+             </p>
+           </div>
         </div>
       </div>
 
@@ -364,25 +386,14 @@ const displayTargets = computed(() => props.health?.display.targets || []);
           class="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-dark/10 dark:border-light/10 bg-white/50 dark:bg-white/5 px-3 py-3"
         >
           <div class="space-y-1">
-            <div class="font-medium text-sm">1st Gen Capture Fix</div>
-            <p class="text-[12px] opacity-70 leading-relaxed">
-              Use for DLSS 3, FSR 3, NVIDIA Smooth Motion, and Lossless Scaling frame generation.
-              Not required for pure upscaling.
-            </p>
+            <div class="font-medium text-sm">Frame Generation Capture Fix</div>
+            <p class="text-[12px] opacity-70 leading-relaxed">{{ captureFixDescription }}</p>
           </div>
-          <n-switch v-model:value="gen1Model" size="large" :disabled="!hasFrameGenSelection" />
-        </div>
-        <div
-          class="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-dark/10 dark:border-light/10 bg-white/50 dark:bg-white/5 px-3 py-3"
-        >
-          <div class="space-y-1">
-            <div class="font-medium text-sm">2nd Gen Capture Fix</div>
-            <p class="text-[12px] opacity-70 leading-relaxed">
-              Only for DLSS 4 titles using 2nd generation frame generation. Forces the NVIDIA
-              Control Panel frame limiter.
-            </p>
-          </div>
-          <n-switch v-model:value="gen2Model" size="large" :disabled="!hasFrameGenSelection" />
+          <n-switch
+            v-model:value="captureFixModel"
+            size="large"
+            :disabled="!hasFrameGenSelection"
+          />
         </div>
       </div>
       <div class="space-y-3">

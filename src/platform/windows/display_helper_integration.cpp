@@ -865,7 +865,7 @@ namespace {
     return (std::chrono::steady_clock::now() - g_last_vd_reenable) < kVirtualDisplayReenableCooldown;
   }
 
-  void explicit_virtual_display_reset_and_apply(
+  [[maybe_unused]] void explicit_virtual_display_reset_and_apply(
     display_helper_integration::DisplayApplyBuilder &builder,
     const rtsp_stream::launch_session_t &session,
     std::function<bool(const display_helper_integration::DisplayApplyRequest &)> apply_fn
@@ -926,7 +926,7 @@ namespace {
     };
   }
 
-  static std::optional<session_dd_fields_t> get_active_session_copy() {
+  [[maybe_unused]] static std::optional<session_dd_fields_t> get_active_session_copy() {
     std::lock_guard<std::mutex> lg(g_session_mutex);
     return g_active_session_dd;
   }
@@ -996,6 +996,16 @@ namespace {
       j["sunshine_always_restore_from_golden"] = true;
     }
 
+    return j.dump();
+  }
+
+  std::string build_revert_payload(bool prefer_golden_if_current_missing) {
+    if (!prefer_golden_if_current_missing) {
+      return {};
+    }
+
+    nlohmann::json j = nlohmann::json::object();
+    j["sunshine_prefer_golden_if_current_missing"] = true;
     return j.dump();
   }
 
@@ -1182,14 +1192,15 @@ namespace display_helper_integration {
     return apply_internal(request, true);
   }
 
-  bool revert() {
+  bool revert(bool prefer_golden_if_current_missing) {
     clear_pending_apply();
     if (!ensure_helper_started()) {
       BOOST_LOG(info) << "Display helper unavailable; cannot send revert.";
       return false;
     }
-    BOOST_LOG(info) << "Display helper: sending REVERT request.";
-    const bool ok = platf::display_helper_client::send_revert();
+    BOOST_LOG(info) << "Display helper: sending REVERT request"
+                    << (prefer_golden_if_current_missing ? " (prefer golden if current missing)." : ".");
+    const bool ok = platf::display_helper_client::send_revert(build_revert_payload(prefer_golden_if_current_missing));
     BOOST_LOG(info) << "Display helper: REVERT dispatch result=" << (ok ? "true" : "false");
     if (ok) {
       g_restore_expected.store(true, std::memory_order_relaxed);

@@ -40,11 +40,11 @@
 #include "config.h"
 #include "crypto.h"
 #include "display_device.h"
-#include "display_helper_integration.h"
 #include "file_handler.h"
 #include "logging.h"
 #include "platform/common.h"
 #ifdef _WIN32
+  #include "display_helper_integration.h"
   #include "config_playnite.h"
   #include "platform/windows/frame_limiter.h"
   #include "platform/windows/ipc/misc_utils.h"
@@ -123,7 +123,12 @@ namespace proc {
       } catch (...) {
       }
       try {
-        return std::filesystem::u8path(utf8);
+        std::u8string utf8_bytes;
+        utf8_bytes.reserve(utf8.size());
+        for (unsigned char ch : utf8) {
+          utf8_bytes.push_back(static_cast<char8_t>(ch));
+        }
+        return std::filesystem::path(utf8_bytes);
       } catch (...) {
         return std::nullopt;
       }
@@ -348,7 +353,7 @@ namespace proc {
       return std::nullopt;
     }
 
-  void populate_lossless_overrides(const pt::ptree &node, lossless_scaling_profile_overrides_t &target) {
+  [[maybe_unused]] void populate_lossless_overrides(const pt::ptree &node, lossless_scaling_profile_overrides_t &target) {
     if (auto perf = pt_get_optional_bool(node, "performance-mode")) {
       target.performance_mode = *perf;
     }
@@ -823,6 +828,10 @@ namespace proc {
       placebo(other.placebo),
       _process(std::move(other._process)),
       _process_group(std::move(other._process_group)),
+#ifdef _WIN32
+      _virtual_display_guid(other._virtual_display_guid),
+      _virtual_display_active(other._virtual_display_active),
+#endif
       _pipe(std::move(other._pipe)),
       _app_prep_it(other._app_prep_it),
       _app_prep_begin(other._app_prep_begin)
@@ -832,9 +841,7 @@ namespace proc {
       _lossless_profile_applied(other._lossless_profile_applied),
       _lossless_backup(other._lossless_backup),
       _lossless_last_install_dir(std::move(other._lossless_last_install_dir)),
-      _lossless_last_exe_path(std::move(other._lossless_last_exe_path)),
-      _virtual_display_guid(other._virtual_display_guid),
-      _virtual_display_active(other._virtual_display_active)
+      _lossless_last_exe_path(std::move(other._lossless_last_exe_path))
 #endif
   {
 #ifdef _WIN32
@@ -1495,13 +1502,14 @@ namespace proc {
       _env[ENV_LOSSLESS_LEGACY_AUTO_DETECT] = "";
     };
 
-    const bool lossless_scaling_enabled = _app.lossless_scaling_framegen;
-    _env["SUNSHINE_FRAME_GENERATION_PROVIDER"] = lossless_scaling_enabled ? _app.frame_generation_provider : "";
+    const bool lossless_scaling_enabled = _app.lossless_scaling_enabled || _app.lossless_scaling_framegen;
+    _env["SUNSHINE_FRAME_GENERATION_PROVIDER"] =
+      _app.lossless_scaling_framegen ? _app.frame_generation_provider : "";
 
-    const bool using_lossless_provider = lossless_scaling_enabled &&
+    const bool using_lossless_provider = _app.lossless_scaling_framegen &&
                                          boost::iequals(_app.frame_generation_provider, "lossless-scaling");
     if (lossless_scaling_enabled) {
-      _env["SUNSHINE_LOSSLESS_SCALING_FRAMEGEN"] = "1";
+      _env["SUNSHINE_LOSSLESS_SCALING_FRAMEGEN"] = _app.lossless_scaling_framegen ? "1" : "";
       if (using_lossless_provider && effective_lossless_target) {
         _env["SUNSHINE_LOSSLESS_SCALING_TARGET_FPS"] = std::to_string(*effective_lossless_target);
       } else {
@@ -1529,8 +1537,8 @@ namespace proc {
         }
         if (resolved_lossless_exe_path) {
           _lossless_metadata.configured_path = *resolved_lossless_exe_path;
-        } else if (!config::lossless_scaling.exe_path.empty()) {
-          _lossless_metadata.configured_path = std::filesystem::u8path(config::lossless_scaling.exe_path);
+        } else if (auto configured_path = lossless_to_path(config::lossless_scaling.exe_path)) {
+          _lossless_metadata.configured_path = *configured_path;
         }
         _lossless_metadata.active_profile = runtime.profile;
         _lossless_metadata.capture_api = runtime.capture_api;
@@ -2012,7 +2020,7 @@ namespace proc {
         const bool provider_auto = config::frame_limiter.provider.empty() ||
                                    boost::iequals(config::frame_limiter.provider, "auto");
         const bool provider_rtss = boost::iequals(config::frame_limiter.provider, "rtss");
-        const bool should_wait_rtss = platf::rtss_is_configured() && (provider_auto || provider_rtss || _app.gen1_framegen_fix);
+        const bool should_wait_rtss = platf::rtss_is_configured() && (provider_auto || provider_rtss || _app.gen1_framegen_fix || _app.gen2_framegen_fix);
         if (should_wait_rtss) {
           const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
           bool running = false;
@@ -2178,8 +2186,8 @@ namespace proc {
     stop_lossless_scaling_support();
 #endif
     // For Playnite-managed apps, request a graceful stop via Playnite first
-#ifdef _WIN32
     std::chrono::seconds remaining_timeout = _app.exit_timeout;
+#ifdef _WIN32
     if (had_active_app && !_app.playnite_id.empty()) {
       bool should_request_playnite_stop = true;
       try {
@@ -2297,8 +2305,8 @@ namespace proc {
     }
 
     if (should_dispatch_revert) {
-      const bool reverted = display_helper_integration::revert();
 #ifdef _WIN32
+      const bool reverted = display_helper_integration::revert();
       if (reverted && rtsp_stream::session_count() == 0) {
         BOOST_LOG(debug) << "Display helper: stopping watchdog after app termination.";
         display_helper_integration::stop_watchdog();
@@ -2706,8 +2714,8 @@ namespace proc {
                   _key = true;
                 } else if (first == "off" || first == "false" || first == "no") {
                   _key = false;
-                } else {
-                  _key = false;  // Default for unknown values
+              } else {
+                _key = false;  // Default for unknown values
                 }
               } else {
                 _key = false;  // Treat empty arrays or non-string first elements as false
@@ -2932,8 +2940,11 @@ namespace proc {
         ctx.allow_client_commands = util::get_non_string_json_value<bool>(app_node, "allow-client-commands", true);
         ctx.terminate_on_pause = util::get_non_string_json_value<bool>(app_node, "terminate-on-pause", false);
         ctx.gamepad = app_node.value("gamepad", "");
-        ctx.gen1_framegen_fix = util::get_non_string_json_value<bool>(app_node, "gen1-framegen-fix", util::get_non_string_json_value<bool>(app_node, "dlss-framegen-capture-fix", false));
-        ctx.gen2_framegen_fix = util::get_non_string_json_value<bool>(app_node, "gen2-framegen-fix", false);
+        const bool frame_generation_capture_fix_enabled =
+          util::get_non_string_json_value<bool>(app_node, "gen1-framegen-fix", util::get_non_string_json_value<bool>(app_node, "dlss-framegen-capture-fix", false)) ||
+          util::get_non_string_json_value<bool>(app_node, "gen2-framegen-fix", false);
+        ctx.gen1_framegen_fix = frame_generation_capture_fix_enabled;
+        ctx.gen2_framegen_fix = false;
         auto virtual_display_mode = util::get_non_string_json_value<std::string>(app_node, "virtual-display-mode", "");
         auto virtual_display_layout = util::get_non_string_json_value<std::string>(app_node, "virtual-display-layout", "");
 
@@ -3024,7 +3035,13 @@ namespace proc {
           }
         }
 
+        const bool has_lossless_scaling_enabled = app_node.contains("lossless-scaling-enabled");
+        ctx.lossless_scaling_enabled =
+          util::get_non_string_json_value<bool>(app_node, "lossless-scaling-enabled", false);
         ctx.lossless_scaling_framegen = util::get_non_string_json_value<bool>(app_node, "lossless-scaling-framegen", false);
+        if (!has_lossless_scaling_enabled) {
+          ctx.lossless_scaling_enabled = ctx.lossless_scaling_framegen;
+        }
         ctx.frame_generation_provider = "lossless-scaling";
         if (auto it = app_node.find("frame-generation-provider"); it != app_node.end() && it->is_string()) {
           ctx.frame_generation_provider = normalize_frame_generation_provider(it->get<std::string>());
