@@ -2392,7 +2392,8 @@ namespace webrtc_stream {
 
 #ifdef _WIN32
       if (allow_platform_teardown) {
-        const bool is_paused = proc::proc.running() > 0;
+        // Placebo apps (Desktop) have no real OS process to resume; treat as not paused
+        const bool is_paused = proc::proc.running() > 0 && !proc::proc.is_placebo_app();
         const bool revert_enabled = config::video.dd.config_revert_on_disconnect;
         const int paused_timeout_secs = std::max(0, config::video.dd.paused_virtual_display_timeout_secs);
         const bool skip_teardown_due_to_pause = is_paused && !revert_enabled;

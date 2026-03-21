@@ -776,7 +776,7 @@ namespace config {
       video_t::dd_t::hdr_request_override_e::automatic,  // hdr_request_override
       3s,  // config_revert_delay
       {},  // config_revert_on_disconnect
-      0,  // paused_virtual_display_timeout_secs
+      10,  // paused_virtual_display_timeout_secs — 10s safety net so Desktop "paused" state auto-clears
       false,  // always_restore_from_golden
       0,  // snapshot_restore_hotkey
 #ifdef _WIN32

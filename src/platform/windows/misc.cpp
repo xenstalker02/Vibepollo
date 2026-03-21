@@ -1371,7 +1371,9 @@ namespace platf {
     // If the client disconnected without /cancel, Sunshine can leave the app running to allow /resume.
     // In that "paused" state, we must keep feeding the display helper heartbeat to prevent it from
     // autonomously reverting the virtual display configuration.
-    const bool is_paused = (proc::proc.running() > 0);
+    // Placebo apps (Desktop) have no real OS process to resume; treat as not paused
+    // so the watchdog is stopped and the display is properly torn down.
+    const bool is_paused = (proc::proc.running() > 0) && !proc::proc.is_placebo_app();
     if (!is_paused) {
       display_helper_integration::stop_watchdog();
     } else {

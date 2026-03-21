@@ -2552,7 +2552,10 @@ namespace stream {
         // Only revert on disconnect when explicitly enabled by config.
         bool revert_display_config {config::video.dd.config_revert_on_disconnect};
 
-        const bool is_paused = proc::proc.running();
+        // A session is considered "paused" only when a real app process is running.
+        // Desktop (placebo) apps have no OS process to resume, so they must not
+        // block display teardown or leave the watchdog alive indefinitely.
+        const bool is_paused = proc::proc.running() && !proc::proc.is_placebo_app();
         if (is_paused) {
 #if defined SUNSHINE_TRAY && SUNSHINE_TRAY >= 1
           system_tray::update_tray_pausing(proc::proc.get_last_run_app_name());

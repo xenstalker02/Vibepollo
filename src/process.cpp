@@ -2075,6 +2075,10 @@ namespace proc {
     return 0;
   }
 
+  bool proc_t::is_placebo_app() const {
+    return placebo;
+  }
+
   void proc_t::resume() {
     BOOST_LOG(info) << "Session resuming for app [" << _app_name << "].";
 
