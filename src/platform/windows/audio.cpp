@@ -716,14 +716,14 @@ namespace platf::audio {
       if (!render_event) return -1;
       {
         std::lock_guard<std::mutex> lock(queue_mutex);
-        for (std::uint32_t i = 0; i < frame_count * (std::uint32_t) channels; i++) {
+        for (std::uint32_t i = 0; i < frame_count; i++) {
           pending_frames.push_back(std::clamp(samples[i], -1.0f, 1.0f));
         }
-        // Cap to 1 second of audio to prevent unbounded growth
-        const std::size_t max_samples = (std::size_t)(48000 * channels);
-        if (pending_frames.size() > max_samples) {
+        // Cap to 1 second of mono samples
+        const std::size_t max_mono = 48000;
+        if (pending_frames.size() > max_mono) {
           pending_frames.erase(pending_frames.begin(),
-            pending_frames.begin() + (pending_frames.size() - max_samples));
+            pending_frames.begin() + (pending_frames.size() - max_mono));
         }
       }
       SetEvent(render_event);
@@ -940,7 +940,7 @@ namespace platf::audio {
       }
 
       // Prebuffer: wait for 4 Opus packets (960 frames each) before starting WASAPI.
-      const std::size_t prebuf_samples = (std::size_t)(960 * 4 * channels);
+      const std::size_t prebuf_samples = (std::size_t)(960 * 4);  // 3840 mono samples, 4 packets worth
 
       while (!stop_render_thread) {
         auto wait_result = WaitForSingleObject(render_event, 20);
@@ -979,18 +979,23 @@ namespace platf::audio {
         auto available = buffer_frames - padding;
         if (available == 0) continue;
 
+        // pending_frames contains mono samples. Duplicate each to L+R for stereo WASAPI output.
         std::lock_guard<std::mutex> lock(queue_mutex);
-        auto to_write = std::min(available, (UINT32)(pending_frames.size() / (std::uint32_t) channels));
+        auto to_write = std::min(available, (UINT32)pending_frames.size());
         if (to_write == 0) continue;
 
         BYTE *buf = nullptr;
         hr = audio_render->GetBuffer(to_write, &buf);
-        if (FAILED(hr) || !buf) continue;
+        if (FAILED(hr) || !buf) {
+          continue;
+        }
 
         auto *dst = reinterpret_cast<float *>(buf);
-        for (UINT32 i = 0; i < to_write * (UINT32) channels; i++) {
-          dst[i] = pending_frames.front();
+        for (UINT32 frame = 0; frame < to_write; frame++) {
+          const float sample = pending_frames.front();
           pending_frames.pop_front();
+          dst[frame * 2]     = sample;  // L
+          dst[frame * 2 + 1] = sample;  // R
         }
         audio_render->ReleaseBuffer(to_write, 0);
 

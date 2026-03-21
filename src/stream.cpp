@@ -2653,7 +2653,7 @@ namespace stream {
         try {
           auto audio_ctrl = platf::audio_control();
           if (audio_ctrl) {
-            constexpr int MIC_CHANNELS = 2;  // stereo — matches standard Moonlight client mic Opus output
+            constexpr int MIC_CHANNELS = 1;  // mono — decoded as mono, duplicated to L+R in render_loop
             auto spk = audio_ctrl->virtual_microphone(config::audio.mic_sink, MIC_CHANNELS, 48000);
             if (spk) {
               int err = OPUS_OK;
