@@ -747,7 +747,34 @@ namespace platf::audio {
         return -1;
       }
 
-      std::memcpy(buf, samples, to_write * channels * sizeof(float));
+      // Convert float32 samples to the device's native format before writing.
+      // AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM converts sample rates but NOT float-to-integer.
+      // Writing float32 bits into an integer PCM buffer produces white noise.
+      const std::uint32_t sample_count = to_write * (std::uint32_t) channels;
+      if (native_is_float) {
+        std::memcpy(buf, samples, sample_count * sizeof(float));
+      }
+      else if (native_bits_per_sample == 16) {
+        auto out = reinterpret_cast<std::int16_t *>(buf);
+        for (std::uint32_t i = 0; i < sample_count; ++i) {
+          float s = std::max(-1.0f, std::min(1.0f, samples[i]));
+          out[i] = static_cast<std::int16_t>(s * 32767.0f);
+        }
+      }
+      else if (native_bits_per_sample == 32) {
+        auto out = reinterpret_cast<std::int32_t *>(buf);
+        for (std::uint32_t i = 0; i < sample_count; ++i) {
+          float s = std::max(-1.0f, std::min(1.0f, samples[i]));
+          out[i] = static_cast<std::int32_t>(s * 2147483647.0f);
+        }
+      }
+      else {
+        // Unknown integer width — fall back to raw copy (may still produce noise,
+        // but prevents a crash; the log will show what format to handle next).
+        BOOST_LOG(warning) << "[mic] Unknown native bit depth "sv << native_bits_per_sample
+                           << " — falling back to memcpy"sv;
+        std::memcpy(buf, samples, sample_count * sizeof(float));
+      }
       update_level_monitor(samples, to_write);
       status = audio_render->ReleaseBuffer(to_write, 0);
       if (status == AUDCLNT_E_DEVICE_INVALIDATED) {
@@ -760,7 +787,7 @@ namespace platf::audio {
       }
 
       BOOST_LOG(verbose) << "Mic render: wrote "sv << to_write << " frames ("sv
-                         << (to_write * channels * sizeof(float)) << " bytes) to CABLE Input"sv;
+                         << (to_write * (std::uint32_t) channels * (native_bits_per_sample / 8u)) << " bytes) to device"sv;
       last_write_time = std::chrono::steady_clock::now();
       warned_stalled = false;
       return 0;
@@ -799,22 +826,88 @@ namespace platf::audio {
         return -1;
       }
 
-      DWORD channel_mask = (channel_count == 2) ? waveformat_mask_stereo : SPEAKER_FRONT_CENTER;
-      WAVEFORMATEXTENSIBLE waveformat = create_waveformat(sample_format_e::f32, (WORD) channel_count, channel_mask);
+      // Query the device's native mix format so we can initialize with it directly.
+      // AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM only converts sample rates; it does NOT
+      // perform float-to-integer conversion. Writing float32 into an integer-format
+      // buffer produces white noise. Using the native format avoids this entirely.
+      WAVEFORMATEX *mix_fmt = nullptr;
+      HRESULT mix_hr = audio_client->GetMixFormat(&mix_fmt);
 
       // Buffer duration from config (default 30ms). REFERENCE_TIME is in 100-ns units.
       REFERENCE_TIME k_mic_buffer_duration = (REFERENCE_TIME) config::audio.mic_buffer_ms * 10000LL;
       BOOST_LOG(info) << "[mic] WASAPI buffer: "sv << config::audio.mic_buffer_ms << "ms"sv;
-      status = audio_client->Initialize(
-        AUDCLNT_SHAREMODE_SHARED,
-        AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY,
-        k_mic_buffer_duration, 0,
-        (LPWAVEFORMATEX) &waveformat,
-        nullptr
-      );
+
+      if (SUCCEEDED(mix_hr) && mix_fmt) {
+        // Detect whether device is float or integer and its bit depth.
+        bool is_float = false;
+        WORD bits = mix_fmt->wBitsPerSample;
+        if (mix_fmt->wFormatTag == WAVE_FORMAT_IEEE_FLOAT) {
+          is_float = true;
+        }
+        else if (mix_fmt->wFormatTag == WAVE_FORMAT_EXTENSIBLE && mix_fmt->cbSize >= 22) {
+          auto ext = reinterpret_cast<WAVEFORMATEXTENSIBLE *>(mix_fmt);
+          // Compare SubFormat GUID to KSDATAFORMAT_SUBTYPE_IEEE_FLOAT
+          static const GUID kIEEEFloat = {0x00000003, 0x0000, 0x0010,
+            {0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71}};
+          if (std::memcmp(&ext->SubFormat, &kIEEEFloat, sizeof(GUID)) == 0) {
+            is_float = true;
+          }
+        }
+
+        BOOST_LOG(info) << "[mic] Device mix format: "sv
+                        << mix_fmt->nChannels << "ch "sv
+                        << mix_fmt->nSamplesPerSec << "Hz "sv
+                        << bits << "-bit "sv
+                        << (is_float ? "float"sv : "int"sv);
+
+        // Initialize with the device's native format; no AUTOCONVERTPCM needed.
+        status = audio_client->Initialize(
+          AUDCLNT_SHAREMODE_SHARED,
+          0,
+          k_mic_buffer_duration, 0,
+          mix_fmt,
+          nullptr
+        );
+        CoTaskMemFree(mix_fmt);
+        mix_fmt = nullptr;
+
+        if (SUCCEEDED(status)) {
+          native_is_float = is_float;
+          native_bits_per_sample = bits;
+        }
+        else {
+          BOOST_LOG(warning) << "speaker_wasapi_t: Initialize with native format failed [0x"sv
+                             << util::hex(status).to_string_view()
+                             << "] — retrying with float32 + AUTOCONVERTPCM"sv;
+          // Fall through to float32 fallback below.
+        }
+      }
+      else {
+        BOOST_LOG(warning) << "[mic] GetMixFormat failed [0x"sv
+                           << util::hex(mix_hr).to_string_view()
+                           << "] — using float32 + AUTOCONVERTPCM fallback"sv;
+        if (mix_fmt) { CoTaskMemFree(mix_fmt); mix_fmt = nullptr; }
+        // status left as previous failure so the fallback path below runs.
+        status = E_FAIL;
+      }
+
+      // Fallback: initialize with hardcoded float32 format and AUTOCONVERTPCM
+      // (original behaviour). Used if GetMixFormat() failed or native init failed.
       if (FAILED(status)) {
-        BOOST_LOG(error) << "speaker_wasapi_t: Couldn't initialize render audio client [0x"sv << util::hex(status).to_string_view() << ']';
-        return -1;
+        DWORD channel_mask = (channel_count == 2) ? waveformat_mask_stereo : SPEAKER_FRONT_CENTER;
+        WAVEFORMATEXTENSIBLE waveformat = create_waveformat(sample_format_e::f32, (WORD) channel_count, channel_mask);
+        status = audio_client->Initialize(
+          AUDCLNT_SHAREMODE_SHARED,
+          AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY,
+          k_mic_buffer_duration, 0,
+          (LPWAVEFORMATEX) &waveformat,
+          nullptr
+        );
+        if (FAILED(status)) {
+          BOOST_LOG(error) << "speaker_wasapi_t: Couldn't initialize render audio client [0x"sv << util::hex(status).to_string_view() << ']';
+          return -1;
+        }
+        // float32 fallback: native_is_float=true, native_bits_per_sample=32 (class defaults)
       }
 
       status = audio_client->GetBufferSize(&buffer_frames);
@@ -837,7 +930,9 @@ namespace platf::audio {
 
       channels = channel_count;
       BOOST_LOG(info) << "Mic passthrough render client started ("sv << channel_count << "ch, "sv << sample_rate << " Hz)"sv;
-      BOOST_LOG(info) << "[mic] WASAPI render format: "sv << channel_count << "ch "sv << sample_rate << "Hz 32bit (float)"sv;
+      BOOST_LOG(info) << "[mic] WASAPI render format: "sv << channel_count << "ch "sv << sample_rate
+                      << "Hz "sv << native_bits_per_sample << "-bit "sv
+                      << (native_is_float ? "float"sv : "int"sv);
       return 0;
     }
 
@@ -852,6 +947,11 @@ namespace platf::audio {
     audio_render_t audio_render;
     UINT32 buffer_frames = 0;
     int channels = 0;
+
+    // Native device format, set by init() via GetMixFormat().
+    // Defaults to float32 so the fallback path works without init() changes.
+    bool native_is_float { true };
+    WORD native_bits_per_sample { 32 };
 
     // Audio level monitoring: accumulate sum-of-squares and sample count for 5-second dBFS logging.
     double level_sum_sq = 0.0;
