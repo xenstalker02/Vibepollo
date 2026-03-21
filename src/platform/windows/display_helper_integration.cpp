@@ -778,12 +778,17 @@ namespace {
     }
 
     const bool external_killed = kill_all_helper_processes();
-    // After killing a stale external helper, Windows holds the executable's image section
-    // for a brief period after process exit, causing CreateProcess to return ERROR_ACCESS_DENIED (5).
+    // After killing a stale external helper (or after the managed helper just exited),
+    // Windows holds the executable's image section for a brief period after process exit,
+    // causing CreateProcess to return ERROR_ACCESS_DENIED (5).
     // Wait 500 ms to allow the kernel to fully release the file mapping before launching fresh.
     if (external_killed) {
       BOOST_LOG(debug) << "Display helper: waiting 500ms for image section release after external kill.";
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    } else {
+      // Even when no external process was killed, add a brief stabilization delay.
+      // The managed helper_proc() may have just exited and Windows still holds the image section.
+      std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
 
     // Compute path to sunshine_display_helper.exe inside the tools subdirectory next to Sunshine.exe
@@ -805,13 +810,14 @@ namespace {
     const bool allow_system_fallback = platf::is_running_as_system() && !user_session_ready();
     BOOST_LOG(debug) << "Starting display helper: " << platf::to_utf8(helper.wstring());
     bool started = helper_proc().start(helper.wstring(), L"", allow_system_fallback);
-    if (!started && force_restart) {
-      // If we were asked to hard-restart, tolerate a brief overlap window where the old
-      // instance is still tearing down and retry with longer delays.
-      // Use 300ms per attempt (up from 150ms) so Windows has time to release the image
-      // section after TerminateProcess — the kernel holds the file mapping briefly after
-      // process exit, causing CreateProcess ERROR_ACCESS_DENIED (error 5) on rapid restart.
-      for (int attempt = 0; attempt < 5 && !started; ++attempt) {
+    if (!started) {
+      // Retry loop: applies on both hard-restart and normal paths.
+      // Windows holds the image section after process exit causing ERROR_ACCESS_DENIED (5).
+      // Use 300ms per attempt so the kernel has time to release the file mapping.
+      const int max_retries = force_restart ? 5 : 3;
+      for (int attempt = 0; attempt < max_retries && !started; ++attempt) {
+        BOOST_LOG(debug) << "Display helper: start attempt " << (attempt + 2) << "/" << (max_retries + 1)
+                         << " after 300ms (force_restart=" << force_restart << ")";
         std::this_thread::sleep_for(std::chrono::milliseconds(300));
         started = helper_proc().start(helper.wstring(), L"", allow_system_fallback);
       }

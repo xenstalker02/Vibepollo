@@ -2645,35 +2645,42 @@ namespace stream {
         BOOST_LOG(warning) << "[mic] Client did not negotiate encrypted control stream (SS_ENC_CONTROL_V2)"
                               " — mic passthrough disabled for this session"sv;
       }
+      BOOST_LOG(info) << "[mic] encryption check complete — session continuing"sv;
       if (!config::audio.mic_sink.empty() && mic_encrypted) {
-        auto audio_ctrl = platf::audio_control();
-        if (audio_ctrl) {
-          constexpr int MIC_CHANNELS = 2;  // stereo — matches standard Moonlight client mic Opus output
-          auto spk = audio_ctrl->virtual_microphone(config::audio.mic_sink, MIC_CHANNELS, 48000);
-          if (spk) {
-            int err = OPUS_OK;
-            auto dec = opus_decoder_create(48000, MIC_CHANNELS, &err);
-            if (err != OPUS_OK || !dec) {
-              BOOST_LOG(error) << "Failed to create Opus decoder for mic passthrough: "sv << opus_strerror(err);
-            } else {
-              session.mic.speaker = std::move(spk);
-              session.mic.decoder.reset(dec);
-              session.mic.channels = MIC_CHANNELS;
-              // Store audio_ctrl so join() can restore the default capture device without
-              // re-invoking platf::audio_control() (which runs blocking driver-install checks).
-              session.mic.audio_ctrl = std::move(audio_ctrl);
-              BOOST_LOG(info) << "Mic passthrough active → \""sv << config::audio.mic_sink << '"';
-              // Switch the Windows default audio input to the configured capture device so host apps see the client's mic.
-              // The device name is read from config (mic_capture_device), defaulting to "CABLE Output (VB-Audio Virtual Cable)".
-              if (!config::audio.mic_capture_device.empty()) {
-                session.mic.prev_default_capture_id = session.mic.audio_ctrl->switch_default_capture_device(config::audio.mic_capture_device);
+        try {
+          auto audio_ctrl = platf::audio_control();
+          if (audio_ctrl) {
+            constexpr int MIC_CHANNELS = 2;  // stereo — matches standard Moonlight client mic Opus output
+            auto spk = audio_ctrl->virtual_microphone(config::audio.mic_sink, MIC_CHANNELS, 48000);
+            if (spk) {
+              int err = OPUS_OK;
+              auto dec = opus_decoder_create(48000, MIC_CHANNELS, &err);
+              if (err != OPUS_OK || !dec) {
+                BOOST_LOG(error) << "Failed to create Opus decoder for mic passthrough: "sv << opus_strerror(err);
+              } else {
+                session.mic.speaker = std::move(spk);
+                session.mic.decoder.reset(dec);
+                session.mic.channels = MIC_CHANNELS;
+                // Store audio_ctrl so join() can restore the default capture device without
+                // re-invoking platf::audio_control() (which runs blocking driver-install checks).
+                session.mic.audio_ctrl = std::move(audio_ctrl);
+                BOOST_LOG(info) << "Mic passthrough active → \""sv << config::audio.mic_sink << '"';
+                // Switch the Windows default audio input to the configured capture device so host apps see the client's mic.
+                // The device name is read from config (mic_capture_device), defaulting to "CABLE Output (VB-Audio Virtual Cable)".
+                if (!config::audio.mic_capture_device.empty()) {
+                  session.mic.prev_default_capture_id = session.mic.audio_ctrl->switch_default_capture_device(config::audio.mic_capture_device);
+                }
               }
+            } else {
+              BOOST_LOG(warning) << "[mic] No capture device found — mic passthrough disabled for this session"sv;
             }
           } else {
             BOOST_LOG(warning) << "[mic] No capture device found — mic passthrough disabled for this session"sv;
           }
-        } else {
-          BOOST_LOG(warning) << "[mic] No capture device found — mic passthrough disabled for this session"sv;
+        } catch (...) {
+          BOOST_LOG(error) << "[mic] init_mic_redirect_device threw exception — mic disabled"sv;
+          session.mic.speaker.reset();
+          session.mic.decoder.reset();
         }
       } else if (!mic_encrypted) {
         // Already logged above when mic_encrypted was false

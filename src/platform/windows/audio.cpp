@@ -702,12 +702,13 @@ namespace platf::audio {
   class speaker_wasapi_t: public platf::speaker_t {
   public:
     int write(const float *samples, std::uint32_t frame_count) override {
+      try {
       // Health check: warn if no frame has been successfully written for 500ms.
       if (!warned_stalled) {
         auto ms_since_write = std::chrono::duration_cast<std::chrono::milliseconds>(
           std::chrono::steady_clock::now() - last_write_time).count();
         if (ms_since_write >= 500) {
-          BOOST_LOG(warning) << "[mic] render thread health: no frame written for "sv << ms_since_write << "ms"sv;
+          BOOST_LOG(warning) << "[mic] WARNING: render stall detected — no frame written for "sv << ms_since_write << "ms"sv;
           warned_stalled = true;
         }
       }
@@ -763,6 +764,10 @@ namespace platf::audio {
       last_write_time = std::chrono::steady_clock::now();
       warned_stalled = false;
       return 0;
+      } catch (...) {
+        BOOST_LOG(error) << "[mic] write_mic_data threw exception — skipping frame"sv;
+        return -1;
+      }
     }
 
     int init(const std::wstring &device_id, int channel_count, std::uint32_t sample_rate) {
@@ -832,6 +837,7 @@ namespace platf::audio {
 
       channels = channel_count;
       BOOST_LOG(info) << "Mic passthrough render client started ("sv << channel_count << "ch, "sv << sample_rate << " Hz)"sv;
+      BOOST_LOG(info) << "[mic] WASAPI render format: "sv << channel_count << "ch "sv << sample_rate << "Hz 32bit (float)"sv;
       return 0;
     }
 
