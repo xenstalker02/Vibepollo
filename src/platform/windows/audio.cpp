@@ -5,10 +5,14 @@
 #define INITGUID
 
 // standard includes
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <deque>
 #include <format>
+#include <mutex>
+#include <thread>
 
 // platform includes
 #include <winsock2.h>
@@ -698,121 +702,38 @@ namespace platf::audio {
    * @brief WASAPI render client for pushing PCM audio into a virtual audio device.
    * Used for upstream mic passthrough: decoded client mic Opus audio is written
    * into a device like VB-Audio "CABLE Input" so Windows apps can read it as a mic.
+   *
+   * Architecture (Logan's event-driven dedicated-thread pattern):
+   * - write() queues decoded float32 samples + signals render_event (zero WASAPI ops)
+   * - Dedicated render_loop() thread wakes on WaitForSingleObject(render_event, 20ms)
+   * - audio_client->Start() is deferred until a 4-packet prebuffer is full
+   * - AUDCLNT_STREAMFLAGS_EVENTCALLBACK replaces AUTOCONVERTPCM
+   * - IPolicyConfig forces float32/2ch/48kHz before Initialize
    */
   class speaker_wasapi_t: public platf::speaker_t {
   public:
     int write(const float *samples, std::uint32_t frame_count) override {
-      try {
-      // Deferred start: start the render client on the very first write so
-      // the WASAPI buffer is never prefilled with stale data before real
-      // decoded audio arrives. This eliminates garbled audio at stream start.
-      if (!started) {
-        auto start_status = audio_client->Start();
-        if (FAILED(start_status)) {
-          BOOST_LOG(error) << "speaker_wasapi_t: Couldn't start audio render client [0x"sv
-                           << util::hex(start_status).to_string_view() << ']';
-          return -1;
+      if (!render_event) return -1;
+      {
+        std::lock_guard<std::mutex> lock(queue_mutex);
+        for (std::uint32_t i = 0; i < frame_count * (std::uint32_t) channels; i++) {
+          pending_frames.push_back(std::clamp(samples[i], -1.0f, 1.0f));
         }
-        BOOST_LOG(info) << "[mic] Render client started on first write — deferred start OK"sv;
-        started = true;
-      }
-
-      // Health check: warn if no frame has been successfully written for 500ms.
-      if (!warned_stalled) {
-        auto ms_since_write = std::chrono::duration_cast<std::chrono::milliseconds>(
-          std::chrono::steady_clock::now() - last_write_time).count();
-        if (ms_since_write >= 500) {
-          BOOST_LOG(warning) << "[mic] WARNING: render stall detected — no frame written for "sv << ms_since_write << "ms"sv;
-          warned_stalled = true;
+        // Cap to 1 second of audio to prevent unbounded growth
+        const std::size_t max_samples = (std::size_t)(48000 * channels);
+        if (pending_frames.size() > max_samples) {
+          pending_frames.erase(pending_frames.begin(),
+            pending_frames.begin() + (pending_frames.size() - max_samples));
         }
       }
-
-      UINT32 padding;
-      auto status = audio_client->GetCurrentPadding(&padding);
-      if (status == AUDCLNT_E_DEVICE_INVALIDATED) {
-        BOOST_LOG(error) << "[mic] WASAPI device invalidated (disconnected) — stopping mic render"sv;
-        return -2;
-      }
-      if (FAILED(status)) {
-        BOOST_LOG(error) << "Mic render: GetCurrentPadding failed [0x"sv << util::hex(status).to_string_view() << ']';
-        return -1;
-      }
-
-      auto available = buffer_frames - padding;
-      // Drop the ENTIRE frame rather than a partial write.
-      // A partial write causes chopped/pitch-shifted audio because the Opus decoder
-      // produced exactly frame_count samples; writing fewer distorts timing.
-      // With a 200ms buffer this branch should be extremely rare.
-      if (available < frame_count) {
-        BOOST_LOG(warning) << "Mic render: buffer full (padding="sv << padding
-                           << '/' << buffer_frames << "), dropping "sv << frame_count << " frames"sv;
-        return 0;
-      }
-      auto to_write = frame_count;
-
-      BYTE *buf;
-      status = audio_render->GetBuffer(to_write, &buf);
-      if (status == AUDCLNT_E_DEVICE_INVALIDATED) {
-        BOOST_LOG(error) << "[mic] WASAPI device invalidated during GetBuffer — stopping mic render"sv;
-        return -2;
-      }
-      if (FAILED(status)) {
-        BOOST_LOG(error) << "Mic render: GetBuffer failed [0x"sv << util::hex(status).to_string_view() << ']';
-        return -1;
-      }
-
-      // Convert float32 samples to the device's native format before writing.
-      // AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM converts sample rates but NOT float-to-integer.
-      // Writing float32 bits into an integer PCM buffer produces white noise.
-      const std::uint32_t sample_count = to_write * (std::uint32_t) channels;
-      if (native_is_float) {
-        std::memcpy(buf, samples, sample_count * sizeof(float));
-      }
-      else if (native_bits_per_sample == 16) {
-        auto out = reinterpret_cast<std::int16_t *>(buf);
-        for (std::uint32_t i = 0; i < sample_count; ++i) {
-          float s = std::max(-1.0f, std::min(1.0f, samples[i]));
-          out[i] = static_cast<std::int16_t>(s * 32767.0f);
-        }
-      }
-      else if (native_bits_per_sample == 32) {
-        auto out = reinterpret_cast<std::int32_t *>(buf);
-        for (std::uint32_t i = 0; i < sample_count; ++i) {
-          float s = std::max(-1.0f, std::min(1.0f, samples[i]));
-          out[i] = static_cast<std::int32_t>(s * 2147483647.0f);
-        }
-      }
-      else {
-        // Unknown integer width — fall back to raw copy (may still produce noise,
-        // but prevents a crash; the log will show what format to handle next).
-        BOOST_LOG(warning) << "[mic] Unknown native bit depth "sv << native_bits_per_sample
-                           << " — falling back to memcpy"sv;
-        std::memcpy(buf, samples, sample_count * sizeof(float));
-      }
-      update_level_monitor(samples, to_write);
-      status = audio_render->ReleaseBuffer(to_write, 0);
-      if (status == AUDCLNT_E_DEVICE_INVALIDATED) {
-        BOOST_LOG(error) << "[mic] WASAPI device invalidated during ReleaseBuffer — stopping mic render"sv;
-        return -2;
-      }
-      if (FAILED(status)) {
-        BOOST_LOG(error) << "Mic render: ReleaseBuffer failed [0x"sv << util::hex(status).to_string_view() << ']';
-        return -1;
-      }
-
-      BOOST_LOG(verbose) << "Mic render: wrote "sv << to_write << " frames ("sv
-                         << (to_write * (std::uint32_t) channels * (native_bits_per_sample / 8u)) << " bytes) to device"sv;
-      last_write_time = std::chrono::steady_clock::now();
-      warned_stalled = false;
+      SetEvent(render_event);
       return 0;
-      } catch (...) {
-        BOOST_LOG(error) << "[mic] write_mic_data threw exception — skipping frame"sv;
-        return -1;
-      }
     }
 
     int init(const std::wstring &device_id, int channel_count, std::uint32_t sample_rate) {
       HRESULT status;
+
+      channels = channel_count;
 
       device_enum_t dev_enum;
       status = CoCreateInstance(
@@ -834,95 +755,118 @@ namespace platf::audio {
         return -1;
       }
 
+      // Force format to float32/2ch/48kHz before opening via IPolicyConfig.
+      // This ensures the device's shared-mode mix format is what we expect,
+      // avoiding float-to-integer conversion issues entirely.
+      {
+        policy_t local_policy;
+        auto policy_hr = CoCreateInstance(
+          CLSID_CPolicyConfigClient,
+          nullptr,
+          CLSCTX_ALL,
+          IID_IPolicyConfig,
+          (void **) &local_policy
+        );
+        if (SUCCEEDED(policy_hr) && local_policy) {
+          WAVEFORMATEXTENSIBLE wfx {};
+          wfx.Format.wFormatTag      = WAVE_FORMAT_EXTENSIBLE;
+          wfx.Format.nChannels       = 2;
+          wfx.Format.nSamplesPerSec  = 48000;
+          wfx.Format.wBitsPerSample  = 32;
+          wfx.Format.nBlockAlign     = 8;
+          wfx.Format.nAvgBytesPerSec = 48000 * 8;
+          wfx.Format.cbSize          = sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX);
+          wfx.Samples.wValidBitsPerSample = 32;
+          wfx.dwChannelMask = SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT;
+          // KSDATAFORMAT_SUBTYPE_IEEE_FLOAT
+          wfx.SubFormat = {0x00000003, 0x0000, 0x0010,
+            {0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71}};
+
+          auto wfx_copy = wfx;
+          WAVEFORMATEXTENSIBLE prev {};
+          auto set_hr = local_policy->SetDeviceFormat(
+            device_id.c_str(),
+            reinterpret_cast<WAVEFORMATEX *>(&wfx_copy),
+            reinterpret_cast<WAVEFORMATEX *>(&prev)
+          );
+          if (SUCCEEDED(set_hr)) {
+            BOOST_LOG(info) << "[mic] Forced device format to float32/2ch/48kHz"sv;
+          }
+          else {
+            BOOST_LOG(warning) << "[mic] SetDeviceFormat failed [0x"sv
+                               << util::hex(set_hr).to_string_view()
+                               << "] — continuing with existing format"sv;
+          }
+        }
+        else {
+          BOOST_LOG(warning) << "[mic] IPolicyConfig unavailable [0x"sv
+                             << util::hex(policy_hr).to_string_view()
+                             << "] — skipping format force"sv;
+        }
+      }
+
       status = device->Activate(IID_IAudioClient, CLSCTX_ALL, nullptr, (void **) &audio_client);
       if (FAILED(status)) {
         BOOST_LOG(error) << "speaker_wasapi_t: Couldn't activate render device [0x"sv << util::hex(status).to_string_view() << ']';
         return -1;
       }
 
-      // Query the device's native mix format so we can initialize with it directly.
-      // AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM only converts sample rates; it does NOT
-      // perform float-to-integer conversion. Writing float32 into an integer-format
-      // buffer produces white noise. Using the native format avoids this entirely.
-      WAVEFORMATEX *mix_fmt = nullptr;
-      HRESULT mix_hr = audio_client->GetMixFormat(&mix_fmt);
+      // Build our float32/2ch/48kHz format for Initialize.
+      WAVEFORMATEXTENSIBLE waveformat {};
+      waveformat.Format.wFormatTag      = WAVE_FORMAT_EXTENSIBLE;
+      waveformat.Format.nChannels       = 2;
+      waveformat.Format.nSamplesPerSec  = 48000;
+      waveformat.Format.wBitsPerSample  = 32;
+      waveformat.Format.nBlockAlign     = 8;
+      waveformat.Format.nAvgBytesPerSec = 48000 * 8;
+      waveformat.Format.cbSize          = sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX);
+      waveformat.Samples.wValidBitsPerSample = 32;
+      waveformat.dwChannelMask = SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT;
+      waveformat.SubFormat = {0x00000003, 0x0000, 0x0010,
+        {0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71}};
 
-      // Buffer duration from config (default 30ms). REFERENCE_TIME is in 100-ns units.
-      REFERENCE_TIME k_mic_buffer_duration = (REFERENCE_TIME) config::audio.mic_buffer_ms * 10000LL;
-      BOOST_LOG(info) << "[mic] WASAPI buffer: "sv << config::audio.mic_buffer_ms << "ms"sv;
-
-      if (SUCCEEDED(mix_hr) && mix_fmt) {
-        // Detect whether device is float or integer and its bit depth.
-        bool is_float = false;
-        WORD bits = mix_fmt->wBitsPerSample;
-        if (mix_fmt->wFormatTag == WAVE_FORMAT_IEEE_FLOAT) {
-          is_float = true;
-        }
-        else if (mix_fmt->wFormatTag == WAVE_FORMAT_EXTENSIBLE && mix_fmt->cbSize >= 22) {
-          auto ext = reinterpret_cast<WAVEFORMATEXTENSIBLE *>(mix_fmt);
-          // Compare SubFormat GUID to KSDATAFORMAT_SUBTYPE_IEEE_FLOAT
-          static const GUID kIEEEFloat = {0x00000003, 0x0000, 0x0010,
-            {0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71}};
-          if (std::memcmp(&ext->SubFormat, &kIEEEFloat, sizeof(GUID)) == 0) {
-            is_float = true;
-          }
-        }
-
-        BOOST_LOG(info) << "[mic] Device mix format: "sv
-                        << mix_fmt->nChannels << "ch "sv
-                        << mix_fmt->nSamplesPerSec << "Hz "sv
-                        << bits << "-bit "sv
-                        << (is_float ? "float"sv : "int"sv);
-
-        // Initialize with the device's native format; no AUTOCONVERTPCM needed.
-        status = audio_client->Initialize(
-          AUDCLNT_SHAREMODE_SHARED,
-          0,
-          k_mic_buffer_duration, 0,
-          mix_fmt,
-          nullptr
-        );
-        CoTaskMemFree(mix_fmt);
-        mix_fmt = nullptr;
-
-        if (SUCCEEDED(status)) {
-          native_is_float = is_float;
-          native_bits_per_sample = bits;
-        }
-        else {
-          BOOST_LOG(warning) << "speaker_wasapi_t: Initialize with native format failed [0x"sv
-                             << util::hex(status).to_string_view()
-                             << "] — retrying with float32 + AUTOCONVERTPCM"sv;
-          // Fall through to float32 fallback below.
-        }
-      }
-      else {
-        BOOST_LOG(warning) << "[mic] GetMixFormat failed [0x"sv
-                           << util::hex(mix_hr).to_string_view()
-                           << "] — using float32 + AUTOCONVERTPCM fallback"sv;
-        if (mix_fmt) { CoTaskMemFree(mix_fmt); mix_fmt = nullptr; }
-        // status left as previous failure so the fallback path below runs.
-        status = E_FAIL;
-      }
-
-      // Fallback: initialize with hardcoded float32 format and AUTOCONVERTPCM
-      // (original behaviour). Used if GetMixFormat() failed or native init failed.
+      // 100ms WASAPI buffer. AUDCLNT_STREAMFLAGS_EVENTCALLBACK enables event-driven mode.
+      status = audio_client->Initialize(
+        AUDCLNT_SHAREMODE_SHARED,
+        AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+        1000000LL,  // 100ms in 100ns units
+        0,
+        reinterpret_cast<WAVEFORMATEX *>(&waveformat),
+        nullptr
+      );
       if (FAILED(status)) {
-        DWORD channel_mask = (channel_count == 2) ? waveformat_mask_stereo : SPEAKER_FRONT_CENTER;
-        WAVEFORMATEXTENSIBLE waveformat = create_waveformat(sample_format_e::f32, (WORD) channel_count, channel_mask);
-        status = audio_client->Initialize(
-          AUDCLNT_SHAREMODE_SHARED,
-          AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY,
-          k_mic_buffer_duration, 0,
-          (LPWAVEFORMATEX) &waveformat,
-          nullptr
-        );
+        BOOST_LOG(warning) << "speaker_wasapi_t: Initialize with float32/EVENTCALLBACK failed [0x"sv
+                           << util::hex(status).to_string_view()
+                           << "] — retrying with AUTOCONVERTPCM fallback"sv;
+        // Fallback: use AUTOCONVERTPCM with native mix format
+        WAVEFORMATEX *mix_fmt = nullptr;
+        audio_client->GetMixFormat(&mix_fmt);
+        if (mix_fmt) {
+          status = audio_client->Initialize(
+            AUDCLNT_SHAREMODE_SHARED,
+            AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY,
+            1000000LL, 0,
+            mix_fmt,
+            nullptr
+          );
+          CoTaskMemFree(mix_fmt);
+        }
         if (FAILED(status)) {
           BOOST_LOG(error) << "speaker_wasapi_t: Couldn't initialize render audio client [0x"sv << util::hex(status).to_string_view() << ']';
           return -1;
         }
-        // float32 fallback: native_is_float=true, native_bits_per_sample=32 (class defaults)
       }
+
+      // Create the render event. SetEventHandle must be called after Initialize.
+      render_event = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+      if (!render_event) {
+        BOOST_LOG(error) << "speaker_wasapi_t: Couldn't create render event"sv;
+        return -1;
+      }
+
+      // SetEventHandle may fail if EVENTCALLBACK flag wasn't used (fallback path).
+      // Ignore failure — the render_loop will still work via 20ms poll timeout.
+      audio_client->SetEventHandle(render_event);
 
       status = audio_client->GetBufferSize(&buffer_frames);
       if (FAILED(status)) {
@@ -936,21 +880,36 @@ namespace platf::audio {
         return -1;
       }
 
-      // Defer Start() until the first real write so the buffer never fills
-      // with stale data before the first Opus packet arrives, which would
-      // cause garbled audio at stream start.
+      // DO NOT call audio_client->Start() here — deferred to render_loop() after prebuffer.
 
-      channels = channel_count;
-      BOOST_LOG(info) << "Mic passthrough render client ready ("sv << channel_count << "ch, "sv << sample_rate << " Hz) — will start on first write"sv;
-      BOOST_LOG(info) << "[mic] WASAPI render format: "sv << channel_count << "ch "sv << sample_rate
-                      << "Hz "sv << native_bits_per_sample << "-bit "sv
-                      << (native_is_float ? "float"sv : "int"sv);
+      BOOST_LOG(info) << "Mic passthrough render client ready ("sv << channel_count << "ch, "sv << sample_rate << " Hz)"sv;
+      BOOST_LOG(info) << "[mic] WASAPI buffer: 100ms, EVENTCALLBACK mode, float32/2ch/48kHz"sv;
+
+      // Launch the dedicated render thread.
+      stop_render_thread = false;
+      render_thread = std::thread(&speaker_wasapi_t::render_loop, this);
+      BOOST_LOG(info) << "[mic] Render thread started, waiting for prebuffer"sv;
+
       return 0;
     }
 
     ~speaker_wasapi_t() override {
+      // Signal render thread to stop and wake it.
+      stop_render_thread = true;
+      if (render_event) {
+        SetEvent(render_event);
+      }
+      if (render_thread.joinable()) {
+        render_thread.join();
+      }
       if (audio_client) {
         audio_client->Stop();
+      }
+      // audio_render released by its safe_ptr destructor.
+      // render_event closed last.
+      if (render_event) {
+        CloseHandle(render_event);
+        render_event = nullptr;
       }
     }
 
@@ -960,23 +919,87 @@ namespace platf::audio {
     UINT32 buffer_frames = 0;
     int channels = 0;
 
-    // Native device format, set by init() via GetMixFormat().
-    // Defaults to float32 so the fallback path works without init() changes.
-    bool native_is_float { true };
-    WORD native_bits_per_sample { 32 };
+    // Event-driven render thread members
+    std::deque<float> pending_frames;
+    std::mutex queue_mutex;
+    HANDLE render_event { nullptr };
+    std::thread render_thread;
+    std::atomic<bool> stop_render_thread { false };
+    bool client_started { false };
 
     // Audio level monitoring: accumulate sum-of-squares and sample count for 5-second dBFS logging.
     double level_sum_sq = 0.0;
     std::uint64_t level_sample_count = 0;
     std::chrono::steady_clock::time_point level_window_start = std::chrono::steady_clock::now();
 
-    // Deferred start: audio_client->Start() is called on the first write() rather
-    // than in init(), so the render buffer is never prefilled with stale data.
-    bool started { false };
+    void render_loop() {
+      // COM must be initialized per-thread.
+      if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) {
+        BOOST_LOG(error) << "[mic] render_loop: CoInitializeEx failed"sv;
+        return;
+      }
 
-    // Health check: track last successful write time to detect stalled render.
-    std::chrono::steady_clock::time_point last_write_time = std::chrono::steady_clock::now();
-    bool warned_stalled = false;
+      // Prebuffer: wait for 4 Opus packets (960 frames each) before starting WASAPI.
+      const std::size_t prebuf_samples = (std::size_t)(960 * 4 * channels);
+
+      while (!stop_render_thread) {
+        auto wait_result = WaitForSingleObject(render_event, 20);
+        if (stop_render_thread) break;
+        if (wait_result == WAIT_FAILED) break;
+
+        // Check prebuffer before starting WASAPI client.
+        if (!client_started) {
+          std::size_t qsz = 0;
+          {
+            std::lock_guard<std::mutex> lock(queue_mutex);
+            qsz = pending_frames.size();
+          }
+          if (qsz < prebuf_samples) {
+            continue;  // still buffering
+          }
+
+          // Enough data — start WASAPI with a clean buffer.
+          auto hr = audio_client->Start();
+          if (FAILED(hr)) {
+            BOOST_LOG(error) << "[mic] WASAPI Start failed: 0x"sv << util::hex(hr).to_string_view();
+            break;
+          }
+          client_started = true;
+          BOOST_LOG(info) << "[mic] WASAPI render started (prebuffer: "sv << qsz << " samples)"sv;
+        }
+
+        // Drain pending_frames into WASAPI.
+        UINT32 padding = 0;
+        auto hr = audio_client->GetCurrentPadding(&padding);
+        if (FAILED(hr)) {
+          if (hr == AUDCLNT_E_DEVICE_INVALIDATED) break;
+          continue;
+        }
+
+        auto available = buffer_frames - padding;
+        if (available == 0) continue;
+
+        std::lock_guard<std::mutex> lock(queue_mutex);
+        auto to_write = std::min(available, (UINT32)(pending_frames.size() / (std::uint32_t) channels));
+        if (to_write == 0) continue;
+
+        BYTE *buf = nullptr;
+        hr = audio_render->GetBuffer(to_write, &buf);
+        if (FAILED(hr) || !buf) continue;
+
+        auto *dst = reinterpret_cast<float *>(buf);
+        for (UINT32 i = 0; i < to_write * (UINT32) channels; i++) {
+          dst[i] = pending_frames.front();
+          pending_frames.pop_front();
+        }
+        audio_render->ReleaseBuffer(to_write, 0);
+
+        // Level monitoring (read from dst since pending_frames were already consumed).
+        update_level_monitor(dst, to_write);
+      }
+
+      CoUninitialize();
+    }
 
     void update_level_monitor(const float *samples, std::uint32_t frame_count) {
       const std::uint64_t n = (std::uint64_t) frame_count * (std::uint64_t) channels;
