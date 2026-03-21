@@ -501,12 +501,13 @@ namespace stream {
       std::uint16_t expected_seq = 0;
       bool has_playout_cursor = false;
 
-      // Session stats counters (B7)
+      // Session stats counters
       std::uint64_t packets_received = 0;
       std::uint64_t decode_errors = 0;
       std::uint64_t plc_events = 0;
       std::uint64_t silence_frames = 0;
       std::uint64_t frames_written = 0;
+      std::uint64_t encryption_failures = 0;  // Packets dropped for unencrypted control stream
 
       // Underrun detection (B3)
       std::chrono::steady_clock::time_point last_recv_time;
@@ -1286,7 +1287,20 @@ namespace stream {
         return;
       }
 
-      // B5: Malformed packet protection
+      // Require encrypted control stream for mic passthrough.
+      // Our mic data rides the control stream; SS_ENC_CONTROL_V2 (AES-GCM) is what encrypts it.
+      // ClassicOldSong upstream requirement: plaintext mic must be refused.
+      if (!(session->config.encryptionFlagsEnabled & SS_ENC_CONTROL_V2)) {
+        if (session->mic.encryption_failures++ == 0) {
+          BOOST_LOG(warning) << "[mic] Client negotiated plaintext control stream — mic passthrough disabled."
+                                " Encrypted control stream (SS_ENC_CONTROL_V2) is required."sv;
+          session->mic.speaker.reset();
+          session->mic.decoder.reset();
+        }
+        return;
+      }
+
+      // Malformed packet protection
       if (payload.empty() || payload.size() >= 4096) {
         BOOST_LOG(warning) << "[mic] malformed packet (len="sv << payload.size() << ") -- skipping"sv;
         return;
@@ -2471,13 +2485,14 @@ namespace stream {
       BOOST_LOG(debug) << "Resetting Input..."sv;
       input::reset(session.input);
 
-      // B7: Session stats on disconnect
-      if (session.mic.packets_received > 0) {
+      // Session stats on disconnect
+      if (session.mic.packets_received > 0 || session.mic.encryption_failures > 0) {
         BOOST_LOG(info) << "[mic] session stats -- packets: "sv << session.mic.packets_received
                         << " errors: "sv << session.mic.decode_errors
                         << " PLC: "sv << session.mic.plc_events
                         << " silence: "sv << session.mic.silence_frames
-                        << " written: "sv << session.mic.frames_written;
+                        << " written: "sv << session.mic.frames_written
+                        << " enc_fail: "sv << session.mic.encryption_failures;
       }
 
       // Restore the previous default audio input device (was switched on session start for mic passthrough).
@@ -2607,7 +2622,15 @@ namespace stream {
       // Initialize upstream mic passthrough. We open the WASAPI render client here
       // and keep it alive for the full session. The control-stream handler writes
       // decoded PCM into it when IDX_MIC_AUDIO_DATA packets arrive.
-      if (!config::audio.mic_sink.empty()) {
+      //
+      // Mic data rides the encrypted control stream (SS_ENC_CONTROL_V2 / AES-GCM).
+      // Per ClassicOldSong's upstream requirement, plaintext mic is refused.
+      const bool mic_encrypted = (session.config.encryptionFlagsEnabled & SS_ENC_CONTROL_V2) != 0;
+      if (!mic_encrypted) {
+        BOOST_LOG(warning) << "[mic] Client did not negotiate encrypted control stream (SS_ENC_CONTROL_V2)"
+                              " — mic passthrough disabled for this session"sv;
+      }
+      if (!config::audio.mic_sink.empty() && mic_encrypted) {
         auto audio_ctrl = platf::audio_control();
         if (audio_ctrl) {
           constexpr int MIC_CHANNELS = 2;  // stereo — matches standard Moonlight client mic Opus output
@@ -2637,6 +2660,8 @@ namespace stream {
         } else {
           BOOST_LOG(warning) << "[mic] No capture device found — mic passthrough disabled for this session"sv;
         }
+      } else if (!mic_encrypted) {
+        // Already logged above when mic_encrypted was false
       } else {
         BOOST_LOG(info) << "[mic] mic_sink not configured — mic passthrough disabled for this session"sv;
       }

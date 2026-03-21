@@ -138,11 +138,19 @@ mic_capture_device = CABLE Output (VB-Audio Virtual Cable)
 
 ---
 
+## Security
+
+Mic packets travel inside the encrypted Moonlight control stream (AES-GCM, `SS_ENC_CONTROL_V2`).
+Clients that do not negotiate an encrypted control stream will have mic passthrough refused — plaintext mic audio is never rendered.
+
+---
+
 ## Related Projects
 - [logabell/Apollo](https://github.com/logabell/Apollo) -- parallel server-side mic passthrough implementation
 - [logabell/moonlight-qt-mic](https://github.com/logabell/moonlight-qt-mic) -- parallel client-side mic passthrough
 - [Nonary/vibepollo](https://github.com/Nonary/vibepollo) -- our direct upstream
+- [ClassicOldSong/Apollo](https://github.com/ClassicOldSong/Apollo) -- Apollo upstream
 - [LizardByte/Sunshine](https://github.com/LizardByte/Sunshine) -- main Sunshine project
 
 ## Contributing
-PRs are welcome. Our goal is to contribute mic passthrough upstream to Nonary/vibepollo after community testing. See [CONTRIBUTING.md](CONTRIBUTING.md) and [UPSTREAM.md](UPSTREAM.md).
+PRs are welcome. Our goal is to contribute mic passthrough upstream to ClassicOldSong/Apollo and Nonary/vibepollo after community testing. See [CONTRIBUTING.md](CONTRIBUTING.md) and [UPSTREAM.md](UPSTREAM.md).

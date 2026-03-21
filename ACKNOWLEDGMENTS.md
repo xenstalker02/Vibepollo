@@ -14,4 +14,11 @@ Vibepollo is built on the work of many open source contributors.
   We adopted: Opus encoder settings (64 kbps, FEC, VBR, complexity 10), deadline-based send pacer with re-sync guard, 12-frame buffer overflow cap, named-device-to-default fallback, `OPUS_FRAMESIZE_20_MS` explicit frame duration.
 
 ## Note on Parallel Development
-Both this project and logabell's forks independently implemented mic passthrough for Moonlight/Sunshine. We cross-referenced implementations and adopted the strongest patterns from each. We encourage collaboration -- reach out via GitHub Discussions or Issues.
+Both this project and logabell's forks independently implemented mic passthrough for Moonlight/Sunshine. We cross-referenced implementations and adopted the strongest patterns from each.
+
+Key design decisions in our implementation:
+- Mic data rides the existing encrypted control stream (AES-GCM via SS_ENC_CONTROL_V2); plaintext mic is refused at the server, satisfying ClassicOldSong's upstream requirement
+- Per-session Opus decoder (no shared global state — concurrent sessions are safe)
+- Session routing by control stream context (not UDP IP matching — NAT-safe by design)
+
+We encourage collaboration — reach out via GitHub Discussions or Issues.
