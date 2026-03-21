@@ -2668,10 +2668,18 @@ namespace stream {
                 // re-invoking platf::audio_control() (which runs blocking driver-install checks).
                 session.mic.audio_ctrl = std::move(audio_ctrl);
                 BOOST_LOG(info) << "Mic passthrough active → \""sv << config::audio.mic_sink << '"';
-                // Switch the Windows default audio input to the configured capture device so host apps see the client's mic.
-                // The device name is read from config (mic_capture_device), defaulting to "CABLE Output (VB-Audio Virtual Cable)".
-                if (!config::audio.mic_capture_device.empty()) {
-                  session.mic.prev_default_capture_id = session.mic.audio_ctrl->switch_default_capture_device(config::audio.mic_capture_device);
+                // Switch the Windows default audio input to the correct capture device so host apps see the client's mic.
+                // If the Steam Streaming Microphone render device was chosen (primary path), the paired capture endpoint
+                // is "Microphone (Steam Streaming Microphone)".  Otherwise fall back to the configured CABLE Output device.
+                {
+                  std::string capture_target = config::audio.mic_capture_device;
+                  if (session.mic.audio_ctrl->is_steam_mic_available()) {
+                    capture_target = "Microphone (Steam Streaming Microphone)";
+                    BOOST_LOG(info) << "[mic] Steam render active — switching capture to Microphone (Steam Streaming Microphone)"sv;
+                  }
+                  if (!capture_target.empty()) {
+                    session.mic.prev_default_capture_id = session.mic.audio_ctrl->switch_default_capture_device(capture_target);
+                  }
                 }
               }
             } else {

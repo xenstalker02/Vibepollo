@@ -1013,6 +1013,10 @@ namespace platf::audio {
       return spk;
     }
 
+    bool is_steam_mic_available() override {
+      return static_cast<bool>(find_device_id(match_steam_microphone()));
+    }
+
     /**
      * If the requested sink is a virtual sink, meaning no speakers attached to
      * the host, then we can seamlessly set the format to stereo and surround sound.
@@ -1113,7 +1117,8 @@ namespace platf::audio {
 
     enum class match_field_e {
       device_id,  ///< Match device_id
-      device_friendly_name,  ///< Match endpoint friendly name
+      device_friendly_name,  ///< Match endpoint friendly name (exact)
+      device_friendly_name_contains,  ///< Match endpoint friendly name (substring)
       adapter_friendly_name,  ///< Match adapter friendly name
       device_description,  ///< Match endpoint description
     };
@@ -1127,12 +1132,19 @@ namespace platf::audio {
       };
     }
 
-    // Steam Streaming Microphone fallback matching (Logan's 3-field pattern)
+    // Steam Streaming Microphone render-side matching.
+    // Priority:
+    //   1. device_friendly_name_contains "Steam Streaming Microphone" — robust substring match
+    //      (matches "Speakers (Steam Streaming Microphone)" regardless of locale prefix)
+    //   2. device_friendly_name exact "Speakers (Steam Streaming Microphone)" — legacy exact match
+    // Notes:
+    //   adapter_friendly_name ({026e516e-b814-414b-83cd-856d6fef4822},2) is not populated
+    //   by the Steam driver on this system; device_description (pid=2) is "Speakers" which
+    //   is too broad to use as a discriminator.
     audio_control_t::match_fields_list_t match_steam_microphone() {
       return {
+        {match_field_e::device_friendly_name_contains, L"Steam Streaming Microphone"},
         {match_field_e::device_friendly_name, L"Speakers (Steam Streaming Microphone)"},
-        {match_field_e::adapter_friendly_name, L"Steam Streaming Microphone"},
-        {match_field_e::device_description, L"Steam Streaming Microphone"},
       };
     }
 
@@ -1196,6 +1208,14 @@ namespace platf::audio {
               case match_field_e::device_friendly_name:
                 match_value = device_friendly_name.prop.pwszVal;
                 break;
+
+              case match_field_e::device_friendly_name_contains:
+                // substring match — handled below
+                if (device_friendly_name.prop.pwszVal &&
+                    std::wcsstr(device_friendly_name.prop.pwszVal, match_list[i].second.c_str())) {
+                  matched[i] = device_id;
+                }
+                continue;
 
               case match_field_e::adapter_friendly_name:
                 match_value = adapter_friendly_name.prop.pwszVal;

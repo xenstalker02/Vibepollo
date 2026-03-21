@@ -602,6 +602,15 @@ namespace platf {
      */
     virtual void reset_default_capture_to_first_real() {}
 
+    /**
+     * @brief Returns true if the Steam Streaming Microphone render device is present
+     * and active. Used to select the correct capture endpoint when Steam mic is in use.
+     * Always returns false on non-Windows.
+     */
+    virtual bool is_steam_mic_available() {
+      return false;
+    }
+
     virtual ~audio_control_t() = default;
   };
 
