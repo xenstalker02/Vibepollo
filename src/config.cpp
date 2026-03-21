@@ -802,7 +802,7 @@ namespace config {
     {},  // virtual_sink
     "CABLE Input",  // mic_sink
     "CABLE Output (VB-Audio Virtual Cable)",  // mic_capture_device
-    30,  // mic_buffer_ms
+    50,  // mic_buffer_ms
     true,  // stream audio
     true,  // install_steam_drivers
     true,  // install_vbcable

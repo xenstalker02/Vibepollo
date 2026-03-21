@@ -185,6 +185,10 @@ bool ProcessHandler::start(
   STARTUPINFOEXW si = {};
   si.StartupInfo.cb = sizeof(si);
 
+  // NOTE: EXTENDED_STARTUPINFO_PRESENT is only valid when lpAttributeList is populated.
+  // We include it here for the SYSTEM paths (CreateProcessAsUserW / console-session launch)
+  // which properly populate the extended struct. The plain CreateProcessW paths below
+  // explicitly use sizeof(STARTUPINFOW) and omit this flag.
   DWORD creation_flags = CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT;
   // When not using a job (keep-alive child), prefer to break away from any existing job to avoid kill-on-close
   if (!use_job_) {
@@ -242,16 +246,21 @@ bool ProcessHandler::start(
       if (start_as_system_in_active_console_session(cmd_line, working_dir, creation_flags, si, pi_)) {
         ret = TRUE;
       } else {
+        // Fallback SYSTEM launch: use plain STARTUPINFOW size and drop EXTENDED_STARTUPINFO_PRESENT
+        // to avoid ERROR_ACCESS_DENIED (error 5) when lpAttributeList is NULL.
+        STARTUPINFOW si_plain = {};
+        si_plain.cb = sizeof(si_plain);
+        DWORD plain_flags = (creation_flags & ~EXTENDED_STARTUPINFO_PRESENT);
         ret = CreateProcessW(
           nullptr,
           (LPWSTR) cmd_line.c_str(),
           nullptr,
           nullptr,
           FALSE,
-          creation_flags,
+          plain_flags,
           nullptr,
           working_dir.empty() ? nullptr : working_dir.c_str(),
-          (LPSTARTUPINFOW) &si,
+          &si_plain,
           &pi_
         );
       }
@@ -260,17 +269,23 @@ bool ProcessHandler::start(
       return false;
     }
   } else {
-    // Non-SYSTEM: inherit our environment but still supply a sensible working directory
+    // Non-SYSTEM: inherit our environment but still supply a sensible working directory.
+    // Use plain STARTUPINFOW (not STARTUPINFOEXW) and omit EXTENDED_STARTUPINFO_PRESENT —
+    // passing EXTENDED_STARTUPINFO_PRESENT with a NULL lpAttributeList causes
+    // ERROR_ACCESS_DENIED (error 5) on Windows 11 when there is no job attribute list.
+    STARTUPINFOW si_plain = {};
+    si_plain.cb = sizeof(si_plain);
+    DWORD plain_flags = (creation_flags & ~EXTENDED_STARTUPINFO_PRESENT);
     ret = CreateProcessW(
       nullptr,
       (LPWSTR) cmd_line.c_str(),
       nullptr,
       nullptr,
       FALSE,
-      creation_flags,
+      plain_flags,
       nullptr,
       working_dir.empty() ? nullptr : working_dir.c_str(),
-      (LPSTARTUPINFOW) &si,
+      &si_plain,
       &pi_
     );
   }
