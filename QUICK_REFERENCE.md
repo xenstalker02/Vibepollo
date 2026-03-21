@@ -4,10 +4,17 @@ Last updated: 2026-03-20
 ## Current State
 | Repo | Commit | Description |
 |------|--------|-------------|
-| Vibepollo | 12429217 | Merged 47 upstream commits + security: refuse plaintext mic |
-| Vibelight | 320218af | docs: Security section and logabell attribution |
+| Vibepollo | b90e002f | fix+docs: display helper stabilization, mic null safety, WASAPI exception handling, README rewrite |
+| Vibelight | 714dc82a | docs: complete README rewrite |
 
 Both repos pushed to GitHub. Local PC and Deck in sync.
+
+## Known Fixed (2026-03-20)
+- Display helper error:5 (ACCESS_DENIED) storm: added 200ms unconditional stabilization delay + 3-retry loop on non-force_restart path
+- Mic null pointer guards: try-catch on init_mic_redirect_device and write_mic_data in audio.cpp
+- WASAPI exception handling: both init and write paths now catch (...) and disable mic gracefully rather than crashing
+- WASAPI render format log: [mic] WASAPI render format: Xch XHz Xbit logged on session start
+- Stall detection renamed to [mic] WARNING: render stall detected for consistency
 
 ## Autostart
 Vibepollo autostarts via Windows Task Scheduler on login (30-second delay for audio init).
