@@ -987,19 +987,18 @@ namespace platf::audio {
       // "CABLE Input" is a render (playback) endpoint from WASAPI's perspective,
       // so find_device_id (which enumerates eRender) will locate it correctly.
       //
-      // Fallback priority chain:
-      //   1. Configured mic_sink (e.g. "CABLE Input")
-      //   2. Steam Streaming Microphone (3-field match)
+      // Priority chain:
+      //   1. Steam Streaming Microphone (primary — auto-detected)
+      //   2. Configured mic_sink (e.g. "CABLE Input") — fallback
       //   3. Give up — log and return nullptr
-      auto match_list = match_all_fields(from_utf8(device_name));
-      auto matched = find_device_id(match_list);
-      if (!matched) {
-        BOOST_LOG(info) << "[mic] configured sink \""sv << device_name
-                        << "\" not found — trying Steam Streaming Microphone"sv;
-        matched = find_device_id(match_steam_microphone());
-        if (matched) {
-          BOOST_LOG(info) << "[mic] using Steam Streaming Microphone as mic sink fallback"sv;
-        }
+
+      // 1. Try Steam Streaming Microphone first
+      auto matched = find_device_id(match_steam_microphone());
+      if (matched) {
+        BOOST_LOG(info) << "[mic] Using Steam Streaming Microphone (primary)"sv;
+      } else {
+        BOOST_LOG(info) << "[mic] Steam Streaming Mic not found — using configured sink: "sv << device_name;
+        matched = find_device_id(match_all_fields(from_utf8(device_name)));
       }
       if (!matched) {
         BOOST_LOG(warning) << "[mic] WARNING: no suitable mic sink — mic passthrough disabled for this session"sv;
