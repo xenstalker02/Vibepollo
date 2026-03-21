@@ -1,46 +1,40 @@
-name: Upstream Sync Check
+name: Upstream Update Check
 on:
   schedule:
     - cron: '0 9 * * 1'  # Every Monday 9am UTC
   workflow_dispatch:
-
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Add upstream
-        run: git remote add upstream https://github.com/Nonary/vibepollo.git || true
-      - name: Fetch upstream
-        run: git fetch upstream master
-      - name: Check for new commits
-        id: check
+      - name: Check Nonary/vibepollo upstream
         run: |
-          NEW=$(git log HEAD..upstream/master --oneline)
-          COUNT=$(git log HEAD..upstream/master --oneline | wc -l)
-          echo "count=$COUNT" >> $GITHUB_OUTPUT
-          # Multi-line output needs delimiter
-          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
-          echo "new_commits<<$EOF" >> $GITHUB_OUTPUT
-          echo "$NEW" >> $GITHUB_OUTPUT
-          echo "$EOF" >> $GITHUB_OUTPUT
-          echo "New upstream commits: $COUNT"
-          if [ "$COUNT" -gt "0" ]; then
-            git log HEAD..upstream/master --oneline
-          else
-            echo "Fork is up to date with upstream"
-          fi
-      - name: Open issue if new commits
-        if: steps.check.outputs.count != '0'
+          git remote add nonary https://github.com/Nonary/vibepollo.git 2>/dev/null || true
+          git fetch nonary main --no-tags 2>/dev/null || git fetch nonary master --no-tags
+          LOCAL=$(git rev-parse HEAD)
+          UPSTREAM=$(git rev-parse nonary/main 2>/dev/null || git rev-parse nonary/master)
+          BEHIND=$(git rev-list --count HEAD..${UPSTREAM} 2>/dev/null || echo 0)
+          echo "NONARY_BEHIND=$BEHIND" >> $GITHUB_ENV
+          echo "NONARY_COMMIT=$UPSTREAM" >> $GITHUB_ENV
+      - name: Check ClassicOldSong/Apollo upstream
+        run: |
+          git remote add classicoldsong https://github.com/ClassicOldSong/Apollo.git 2>/dev/null || true
+          git fetch classicoldsong master --no-tags 2>/dev/null || true
+          UPSTREAM=$(git rev-parse classicoldsong/master 2>/dev/null || echo "unknown")
+          echo "CLASSIC_COMMIT=$UPSTREAM" >> $GITHUB_ENV
+      - name: Open issue if behind
+        if: env.NONARY_BEHIND != '0'
         uses: actions/github-script@v7
         with:
           script: |
+            const behind = process.env.NONARY_BEHIND;
+            const commit = process.env.NONARY_COMMIT;
+            const classic = process.env.CLASSIC_COMMIT;
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `Upstream sync available -- ${${{ steps.check.outputs.count }}} new commits from Nonary/vibepollo`,
-              body: `New commits available from upstream:\n\n\`\`\`\n${{ steps.check.outputs.new_commits }}\n\`\`\`\n\nSee UPSTREAM.md for merge instructions.`,
-              labels: ['upstream-sync']
+              title: `Upstream update available: Nonary/vibepollo (${behind} commits behind)`,
+              body: `## Upstream Commits Available\n\n**Nonary/vibepollo** is ${behind} commit(s) ahead.\nLatest upstream commit: \`${commit}\`\n\n**ClassicOldSong/Apollo** latest: \`${classic}\`\n\n## Review Before Merging\nDo NOT auto-merge. Review each upstream commit manually:\n\`\`\`\ngit fetch nonary\ngit log HEAD..nonary/main --oneline\n\`\`\`\nThen cherry-pick or merge selectively after verifying no conflicts with mic passthrough code.`,
+              labels: ['upstream-update']
             });

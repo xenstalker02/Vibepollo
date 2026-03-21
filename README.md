@@ -107,12 +107,16 @@ Key mic passthrough options:
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `mic_sink` | `CABLE Input` | Primary virtual mic device. Falls back to Steam Streaming Mic automatically if not found. |
-| `mic_capture_device` | `CABLE Output (VB-Audio Virtual Cable)` | Windows capture device for mic audio |
+| `mic_sink` | _(empty — auto)_ | Virtual mic device for passthrough. Leave blank to auto-use **Steam Streaming Microphone** (recommended). Set to `CABLE Input` only as a VB-Cable fallback if Steam is not installed. |
 | `mic_buffer_ms` | `50` | WASAPI render buffer size in ms (10-200). 50ms recommended for stability. |
-| `install_steam_drivers` | `true` | Auto-install Steam audio drivers if not present |
+| `install_steam_audio_drivers` | `true` | Auto-install Steam Streaming Microphone and Speakers drivers when Steam is present. This installs the primary mic device — no VB-Cable needed. |
+| `install_vbcable` | `false` | Auto-install VB-Audio CABLE as a fallback if Steam Streaming Microphone is unavailable. Optional. |
 
 The web UI at `https://localhost:47990` provides a graphical interface for most settings.
+
+### Windows Application Setup
+
+After streaming begins, Windows applications will see **Microphone (Steam Streaming Microphone)** as an available input device. In Discord, Teams, or other voice apps, select this device as the microphone input to receive audio from your Steam Deck client.
 
 ---
 
