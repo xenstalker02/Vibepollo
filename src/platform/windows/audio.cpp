@@ -791,11 +791,6 @@ namespace platf::audio {
           );
           if (SUCCEEDED(set_hr)) {
             BOOST_LOG(info) << "[mic] Forced device format to float32/2ch/48kHz"sv;
-            // Let the audio engine settle after a format change before activating
-            // the client. Without this delay, the engine may not have restarted
-            // the device endpoint yet, leading to AUDCLNT_E_DEVICE_INVALIDATED
-            // in render_loop shortly after init completes.
-            Sleep(50);
           }
           else {
             BOOST_LOG(warning) << "[mic] SetDeviceFormat failed [0x"sv
@@ -887,12 +882,22 @@ namespace platf::audio {
         return -1;
       }
 
-      // DO NOT call audio_client->Start() here — deferred to render_loop() after prebuffer.
-
       BOOST_LOG(info) << "Mic passthrough render client ready ("sv << channel_count << "ch, "sv << sample_rate << " Hz)"sv;
       BOOST_LOG(info) << "[mic] WASAPI buffer: 100ms, EVENTCALLBACK mode, float32/2ch/48kHz"sv;
 
-      // Launch the dedicated render thread.
+      // Start WASAPI before launching the render thread (Logan's exact order).
+      // The device runs idle until playout_started is set in render_loop.
+      status = audio_client->Start();
+      if (FAILED(status)) {
+        BOOST_LOG(error) << "speaker_wasapi_t: Couldn't start audio client [0x"sv
+                         << util::hex(status).to_string_view() << ']';
+        CloseHandle(render_event);
+        render_event = nullptr;
+        return -1;
+      }
+      BOOST_LOG(info) << "[mic] WASAPI client started"sv;
+
+      // Launch the dedicated render thread — WASAPI is running, render_loop manages prebuffer.
       stop_render_thread = false;
       render_thread = std::thread(&speaker_wasapi_t::render_loop, this);
       BOOST_LOG(info) << "[mic] Render thread started, waiting for prebuffer"sv;
@@ -932,7 +937,7 @@ namespace platf::audio {
     HANDLE render_event { nullptr };
     std::thread render_thread;
     std::atomic<bool> stop_render_thread { false };
-    bool client_started { false };
+    bool playout_started { false };
 
     // Audio level monitoring: accumulate sum-of-squares and sample count for 5-second dBFS logging.
     double level_sum_sq = 0.0;
@@ -954,25 +959,19 @@ namespace platf::audio {
         if (stop_render_thread) break;
         if (wait_result == WAIT_FAILED) break;
 
-        // Check prebuffer before starting WASAPI client.
-        if (!client_started) {
+        // WASAPI is already running (Start() was called in init()).
+        // Delay writes until the prebuffer is full — device runs idle in the meantime.
+        if (!playout_started) {
           std::size_t qsz = 0;
           {
             std::lock_guard<std::mutex> lock(queue_mutex);
             qsz = pending_frames.size();
           }
           if (qsz < prebuf_samples) {
-            continue;  // still buffering
+            continue;  // still accumulating
           }
-
-          // Enough data — start WASAPI with a clean buffer.
-          auto hr = audio_client->Start();
-          if (FAILED(hr)) {
-            BOOST_LOG(error) << "[mic] WASAPI Start failed: 0x"sv << util::hex(hr).to_string_view();
-            break;
-          }
-          client_started = true;
-          BOOST_LOG(info) << "[mic] WASAPI render started (prebuffer: "sv << qsz << " samples)"sv;
+          playout_started = true;
+          BOOST_LOG(info) << "[mic] Playout started (prebuffer: "sv << qsz << " samples)"sv;
         }
 
         // Drain pending_frames into WASAPI.
@@ -980,11 +979,8 @@ namespace platf::audio {
         auto hr = audio_client->GetCurrentPadding(&padding);
         if (FAILED(hr)) {
           if (hr == AUDCLNT_E_DEVICE_INVALIDATED || hr == AUDCLNT_E_RESOURCES_INVALIDATED) {
-            BOOST_LOG(warning) << "[mic] WASAPI device invalidated (0x"sv
-                               << util::hex(hr).to_string_view()
-                               << ") — resetting for next prebuffer"sv;
-            client_started = false;
-            continue;
+            BOOST_LOG(warning) << "[mic] WASAPI device invalidated — stopping render"sv;
+            break;  // device is gone, teardown will handle cleanup
           }
           continue;
         }
