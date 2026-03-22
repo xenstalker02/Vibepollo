@@ -104,7 +104,7 @@
           <p class="text-xs opacity-70 leading-snug mt-1">
             {{
               $t('troubleshooting.mic_passthrough_desc') ||
-              'Mic passthrough is active when a client with mic enabled connects. Steam Streaming Microphone is used automatically when Steam is installed (primary). VB-Audio CABLE Input is used as fallback if configured via the Audio/Video settings tab.'
+              'Mic passthrough is active when a client with mic enabled connects. Decoded audio is written to CABLE Input (VB-Audio Virtual Cable). Windows routes it to CABLE Output; Discord (set to Default) picks it up automatically.'
             }}
           </p>
         </div>

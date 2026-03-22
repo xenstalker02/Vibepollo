@@ -390,7 +390,7 @@
     "high_resolution_scrolling": "High Resolution Scrolling Support",
     "high_resolution_scrolling_desc": "When enabled, Vibepollo will pass through high resolution scroll events from Moonlight clients. This can be useful to disable for older applications that scroll too fast with high resolution scroll events.",
     "install_steam_audio_drivers": "Install Steam Audio Drivers (Recommended)",
-    "install_steam_audio_drivers_desc": "If Steam is installed, this installs the Steam Streaming Speakers and Steam Streaming Microphone drivers. The Steam Streaming Microphone is the primary mic passthrough device — no VB-Cable needed when this is installed. Also enables 5.1/7.1 surround sound and host audio muting.",
+    "install_steam_audio_drivers_desc": "If Steam is installed, this installs the Steam Streaming Speakers and Steam Streaming Microphone drivers. Also enables 5.1/7.1 surround sound and host audio muting.",
     "key_repeat_delay": "Key Repeat Delay",
     "key_repeat_delay_desc": "Control how fast keys will repeat themselves. The initial delay in milliseconds before repeating keys.",
     "key_repeat_frequency": "Key Repeat Frequency",
@@ -600,10 +600,10 @@
     "legacy_ordering": "App ordering for legacy clients",
     "legacy_ordering_desc": "Enable ordering support workaround for legacy clients. Can cause issues with clients or scripts that can't handle UTF8 correctly. Artemis clients support this by default.",
     "mic_sink": "Mic Passthrough Sink",
-    "mic_sink_desc": "Device name to receive the client's microphone audio. Steam Streaming Microphone is recommended — it is auto-detected when Steam is installed and requires no configuration. Leave blank to use the default (Steam Streaming Microphone). Set to 'CABLE Input' only as a VB-Cable fallback if Steam is not installed.",
+    "mic_sink_desc": "Render endpoint that receives decoded mic audio. Vibepollo writes to CABLE Input; Windows routes it to CABLE Output automatically. Discord (set to Default) picks up the client mic without any manual configuration.",
     "mic_sink_placeholder": "CABLE Input",
-    "install_vbcable": "Auto-install VB-Audio CABLE (optional fallback)",
-    "install_vbcable_desc": "Automatically download and install VB-Audio Virtual Cable if Steam Streaming Microphone is not available. Not required when Steam is installed — Steam provides the primary mic device automatically."
+    "install_vbcable": "Auto-install VB-Audio CABLE",
+    "install_vbcable_desc": "Automatically download and install VB-Audio Virtual Cable. Required for mic passthrough — CABLE Input is the render target and CABLE Output is the capture device switched to at session start."
   },
   "index": {
     "description": "Vibepollo is a self-hosted game stream host for Moonlight.",
