@@ -26,10 +26,9 @@ for voice chat, Discord, games, and anything else.
 
 - **Encrypted mic passthrough** — mic audio rides the AES-GCM encrypted control stream
   (SS_ENC_CONTROL_V2). Plaintext mic is refused. No unencrypted audio on the network.
-- **Steam Streaming Microphone** — uses Steam's built-in virtual mic driver as the
-  primary audio sink. No third-party dependencies required if Steam is installed.
-- **VB-Cable fallback** — if Steam Streaming Microphone is not available, automatically
-  falls back to VB-Cable. Auto-installs VB-Cable as a last resort.
+- **VB-Audio Virtual Cable** — decoded mic audio is written to CABLE Input (render
+  endpoint). Windows routes it to CABLE Output automatically. Discord and other apps
+  read from CABLE Output via the Windows default capture device — no manual setup needed.
 - **Opus audio** — 64kbps VBR, complexity 10, FEC enabled, 20ms frames. Low latency,
   excellent voice quality, robust to packet loss.
 - **Per-session decoder** — each streaming session gets its own Opus decoder and WASAPI
@@ -47,7 +46,7 @@ for voice chat, Discord, games, and anything else.
 
 **Windows PC (host):**
 - Windows 10 or 11
-- Steam installed (for Steam Streaming Microphone driver)
+- [VB-Audio Virtual Cable](https://vb-audio.com/Cable/) installed
 - GPU: NVIDIA (NVENC), AMD, or Intel (QuickSync)
 
 **Steam Deck / Client:**
@@ -66,7 +65,7 @@ for voice chat, Discord, games, and anything else.
    - Installs to `C:\Program Files\Vibepollo\`
    - Configures Windows Firewall rules (TCP 47984/47989/47990, UDP 47998-48010)
    - Sets up autostart on login via Task Scheduler (30-second delay for audio init)
-   - Installs Steam Streaming Microphone driver if not present
+   - Detects VB-Audio Virtual Cable installation
    - Creates Start Menu shortcut
    - Opens the web UI on first run for initial setup
 3. Install [Vibelight](https://github.com/xenstalker02/Vibelight) on your Steam Deck
@@ -107,16 +106,18 @@ Key mic passthrough options:
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `mic_sink` | _(empty — auto)_ | Virtual mic device for passthrough. Leave blank to auto-use **Steam Streaming Microphone** (recommended). Set to `CABLE Input` only as a VB-Cable fallback if Steam is not installed. |
+| `mic_sink` | `CABLE Input` | Render endpoint for mic passthrough. Vibepollo writes decoded Opus audio here; Windows routes it to CABLE Output automatically. |
+| `mic_capture_device` | `CABLE Output (VB-Audio Virtual Cable)` | Capture device Vibepollo switches Windows default input to at session start, so Discord (on Default) picks up the client mic. Restored to AT2040 on session end. |
 | `mic_buffer_ms` | `50` | WASAPI render buffer size in ms (10-200). 50ms recommended for stability. |
-| `install_steam_audio_drivers` | `true` | Auto-install Steam Streaming Microphone and Speakers drivers when Steam is present. This installs the primary mic device — no VB-Cable needed. |
-| `install_vbcable` | `false` | Auto-install VB-Audio CABLE as a fallback if Steam Streaming Microphone is unavailable. Optional. |
 
 The web UI at `https://localhost:47990` provides a graphical interface for most settings.
 
 ### Windows Application Setup
 
-After streaming begins, Windows applications will see **Microphone (Steam Streaming Microphone)** as an available input device. In Discord, Teams, or other voice apps, select this device as the microphone input to receive audio from your Steam Deck client.
+Set Discord (and other voice apps) input to **Default** — that's all. At session start,
+Vibepollo switches the Windows default capture device to **CABLE Output (VB-Audio Virtual Cable)**,
+so Discord automatically picks up the client mic. At session end, the default capture restores
+to your AT2040 (or whatever was default before). No manual switching needed.
 
 ---
 
@@ -138,10 +139,11 @@ Steam Deck mic
 → AES-GCM encrypted control stream (SS_ENC_CONTROL_V2)
 → Vibepollo receives 0x3003 packets
 → Opus decode with PLC on packet loss
-→ WASAPI render → Steam Streaming Microphone (primary)
-→ VB-Cable Input (fallback)
-→ Windows sees "Microphone (Steam Streaming Microphone)"
-→ Discord / games / voice chat work normally
+→ WASAPI render → CABLE Input (VB-Audio Virtual Cable render endpoint)
+→ Windows routes CABLE Input → CABLE Output automatically
+→ Vibepollo switches Windows default capture to CABLE Output
+→ Discord (set to Default) picks up client mic automatically
+→ Session end: default capture restores to AT2040
 ```
 
 ---

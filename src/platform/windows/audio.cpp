@@ -819,6 +819,19 @@ namespace platf::audio {
         return -1;
       }
 
+      // Log actual mix format for diagnostics
+      {
+        WAVEFORMATEX *mix_fmt = nullptr;
+        if (SUCCEEDED(audio_client->GetMixFormat(&mix_fmt)) && mix_fmt) {
+          BOOST_LOG(info) << "[mic] WASAPI mix format: "
+                          << mix_fmt->nChannels << "ch, "
+                          << mix_fmt->nSamplesPerSec << "Hz, "
+                          << mix_fmt->wBitsPerSample << "-bit, "
+                          << "tag=0x" << util::hex(mix_fmt->wFormatTag).to_string_view();
+          CoTaskMemFree(mix_fmt);
+        }
+      }
+
       // Step 4: GetBufferSize + GetService.
       status = audio_client->GetBufferSize(&buffer_frames);
       if (FAILED(status)) {
@@ -1050,20 +1063,7 @@ namespace platf::audio {
     std::unique_ptr<platf::speaker_t> virtual_microphone(const std::string &device_name, int channels, std::uint32_t sample_rate) override {
       // "CABLE Input" is a render (playback) endpoint from WASAPI's perspective,
       // so find_device_id (which enumerates eRender) will locate it correctly.
-      //
-      // Priority chain:
-      //   1. Steam Streaming Microphone (primary — auto-detected)
-      //   2. Configured mic_sink (e.g. "CABLE Input") — fallback
-      //   3. Give up — log and return nullptr
-
-      // 1. Try Steam Streaming Microphone first
-      auto matched = find_device_id(match_steam_microphone());
-      if (matched) {
-        BOOST_LOG(info) << "[mic] Using Steam Streaming Microphone (primary)"sv;
-      } else {
-        BOOST_LOG(info) << "[mic] Steam Streaming Mic not found — using configured sink: "sv << device_name;
-        matched = find_device_id(match_all_fields(from_utf8(device_name)));
-      }
+      auto matched = find_device_id(match_all_fields(from_utf8(device_name)));
       if (!matched) {
         BOOST_LOG(warning) << "[mic] WARNING: no suitable mic sink — mic passthrough disabled for this session"sv;
         return nullptr;
