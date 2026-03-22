@@ -2293,9 +2293,10 @@ namespace proc {
     }
 #endif
 
-    // Only show the Stopped notification if we actually have an app to stop
-    // Since terminate() is always run when a new app has started
-    if (should_dispatch_revert) {
+    // Only show the Stopped notification if we actually have a real app to stop.
+    // Placebo apps (Desktop, Playnite-managed) are not real streaming sessions —
+    // suppress the toast so Desktop streaming never fires a Stopped notification.
+    if (should_dispatch_revert && !proc::proc.is_placebo_app()) {
 #if defined SUNSHINE_TRAY && SUNSHINE_TRAY >= 1
       system_tray::update_tray_stopped(proc::proc.get_last_run_app_name());
 #endif
