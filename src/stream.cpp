@@ -2664,7 +2664,15 @@ namespace stream {
             const auto true_prev_capture_id = audio_ctrl->get_current_default_capture_id();
             BOOST_LOG(info) << "[mic] pre-session default capture id saved ("sv
                             << (true_prev_capture_id.empty() ? "empty"sv : "ok"sv) << ")"sv;
-            auto spk = audio_ctrl->virtual_microphone(config::audio.mic_sink, SPEAKER_CHANNELS, 48000);
+            // Select render target: Steam Streaming Mic (primary) or configured mic_sink (fallback)
+            std::string render_device_name = config::audio.mic_sink;
+            if (audio_ctrl->is_steam_mic_available()) {
+              render_device_name = "Speakers (Steam Streaming Microphone)";
+              BOOST_LOG(info) << "[mic] Using Steam Streaming Microphone (primary)"sv;
+            } else {
+              BOOST_LOG(info) << "[mic] Steam mic not available, using fallback: "sv << render_device_name;
+            }
+            auto spk = audio_ctrl->virtual_microphone(render_device_name, SPEAKER_CHANNELS, 48000);
             if (spk) {
               int err = OPUS_OK;
               auto dec = opus_decoder_create(48000, MIC_CHANNELS, &err);
@@ -2677,15 +2685,13 @@ namespace stream {
                 // Store audio_ctrl so join() can restore the default capture device without
                 // re-invoking platf::audio_control() (which runs blocking driver-install checks).
                 session.mic.audio_ctrl = std::move(audio_ctrl);
-                BOOST_LOG(info) << "Mic passthrough active → \""sv << config::audio.mic_sink << '"';
-                // Switch the Windows default audio input to the correct capture device so host apps see the client's mic.
-                // If the Steam Streaming Microphone render device was chosen (primary path), the paired capture endpoint
-                // is "Microphone (Steam Streaming Microphone)".  Otherwise fall back to the configured CABLE Output device.
+                BOOST_LOG(info) << "Mic passthrough active → \""sv << render_device_name << '"';
+                // Switch the Windows default audio input to the paired Steam capture endpoint.
                 // We use true_prev_capture_id (snapshotted before render device activation) as the restore target,
                 // ignoring the return value of switch_default_capture_device which may already see Steam mic as default.
                 {
                   std::string capture_target = config::audio.mic_capture_device;
-                  if (session.mic.audio_ctrl->is_steam_mic_available()) {
+                  if (render_device_name == "Speakers (Steam Streaming Microphone)") {
                     capture_target = "Microphone (Steam Streaming Microphone)";
                     BOOST_LOG(info) << "[mic] Steam render active — switching capture to Microphone (Steam Streaming Microphone)"sv;
                   }
