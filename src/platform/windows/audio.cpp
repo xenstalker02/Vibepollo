@@ -1196,19 +1196,22 @@ namespace platf::audio {
       };
     }
 
-    // Steam Streaming Microphone render-side matching.
+    // Steam Streaming Microphone render-side matching (eRender endpoint only).
     // Priority:
-    //   1. device_friendly_name_contains "Steam Streaming Microphone" — robust substring match
-    //      (matches "Speakers (Steam Streaming Microphone)" regardless of locale prefix)
-    //   2. device_friendly_name exact "Speakers (Steam Streaming Microphone)" — legacy exact match
+    //   1. device_friendly_name exact "Speakers (Steam Streaming Microphone)" — primary
+    //   2. device_friendly_name exact "Steam Streaming Microphone" — locale-prefix fallback
+    // Intentionally NOT using device_friendly_name_contains: the substring "Steam Streaming
+    // Microphone" would also match the eCapture endpoint "Microphone (Steam Streaming
+    // Microphone)" if Steam registers it in both flow directions.  Exact match on the
+    // eRender name avoids silently opening the wrong endpoint.
     // Notes:
     //   adapter_friendly_name ({026e516e-b814-414b-83cd-856d6fef4822},2) is not populated
     //   by the Steam driver on this system; device_description (pid=2) is "Speakers" which
     //   is too broad to use as a discriminator.
     audio_control_t::match_fields_list_t match_steam_microphone() {
       return {
-        {match_field_e::device_friendly_name_contains, L"Steam Streaming Microphone"},
         {match_field_e::device_friendly_name, L"Speakers (Steam Streaming Microphone)"},
+        {match_field_e::device_friendly_name, L"Steam Streaming Microphone"},
       };
     }
 
