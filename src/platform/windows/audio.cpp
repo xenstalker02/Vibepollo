@@ -1515,9 +1515,16 @@ namespace platf::audio {
 
       device_t prev_dev;
       std::wstring prev_id;
+      std::string prev_name;
       if (SUCCEEDED(device_enum->GetDefaultAudioEndpoint(eCapture, eConsole, &prev_dev))) {
         wstring_t id;
         if (SUCCEEDED(prev_dev->GetId(&id))) prev_id = id.get();
+        prop_t prev_prop;
+        if (SUCCEEDED(prev_dev->OpenPropertyStore(STGM_READ, &prev_prop))) {
+          prop_var_t pv;
+          if (SUCCEEDED(prev_prop->GetValue(PKEY_Device_FriendlyName, &pv.prop)) && pv.prop.vt == VT_LPWSTR)
+            prev_name = to_utf8(pv.prop.pwszVal);
+        }
       }
       auto target_id = find_capture_device_id(from_utf8(device_name));
       if (target_id.empty()) {
@@ -1527,16 +1534,41 @@ namespace platf::audio {
       if (target_id == prev_id) return to_utf8(prev_id);
       for (int x = 0; x < (int) ERole_enum_count; ++x)
         policy->SetDefaultEndpoint(target_id.c_str(), (ERole) x);
-      BOOST_LOG(info) << "Switched default audio input to: " << device_name;
+      BOOST_LOG(info) << "[mic] default capture: '" << prev_name << "' -> '" << device_name << "'";
       return to_utf8(prev_id);
     }
 
     void restore_default_capture_device(const std::string &prev_id) override {
       if (prev_id.empty()) return;
       auto wide = from_utf8(prev_id);
+      // Capture current (CABLE Output) and restored device names for logging.
+      std::string current_name;
+      {
+        device_t cur_dev;
+        if (SUCCEEDED(device_enum->GetDefaultAudioEndpoint(eCapture, eConsole, &cur_dev))) {
+          prop_t prop;
+          if (SUCCEEDED(cur_dev->OpenPropertyStore(STGM_READ, &prop))) {
+            prop_var_t pv;
+            if (SUCCEEDED(prop->GetValue(PKEY_Device_FriendlyName, &pv.prop)) && pv.prop.vt == VT_LPWSTR)
+              current_name = to_utf8(pv.prop.pwszVal);
+          }
+        }
+      }
+      std::string restored_name;
+      {
+        device_t restored_dev;
+        if (SUCCEEDED(device_enum->GetDevice(wide.c_str(), &restored_dev))) {
+          prop_t prop;
+          if (SUCCEEDED(restored_dev->OpenPropertyStore(STGM_READ, &prop))) {
+            prop_var_t pv;
+            if (SUCCEEDED(prop->GetValue(PKEY_Device_FriendlyName, &pv.prop)) && pv.prop.vt == VT_LPWSTR)
+              restored_name = to_utf8(pv.prop.pwszVal);
+          }
+        }
+      }
       for (int x = 0; x < (int) ERole_enum_count; ++x)
         policy->SetDefaultEndpoint(wide.c_str(), (ERole) x);
-      BOOST_LOG(info) << "Restored default audio input device";
+      BOOST_LOG(info) << "[mic] default capture restored: '" << current_name << "' -> '" << restored_name << "'";
     }
 
     std::string get_current_default_capture_name() override {

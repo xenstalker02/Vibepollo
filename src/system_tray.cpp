@@ -317,6 +317,9 @@ namespace system_tray {
   static std::string s_notification_text;
   static std::string s_last_playing_app;
   static std::chrono::steady_clock::time_point s_last_stopped_notification_time;
+  // Per-session flag: set to true once the Stopped toast fires for the current session.
+  // Reset to false in update_tray_playing() so each new session gets exactly one toast.
+  static bool s_stopped_notification_fired = false;
 
   void update_tray_playing(std::string app_name) {
     if (!tray_initialized) {
@@ -326,6 +329,9 @@ namespace system_tray {
     if (!app_name.empty() && app_name == s_last_playing_app && tray.icon && std::strcmp(tray.icon, TRAY_ICON_PLAYING) == 0) {
       return;
     }
+
+    // New session starting — allow exactly one Stopped toast for this session.
+    s_stopped_notification_fired = false;
 
     tray.notification_title = nullptr;
     tray.notification_text = nullptr;
@@ -387,16 +393,15 @@ namespace system_tray {
       return;
     }
 
-    // Debounce: suppress duplicate "stopped" toasts within 60 seconds.
-    // Multiple rapid calls can occur when teardown fires from several code paths
-    // (session cleanup, proc monitor, reconnect cycles) in quick succession.
-    {
-      auto now = std::chrono::steady_clock::now();
-      if (now - s_last_stopped_notification_time < std::chrono::seconds(60)) {
-        return;
-      }
-      s_last_stopped_notification_time = now;
+    // Per-session guard: fire exactly one Stopped toast per session.
+    // s_stopped_notification_fired is reset to false in update_tray_playing() when a
+    // new session starts, ensuring silence after the first toast regardless of how many
+    // duplicate Stopped events arrive (reconnect cycles, watchdog, etc.).
+    if (s_stopped_notification_fired) {
+      return;
     }
+    s_stopped_notification_fired = true;
+    s_last_stopped_notification_time = std::chrono::steady_clock::now();
 
     tray.notification_cb = nullptr;
     tray.notification_icon = nullptr;

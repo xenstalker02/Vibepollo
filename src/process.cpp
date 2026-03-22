@@ -2185,6 +2185,7 @@ namespace proc {
   void proc_t::terminate(bool immediate, bool needs_refresh) {
     std::error_code ec;
     const bool had_active_app = _app_id > 0;
+    const bool was_placebo = placebo;
     placebo = false;
 #ifdef _WIN32
     _deferred_launch = false;
@@ -2296,7 +2297,8 @@ namespace proc {
     // Only show the Stopped notification if we actually have a real app to stop.
     // Placebo apps (Desktop, Playnite-managed) are not real streaming sessions —
     // suppress the toast so Desktop streaming never fires a Stopped notification.
-    if (should_dispatch_revert && !proc::proc.is_placebo_app()) {
+    // NOTE: placebo was reset to false above, so we use was_placebo (saved before the reset).
+    if (should_dispatch_revert && !was_placebo) {
 #if defined SUNSHINE_TRAY && SUNSHINE_TRAY >= 1
       system_tray::update_tray_stopped(proc::proc.get_last_run_app_name());
 #endif
