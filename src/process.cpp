@@ -63,10 +63,12 @@
   #include "platform/windows/virtual_display.h"
   #include "platform/windows/virtual_display_legacy.h"
 #endif
+#include "rtsp.h"
 #include "system_tray.h"
 #include "utility.h"
 #include "uuid.h"
 #include "video.h"
+#include "webrtc_stream.h"
 
 #ifdef _WIN32
   // from_utf8() string conversion function
@@ -2308,7 +2310,10 @@ namespace proc {
       config::video.output_name = initial_display;
     }
 
-    if (should_dispatch_revert) {
+    const bool other_streaming_session_active =
+      rtsp_stream::session_count() > 0 || webrtc_stream::has_active_sessions();
+
+    if (should_dispatch_revert && !other_streaming_session_active) {
 #ifdef _WIN32
       const bool reverted = display_helper_integration::revert();
       if (reverted && rtsp_stream::session_count() == 0) {
@@ -2316,6 +2321,8 @@ namespace proc {
         display_helper_integration::stop_watchdog();
       }
 #endif
+    } else if (should_dispatch_revert && other_streaming_session_active) {
+      BOOST_LOG(info) << "Deferring display revert after app termination because another streaming session is still active.";
     }
 
     _active_client_uuid.clear();

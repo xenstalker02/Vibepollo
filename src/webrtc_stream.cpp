@@ -4480,7 +4480,7 @@ namespace webrtc_stream {
     return start_webrtc_capture(options);
   }
 
-  SessionState create_session(const SessionOptions &options) {
+  std::optional<SessionState> create_session(const SessionOptions &options) {
     BOOST_LOG(debug) << "WebRTC: create_session enter";
     const auto rtsp_config = rtsp_sessions_active.load(std::memory_order_relaxed) ? snapshot_rtsp_capture_config() : std::nullopt;
     Session session;
