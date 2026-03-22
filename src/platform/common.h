@@ -597,6 +597,15 @@ namespace platf {
     }
 
     /**
+     * @brief Get the opaque device ID of the current Windows default capture endpoint.
+     * Must be called before activating a render device that may cause Windows to
+     * auto-promote a paired capture device. Returns empty string on non-Windows or on failure.
+     */
+    virtual std::string get_current_default_capture_id() {
+      return {};
+    }
+
+    /**
      * @brief Reset the default audio capture device to the first real (non-CABLE)
      * capture device found. Used for crash recovery at startup. No-op on non-Windows.
      */

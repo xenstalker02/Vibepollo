@@ -791,6 +791,11 @@ namespace platf::audio {
           );
           if (SUCCEEDED(set_hr)) {
             BOOST_LOG(info) << "[mic] Forced device format to float32/2ch/48kHz"sv;
+            // Let the audio engine settle after a format change before activating
+            // the client. Without this delay, the engine may not have restarted
+            // the device endpoint yet, leading to AUDCLNT_E_DEVICE_INVALIDATED
+            // in render_loop shortly after init completes.
+            Sleep(50);
           }
           else {
             BOOST_LOG(warning) << "[mic] SetDeviceFormat failed [0x"sv
@@ -838,13 +843,15 @@ namespace platf::audio {
         BOOST_LOG(warning) << "speaker_wasapi_t: Initialize with float32/EVENTCALLBACK failed [0x"sv
                            << util::hex(status).to_string_view()
                            << "] — retrying with AUTOCONVERTPCM fallback"sv;
-        // Fallback: use AUTOCONVERTPCM with native mix format
+        // Fallback: use the device's native mix format with EVENTCALLBACK.
+        // AUTOCONVERTPCM only handles sample-rate conversion, not float↔int,
+        // and loses the event-driven wakeup needed by render_loop.
         WAVEFORMATEX *mix_fmt = nullptr;
         audio_client->GetMixFormat(&mix_fmt);
         if (mix_fmt) {
           status = audio_client->Initialize(
             AUDCLNT_SHAREMODE_SHARED,
-            AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY,
+            AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
             1000000LL, 0,
             mix_fmt,
             nullptr
@@ -972,7 +979,13 @@ namespace platf::audio {
         UINT32 padding = 0;
         auto hr = audio_client->GetCurrentPadding(&padding);
         if (FAILED(hr)) {
-          if (hr == AUDCLNT_E_DEVICE_INVALIDATED) break;
+          if (hr == AUDCLNT_E_DEVICE_INVALIDATED || hr == AUDCLNT_E_RESOURCES_INVALIDATED) {
+            BOOST_LOG(warning) << "[mic] WASAPI device invalidated (0x"sv
+                               << util::hex(hr).to_string_view()
+                               << ") — resetting for next prebuffer"sv;
+            client_started = false;
+            continue;
+          }
           continue;
         }
 
@@ -1625,6 +1638,14 @@ namespace platf::audio {
       if (SUCCEEDED(prop->GetValue(PKEY_Device_FriendlyName, &pv.prop)) && pv.prop.vt == VT_LPWSTR)
         return to_utf8(pv.prop.pwszVal);
       return {};
+    }
+
+    std::string get_current_default_capture_id() override {
+      device_t dev;
+      if (FAILED(device_enum->GetDefaultAudioEndpoint(eCapture, eConsole, &dev))) return {};
+      wstring_t id;
+      if (FAILED(dev->GetId(&id))) return {};
+      return to_utf8(id.get());
     }
 
     void reset_default_capture_to_first_real() override {

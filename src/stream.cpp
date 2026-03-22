@@ -2655,6 +2655,15 @@ namespace stream {
           if (audio_ctrl) {
             constexpr int MIC_CHANNELS = 1;      // Opus decoder: mono (1ch decoded, L+R duplication in render_loop)
             constexpr int SPEAKER_CHANNELS = 2;  // WASAPI render device: always stereo (L+R float32)
+            // Snapshot the true default capture device ID NOW — before virtual_microphone()
+            // activates the Steam render device. Windows may auto-promote the paired
+            // "Microphone (Steam Streaming Microphone)" capture endpoint the moment the
+            // render side is opened, so by the time we call switch_default_capture_device
+            // below, GetDefaultAudioEndpoint(eCapture) may already return Steam mic (not AT2040).
+            // If we saved that ID and restored it, we'd restore to Steam mic — the wrong device.
+            const auto true_prev_capture_id = audio_ctrl->get_current_default_capture_id();
+            BOOST_LOG(info) << "[mic] pre-session default capture id saved ("sv
+                            << (true_prev_capture_id.empty() ? "empty"sv : "ok"sv) << ")"sv;
             auto spk = audio_ctrl->virtual_microphone(config::audio.mic_sink, SPEAKER_CHANNELS, 48000);
             if (spk) {
               int err = OPUS_OK;
@@ -2672,6 +2681,8 @@ namespace stream {
                 // Switch the Windows default audio input to the correct capture device so host apps see the client's mic.
                 // If the Steam Streaming Microphone render device was chosen (primary path), the paired capture endpoint
                 // is "Microphone (Steam Streaming Microphone)".  Otherwise fall back to the configured CABLE Output device.
+                // We use true_prev_capture_id (snapshotted before render device activation) as the restore target,
+                // ignoring the return value of switch_default_capture_device which may already see Steam mic as default.
                 {
                   std::string capture_target = config::audio.mic_capture_device;
                   if (session.mic.audio_ctrl->is_steam_mic_available()) {
@@ -2679,7 +2690,10 @@ namespace stream {
                     BOOST_LOG(info) << "[mic] Steam render active — switching capture to Microphone (Steam Streaming Microphone)"sv;
                   }
                   if (!capture_target.empty()) {
-                    session.mic.prev_default_capture_id = session.mic.audio_ctrl->switch_default_capture_device(capture_target);
+                    session.mic.audio_ctrl->switch_default_capture_device(capture_target);
+                    // Restore target: use the pre-activation snapshot, not the return value
+                    // of switch_default_capture_device (which may already be Steam mic).
+                    session.mic.prev_default_capture_id = true_prev_capture_id;
                   }
                 }
               }
