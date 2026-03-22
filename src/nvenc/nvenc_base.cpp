@@ -587,10 +587,13 @@ namespace nvenc {
           format_config.enableBitstreamPadding = config.insert_filler_data;
           if (buffer_is_10bit()) {
             set_av1_10bit_format(format_config);
-          } else {
+          }
+#if NVENCAPI_MAJOR_VERSION > 12 || (NVENCAPI_MAJOR_VERSION == 12 && NVENCAPI_MINOR_VERSION >= 1)
+          else {
             format_config.inputBitDepth = NV_ENC_BIT_DEPTH_8;
             format_config.outputBitDepth = NV_ENC_BIT_DEPTH_8;
           }
+#endif
           format_config.colorPrimaries = colorspace.primaries;
           format_config.transferCharacteristics = colorspace.tranfer_function;
           format_config.matrixCoefficients = colorspace.matrix;
