@@ -604,6 +604,8 @@
     "mic_sink": "Mic Passthrough Sink",
     "mic_sink_desc": "Render endpoint that receives decoded mic audio. Vibepollo writes to CABLE Input; Windows routes it to CABLE Output automatically. Discord (set to Default) picks up the client mic without any manual configuration.",
     "mic_sink_placeholder": "CABLE Input",
+    "mic_buffer_packets": "Mic Jitter Buffer Depth",
+    "mic_buffer_packets_desc": "Number of Opus packets to prebuffer before mic playback starts (default: 3). Increase for unstable connections. Lower = less latency, higher = more stability.",
     "install_vbcable": "Auto-install VB-Audio CABLE",
     "install_vbcable_desc": "Automatically download and install VB-Audio Virtual Cable. Required for mic passthrough — CABLE Input is the render target and CABLE Output is the capture device switched to at session start."
   },

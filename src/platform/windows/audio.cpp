@@ -1725,9 +1725,12 @@ namespace platf {
         RegCloseKey(hKey);
       }
       if (cable_version != "unknown") {
-        BOOST_LOG(info) << "VB-Audio Virtual Cable version " << cable_version << " detected";
+        BOOST_LOG(info) << "VB-Audio Virtual Cable version " << cable_version << " detected — mic passthrough ready";
       } else if (control->find_device_id(control->match_all_fields(from_utf8(config::audio.mic_sink)))) {
-        BOOST_LOG(info) << "VB-Audio Virtual Cable detected (version unknown)";
+        BOOST_LOG(info) << "VB-Audio Virtual Cable detected (version unknown) — mic passthrough ready";
+      } else {
+        BOOST_LOG(warning) << "VB-Audio CABLE Input not found — mic passthrough will not work. "
+                              "Install VB-Audio Virtual Cable from https://vb-audio.com/Cable/"sv;
       }
     }
 

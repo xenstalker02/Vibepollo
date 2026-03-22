@@ -479,7 +479,7 @@ namespace stream {
     // Jitter buffer constants and types for mic reordering and FEC/PLC
     // (adopted from logabell/Apollo patterns).
     static constexpr std::size_t mic_max_queued_packets = 32;
-    static constexpr std::size_t mic_target_prebuffer_packets = 3;
+    // mic_target_prebuffer_packets is now runtime-configurable via config::audio.mic_buffer_packets
 
     struct mic_queued_packet_t {
       std::vector<std::uint8_t> payload;
@@ -1329,8 +1329,8 @@ namespace stream {
                     last_log_ns.compare_exchange_weak(prev_log, now_ns, std::memory_order_relaxed);
 
       if (do_log) {
-        BOOST_LOG(info) << "Mic pkt #"sv << pkt_seq_num
-                        << ": payload "sv << payload.size() << " bytes"sv;
+        BOOST_LOG(debug) << "Mic pkt #"sv << pkt_seq_num
+                         << ": payload "sv << payload.size() << " bytes"sv;
       }
 
       // 30-second stats summary: packets received, PLC events, and decode errors.
@@ -1382,12 +1382,12 @@ namespace stream {
 
       // Initialize playout cursor after prebuffering
       if (!mic.has_playout_cursor) {
-        if (mic.pending_packets.size() < session_t::mic_target_prebuffer_packets) {
+        if (mic.pending_packets.size() < (std::size_t)config::audio.mic_buffer_packets) {
           return;  // wait for more packets before starting playout
         }
         mic.expected_seq = mic.pending_packets.begin()->first;
         mic.has_playout_cursor = true;
-        BOOST_LOG(info) << "[mic] Jitter buffer prebuffered "sv << session_t::mic_target_prebuffer_packets
+        BOOST_LOG(info) << "[mic] Jitter buffer prebuffered "sv << config::audio.mic_buffer_packets
                         << " packets -- starting playout"sv;
       }
 
@@ -2675,6 +2675,7 @@ namespace stream {
                 session.mic.speaker = std::move(spk);
                 session.mic.decoder.reset(dec);
                 session.mic.channels = MIC_CHANNELS;
+                BOOST_LOG(debug) << "[mic] per-session decoder initialized — reconnects safe"sv;
                 // Store audio_ctrl so join() can restore the default capture device without
                 // re-invoking platf::audio_control() (which runs blocking driver-install checks).
                 session.mic.audio_ctrl = std::move(audio_ctrl);

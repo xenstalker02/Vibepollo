@@ -6,7 +6,13 @@
 - Mic passthrough via 0x3003 control stream packets — streams client
   microphone audio to host PC in real time via VB-Audio Virtual Cable
 - VB-Audio Virtual Cable auto-install on first run (skipped if already present)
-- Configurable `mic_sink` and `mic_capture_device` settings in sunshine.conf
+- Configurable `mic_sink`, `mic_capture_device`, `mic_buffer_packets`,
+  and `mic_buffer_ms` settings in sunshine.conf
+- `mic_buffer_packets` — jitter buffer prebuffer depth (default 3, range 1–16);
+  tunable without rebuild for latency vs stability tradeoff
+- VB-Cable startup detection — logs driver version when found, warning when absent
+- Per-session Opus decoder isolation — decoder and speaker re-created fresh on
+  every reconnect; no shared state between sessions
 - Auto-update for stable releases only — downloads silently in background,
   applied on next restart, never during an active stream session
 - Log rotation — keeps the 10 most recent log files on each startup
@@ -15,6 +21,10 @@
 - Automatic firewall rule management via Windows Defender Firewall
 
 ### Fixed
+- Desktop pseudo-app (placebo) no longer fires "Application Stopped" toast
+- Update notification deduplicated — fires once per version, not every stream start
+- 60-second debounce on "Application Stopped" tray notification
+- Per-second mic packet count log moved from INFO to DEBUG (quieter normal operation)
 - Stream disconnect hang — MicCapture SDL audio thread blocking on stop;
   fixed with non-blocking atomic stop flag
 - WASAPI render buffer too small for Opus frame size — increased to 200ms
