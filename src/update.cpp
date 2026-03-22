@@ -276,6 +276,11 @@ namespace update {
     if (version.empty()) {
       return;
     }
+    // Only notify once per version — on_stream_started() calls trigger_check(force=true) on
+    // every stream, so without this guard we'd fire the same "new update" toast every session.
+    if (version == state.last_notified_version) {
+      return;
+    }
     std::string title = prerelease ? "New update available (Pre-release)" : "New update available (Stable)";
     std::string body = "Version " + version;
     state.last_notified_version = version;
@@ -286,7 +291,6 @@ namespace update {
       open_last_notified_release_page();
     });
 #endif
-    // We intentionally allow repeated notifications; do not persist last_notified_version
   }
 
   static void perform_check() {

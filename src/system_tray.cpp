@@ -33,6 +33,7 @@
 
   // standard includes
   #include <atomic>
+  #include <chrono>
   #include <csignal>
   #include <cstring>
   #include <cwchar>
@@ -315,6 +316,7 @@ namespace system_tray {
   static std::string s_tooltip;
   static std::string s_notification_text;
   static std::string s_last_playing_app;
+  static std::chrono::steady_clock::time_point s_last_stopped_notification_time;
 
   void update_tray_playing(std::string app_name) {
     if (!tray_initialized) {
@@ -383,6 +385,17 @@ namespace system_tray {
   void update_tray_stopped(std::string app_name) {
     if (!tray_initialized) {
       return;
+    }
+
+    // Debounce: suppress duplicate "stopped" toasts within 60 seconds.
+    // Multiple rapid calls can occur when teardown fires from several code paths
+    // (session cleanup, proc monitor, reconnect cycles) in quick succession.
+    {
+      auto now = std::chrono::steady_clock::now();
+      if (now - s_last_stopped_notification_time < std::chrono::seconds(60)) {
+        return;
+      }
+      s_last_stopped_notification_time = now;
     }
 
     tray.notification_cb = nullptr;
