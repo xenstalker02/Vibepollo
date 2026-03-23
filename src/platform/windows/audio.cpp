@@ -1535,6 +1535,23 @@ namespace platf::audio {
       for (int x = 0; x < (int) ERole_enum_count; ++x)
         policy->SetDefaultEndpoint(target_id.c_str(), (ERole) x);
       BOOST_LOG(info) << "[mic] default capture: '" << prev_name << "' -> '" << device_name << "'";
+      // Verify the switch took effect; retry up to 3 times with 500 ms intervals.
+      for (int retry = 0; retry < 3; ++retry) {
+        device_t verify_dev;
+        std::wstring verify_id;
+        if (SUCCEEDED(device_enum->GetDefaultAudioEndpoint(eCapture, eConsole, &verify_dev))) {
+          wstring_t vid;
+          if (SUCCEEDED(verify_dev->GetId(&vid))) verify_id = vid.get();
+        }
+        if (verify_id == target_id) break;  // switch confirmed
+        BOOST_LOG(info) << "[mic] switch_default_capture_device: verify failed (attempt " << (retry + 1) << "), retrying in 500 ms";
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        for (int x = 0; x < (int) ERole_enum_count; ++x)
+          policy->SetDefaultEndpoint(target_id.c_str(), (ERole) x);
+        if (retry == 2) {
+          BOOST_LOG(warning) << "[mic] switch_default_capture_device: switch did not take effect after 3 retries";
+        }
+      }
       return to_utf8(prev_id);
     }
 

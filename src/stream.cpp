@@ -2682,13 +2682,26 @@ namespace stream {
                 BOOST_LOG(info) << "Mic passthrough active → \""sv << render_device_name << '"';
                 // Switch the Windows default audio input to CABLE Output so host apps (Discord on Default)
                 // automatically pick up the client mic. Restore to true_prev_capture_id on session end.
+                // Desktop (placebo) apps are exempt: no capture switch, no restore.
                 {
                   std::string capture_target = config::audio.mic_capture_device;
-                  if (!capture_target.empty()) {
+                  if (!capture_target.empty() && !proc::proc.is_placebo_app()) {
+                    // Do an immediate switch, then retry 1 second later in a background thread.
+                    // The 1-second delay gives games that initialize audio after process creation
+                    // time to open their audio context against the already-switched default.
                     session.mic.audio_ctrl->switch_default_capture_device(capture_target);
                     // Restore target: use the pre-activation snapshot, not the return value
                     // of switch_default_capture_device (which may already be Steam mic).
                     session.mic.prev_default_capture_id = true_prev_capture_id;
+                    // Delayed retry: spawn a thread that re-applies the switch after 1 second.
+                    // Uses its own audio_ctrl instance to avoid lifetime coupling to the session.
+                    std::thread([capture_target] {
+                      std::this_thread::sleep_for(std::chrono::seconds(1));
+                      auto ctrl = platf::audio_control();
+                      if (ctrl) {
+                        ctrl->switch_default_capture_device(capture_target);
+                      }
+                    }).detach();
                   }
                 }
               }
@@ -2806,7 +2819,10 @@ namespace stream {
       }
 
 #if defined SUNSHINE_TRAY && SUNSHINE_TRAY >= 1
-      system_tray::update_tray_playing(proc::proc.get_last_run_app_name());
+      // Desktop (placebo) apps must not fire any tray toasts.
+      if (!proc::proc.is_placebo_app()) {
+        system_tray::update_tray_playing(proc::proc.get_last_run_app_name());
+      }
       update::on_stream_started();
   #if defined(_WIN32)
       // If ViGEm is not installed, notify the user that gamepad input won't work
