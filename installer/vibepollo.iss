@@ -111,7 +111,7 @@ Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""Vibepollo U
 ; Register Task Scheduler autostart (30s delay, HIGHEST privilege)
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NonInteractive -File ""{app}\setup-task.ps1"" -AppPath ""{app}"""; Flags: runhidden; StatusMsg: "Registering autostart task..."
 
-; Install Steam Streaming Microphone driver (if Steam present)
+; Legacy: Steam Streaming Microphone setup (no-op if driver not bundled)
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NonInteractive -File ""{app}\setup-steam-mic.ps1"" -AppPath ""{app}"""; Flags: runhidden; StatusMsg: "Checking Steam audio drivers..."
 
 ; First-run: launch Vibepollo then open web UI
