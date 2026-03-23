@@ -49,6 +49,8 @@ const NUMBER_FIELD_OVERRIDES: Record<string, Partial<ConfigFieldDefinition>> = {
   minimum_fps_target: { min: 0, max: 1000, placeholder: '0' },
   nvenc_vbv_increase: { min: 0, max: 400, placeholder: '0' },
   frame_limiter_fps_limit: { min: 0, max: 1000, step: 1, precision: 0, placeholder: '0' },
+  mic_buffer_ms: { min: 10, max: 200, step: 1, precision: 0, placeholder: '50' },
+  mic_buffer_packets: { min: 1, max: 16, step: 1, precision: 0, placeholder: '3' },
 };
 
 function isFiniteNumber(value: unknown): value is number {

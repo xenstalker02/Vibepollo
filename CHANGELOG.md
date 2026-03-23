@@ -23,7 +23,8 @@
 ### Fixed
 - Desktop pseudo-app (placebo) no longer fires "Application Stopped" toast
 - Update notification deduplicated — fires once per version, not every stream start
-- 60-second debounce on "Application Stopped" tray notification
+- "Application Started" and "Application Stopped" tray toasts fire exactly once per app
+  session; reconnect cycles within the same app do not repeat the notification
 - Per-second mic packet count log moved from INFO to DEBUG (quieter normal operation)
 - Stream disconnect hang — MicCapture SDL audio thread blocking on stop;
   fixed with non-blocking atomic stop flag

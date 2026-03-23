@@ -63,6 +63,21 @@ _codeql_detected_source_root
 
 build-msvc
 
+# Runtime config (generated at first run, never committed)
+sunshine.conf
+apps.json
+*.exe.old
+
+# Dev/debug Python scripts (local workflow helpers, not distributed)
+check_ssid.py
+fix_miccapture.py
+fix_miccapture_h.py
+fix_moonlight_conf.py
+run_phases.py
+run_pi_via_deck.py
+write_mic_files.py
+*.patch
+
 # Project-local scripts (not for distribution)
 fix_apps.ps1
 fix_firewall.ps1

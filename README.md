@@ -107,7 +107,7 @@ Key mic passthrough options:
 | Option | Default | Description |
 |--------|---------|-------------|
 | `mic_sink` | `CABLE Input` | Render endpoint for mic passthrough. Vibepollo writes decoded Opus audio here; Windows routes it to CABLE Output automatically. |
-| `mic_capture_device` | `CABLE Output (VB-Audio Virtual Cable)` | Capture device Vibepollo switches Windows default input to at session start, so Discord (on Default) picks up the client mic. Restored to AT2040 on session end. |
+| `mic_capture_device` | `CABLE Output (VB-Audio Virtual Cable)` | Capture device Vibepollo switches Windows default input to at session start, so Discord (on Default) picks up the client mic. Restored to previous default on session end. |
 | `mic_buffer_ms` | `50` | WASAPI render buffer size in ms (10-200). 50ms recommended for stability. |
 
 The web UI at `https://localhost:47990` provides a graphical interface for most settings.
@@ -143,7 +143,7 @@ Steam Deck mic
 → Windows routes CABLE Input → CABLE Output automatically
 → Vibepollo switches Windows default capture to CABLE Output
 → Discord (set to Default) picks up client mic automatically
-→ Session end: default capture restores to AT2040
+→ Session end: default capture restores to previous default device
 ```
 
 ---

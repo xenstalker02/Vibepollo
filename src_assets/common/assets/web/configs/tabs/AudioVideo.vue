@@ -214,6 +214,25 @@ function selectVirtualDisplayLayout(v: unknown) {
         />
 
         <ConfigFieldRenderer
+          setting-key="mic_capture_device"
+          v-model="config.mic_capture_device"
+          class="mb-4"
+          :placeholder="$t('config.mic_capture_device_placeholder')"
+        />
+
+        <ConfigFieldRenderer
+          setting-key="mic_buffer_ms"
+          v-model="config.mic_buffer_ms"
+          class="mb-4"
+        />
+
+        <ConfigFieldRenderer
+          setting-key="mic_buffer_packets"
+          v-model="config.mic_buffer_packets"
+          class="mb-4"
+        />
+
+        <ConfigFieldRenderer
           setting-key="install_vbcable"
           v-model="config.install_vbcable"
           class="mb-3"
