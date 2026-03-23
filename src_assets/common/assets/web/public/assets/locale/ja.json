@@ -224,8 +224,6 @@
     "hevc_mode_desc": "HEVC MainまたはHEVC Main10ビデオストリームのリクエストをクライアントに許可します。 HEVCはエンコードにCPU負荷がかかるため、ソフトウェアエンコーディングを使用する際のパフォーマンスが低下する可能性があります。",
     "high_resolution_scrolling": "高解像度スクロールサポート",
     "high_resolution_scrolling_desc": "有効にすると、VibepolloはMoonlightのクライアントから高解像度スクロールイベントを通過します。 これは、高解像度スクロールイベントで高速にスクロールする古いアプリケーションでは無効にすることができます。",
-    "install_steam_audio_drivers": "Steam オーディオドライバをインストール",
-    "install_steam_audio_drivers_desc": "Steamがインストールされている場合、Steam Streaming Speakersドライバが自動的にインストールされ、5.1/7.1 サラウンドサウンドとホストオーディオのミュートがサポートされます。",
     "key_repeat_delay": "Key Repeat Delay",
     "key_repeat_delay_desc": "キーを繰り返す速度を制御します。キーを繰り返すまでの時間をミリ秒単位で設定します。",
     "key_repeat_frequency": "キーの繰り返し周波数",

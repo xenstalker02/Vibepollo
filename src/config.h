@@ -194,7 +194,6 @@ namespace config {
     int mic_buffer_ms;  ///< WASAPI render buffer duration in ms for mic passthrough (default 50, range 10-200)
     int mic_buffer_packets;  ///< Jitter buffer prebuffer depth in Opus packets (default 3, range 1-16)
     bool stream;
-    bool install_steam_drivers;
     bool install_vbcable;  ///< Auto-install VB-Audio CABLE if not present
     bool keep_default;
     bool auto_capture;

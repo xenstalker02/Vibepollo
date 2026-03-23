@@ -224,8 +224,6 @@
     "hevc_mode_desc": "允許用戶端要求 HEVC Main 或 HEVC Main10 視訊串流。HEVC 的編碼較耗費 CPU，因此使用軟體編碼時，啟用此功能可能會降低效能。",
     "high_resolution_scrolling": "支援高解析度捲動",
     "high_resolution_scrolling_desc": "啟用後，Vibepollo 會傳遞來自 Moonlight 用戶端的高解析度捲動事件。對於某些在高解析度捲動時捲動速度過快的舊應用程式，建議將此選項停用。",
-    "install_steam_audio_drivers": "安裝 Steam 音訊驅動程式",
-    "install_steam_audio_drivers_desc": "如果已安裝 Steam，這將會自動安裝 Steam Streaming Speakers 驅動程式，以支援 5.1/7.1 環繞音效和主機音訊靜音。",
     "key_repeat_delay": "按鍵重複延遲",
     "key_repeat_delay_desc": "控制按鍵重複的速度。設定按鍵重複前的初始延遲時間，以毫秒為單位。",
     "key_repeat_frequency": "按鍵重複頻率",

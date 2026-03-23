@@ -38,16 +38,9 @@ DEFINE_PROPERTYKEY(PKEY_Device_DeviceDesc, 0xa45c254e, 0xdf1c, 0x4efd, 0x80, 0x2
 DEFINE_PROPERTYKEY(PKEY_Device_FriendlyName, 0xa45c254e, 0xdf1c, 0x4efd, 0x80, 0x20, 0x67, 0xd1, 0x46, 0xa8, 0x50, 0xe0, 14);  // DEVPROP_TYPE_STRING
 DEFINE_PROPERTYKEY(PKEY_DeviceInterface_FriendlyName, 0x026e516e, 0xb814, 0x414b, 0x83, 0xcd, 0x85, 0x6d, 0x6f, 0xef, 0x48, 0x22, 2);
 
-#if defined(__x86_64) || defined(__x86_64__) || defined(__amd64) || defined(__amd64__) || defined(_M_AMD64)
-  #define STEAM_DRIVER_SUBDIR L"x64"
-#else
-  #warning No known Steam audio driver for this architecture
-#endif
-
 namespace {
 
   constexpr auto SAMPLE_RATE = 48000;
-  constexpr auto STEAM_AUDIO_DRIVER_PATH = L"%CommonProgramFiles(x86)%\\Steam\\drivers\\Windows10\\" STEAM_DRIVER_SUBDIR L"\\SteamStreamingSpeakers.inf";
 
   constexpr auto waveformat_mask_stereo = SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT;
 
@@ -1368,77 +1361,6 @@ namespace platf::audio {
       BOOST_LOG(info) << "Successfully reset default audio device"sv;
     }
 
-    /**
-     * @brief Installs the Steam Streaming Speakers driver, if present.
-     * @return `true` if installation was successful.
-     */
-    bool install_steam_audio_drivers() {
-#ifdef STEAM_DRIVER_SUBDIR
-      // MinGW's libnewdev.a is missing DiInstallDriverW() even though the headers have it,
-      // so we have to load it at runtime. It's Vista or later, so it will always be available.
-      auto newdev = LoadLibraryExW(L"newdev.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-      if (!newdev) {
-        BOOST_LOG(error) << "newdev.dll failed to load"sv;
-        return false;
-      }
-      auto fg = util::fail_guard([newdev]() {
-        FreeLibrary(newdev);
-      });
-
-      auto fn_DiInstallDriverW = (decltype(DiInstallDriverW) *) GetProcAddress(newdev, "DiInstallDriverW");
-      if (!fn_DiInstallDriverW) {
-        BOOST_LOG(error) << "DiInstallDriverW() is missing"sv;
-        return false;
-      }
-
-      // Get the current default audio device (if present)
-      auto old_default_dev = default_device(device_enum);
-
-      // Install the Steam Streaming Speakers driver
-      WCHAR driver_path[MAX_PATH] = {};
-      ExpandEnvironmentStringsW(STEAM_AUDIO_DRIVER_PATH, driver_path, ARRAYSIZE(driver_path));
-      if (fn_DiInstallDriverW(nullptr, driver_path, 0, nullptr)) {
-        BOOST_LOG(info) << "Successfully installed Steam Streaming Speakers"sv;
-
-        // Wait for 5 seconds to allow the audio subsystem to reconfigure things before
-        // modifying the default audio device or enumerating devices again.
-        Sleep(5000);
-
-        // If there was a previous default device, restore that original device as the
-        // default output device just in case installing the new one changed it.
-        if (old_default_dev) {
-          audio::wstring_t old_default_id;
-          old_default_dev->GetId(&old_default_id);
-
-          for (int x = 0; x < (int) ERole_enum_count; ++x) {
-            policy->SetDefaultEndpoint(old_default_id.get(), (ERole) x);
-          }
-        }
-
-        return true;
-      } else {
-        auto err = GetLastError();
-        switch (err) {
-          case ERROR_ACCESS_DENIED:
-            BOOST_LOG(warning) << "Administrator privileges are required to install Steam Streaming Speakers"sv;
-            break;
-          case ERROR_FILE_NOT_FOUND:
-          case ERROR_PATH_NOT_FOUND:
-            BOOST_LOG(info) << "Steam audio drivers not found. This is expected if you don't have Steam installed."sv;
-            break;
-          default:
-            BOOST_LOG(warning) << "Failed to install Steam audio drivers: "sv << err;
-            break;
-        }
-
-        return false;
-      }
-#else
-      BOOST_LOG(warning) << "Unable to install Steam Streaming Speakers on unknown architecture"sv;
-      return false;
-#endif
-    }
-
     int init() {
       auto status = CoCreateInstance(
         CLSID_CPolicyConfigClient,
@@ -1719,13 +1641,6 @@ namespace platf {
 
     if (control->init()) {
       return nullptr;
-    }
-
-    // Install Steam Streaming Speakers if needed. We do this during audio_control() to ensure
-    // the sink information returned includes the new Steam Streaming Speakers device.
-    if (config::audio.install_steam_drivers && !control->find_device_id(control->match_steam_speakers())) {
-      // This is best effort. Don't fail if it doesn't work.
-      control->install_steam_audio_drivers();
     }
 
     // Install VB-Audio CABLE if mic passthrough is configured and CABLE Input (render) is not present.

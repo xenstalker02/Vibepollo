@@ -29,7 +29,7 @@ for voice chat, Discord, games, and anything else.
 - **VB-Audio Virtual Cable** — decoded mic audio is written to CABLE Input (render
   endpoint). Windows routes it to CABLE Output automatically. Discord and other apps
   read from CABLE Output via the Windows default capture device — no manual setup needed.
-- **Opus audio** — 64kbps VBR, complexity 10, FEC enabled, 20ms frames. Low latency,
+- **Opus audio** — 96kbps VBR, complexity 10, FEC enabled, 20ms frames. Low latency,
   excellent voice quality, robust to packet loss.
 - **Per-session decoder** — each streaming session gets its own Opus decoder and WASAPI
   render client. Multiple concurrent sessions do not corrupt each other's audio.
@@ -46,7 +46,7 @@ for voice chat, Discord, games, and anything else.
 
 **Windows PC (host):**
 - Windows 10 or 11
-- [VB-Audio Virtual Cable](https://vb-audio.com/Cable/) installed
+- VB-Audio Virtual Cable — installed automatically by the Vibepollo installer
 - GPU: NVIDIA (NVENC), AMD, or Intel (QuickSync)
 
 **Steam Deck / Client:**
@@ -134,7 +134,7 @@ negotiate an encrypted control stream. Plaintext mic passthrough is never permit
 ```
 Steam Deck mic
 → SDL2 capture (48kHz, 16-bit, mono)
-→ Opus encode (64kbps, VBR, FEC, 20ms frames)
+→ Opus encode (96kbps, VBR, FEC, 20ms frames)
 → Deadline-based pacer (exactly 20ms intervals with re-sync guard)
 → AES-GCM encrypted control stream (SS_ENC_CONTROL_V2)
 → Vibepollo receives 0x3003 packets
@@ -185,6 +185,5 @@ community testing is complete. The PR draft is at
 See [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md) for full credits.
 
 Mic passthrough was developed in parallel with [logabell](https://github.com/logabell).
-We compared implementations and adopted Opus encoder tuning (64kbps, FEC, VBR,
-complexity 10, FRAMESIZE_20_MS), the deadline-based send pacer, Steam Streaming
-Microphone support, and 12-frame buffer overflow protection from that work.
+We compared implementations and adopted Opus encoder tuning (96kbps, FEC, VBR,
+complexity 10, FRAMESIZE_20_MS) and the deadline-based send pacer from that work.

@@ -237,12 +237,6 @@ function selectVirtualDisplayLayout(v: unknown) {
           v-model="config.install_vbcable"
           class="mb-3"
         />
-
-        <ConfigFieldRenderer
-          setting-key="install_steam_audio_drivers"
-          v-model="config.install_steam_audio_drivers"
-          class="mb-3"
-        />
       </template>
     </PlatformLayout>
 

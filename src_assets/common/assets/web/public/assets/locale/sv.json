@@ -224,8 +224,6 @@
     "hevc_mode_desc": "Tillåter kunden att begära HEVC Main eller HEVC Main10 videoströmmar. HEVC är mer CPU-intensiv att koda, så att detta kan minska prestandan vid användning av programkodning.",
     "high_resolution_scrolling": "Stöd för högupplöst rullning",
     "high_resolution_scrolling_desc": "När den är aktiverad kommer Vibepollo att passera genom högupplösta scroll-händelser från Moonlight klienter. Detta kan vara användbart för att inaktivera för äldre program som bläddrar för snabbt med högupplösta scroll-händelser.",
-    "install_steam_audio_drivers": "Installera Steam Audio-drivrutiner",
-    "install_steam_audio_drivers_desc": "Om Steam är installerat kommer detta automatiskt installera drivrutinen Steam Streaming Speakers för att stödja 5.1/7.1 surroundljud och ljuddämpning av värdljud.",
     "key_repeat_delay": "Nyckel upprepas fördröjning",
     "key_repeat_delay_desc": "Kontrollera hur snabba tangenter kommer att upprepa sig. Den initiala fördröjningen i millisekunder innan du upprepar nycklar.",
     "key_repeat_frequency": "Nyckel Upprepa Frekvens",

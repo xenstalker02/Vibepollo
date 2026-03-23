@@ -379,8 +379,6 @@
     "hevc_mode_desc": "Umožňuje klientovi vyžádat videostreamy HEVC Main nebo HEVC Main10. Kódování HEVC je náročnější na procesor, takže zapnutí této funkce může snížit výkon při použití softwarového kódování.",
     "high_resolution_scrolling": "Podpora rolování s vysokým rozlišením",
     "high_resolution_scrolling_desc": "Je-li tato funkce povolena, bude Vibepollo předávat události posouvání ve vysokém rozlišení od klientů Moonlight. To může být užitečné zakázat u starších aplikací, které se při událostech posouvání ve vysokém rozlišení posouvají příliš rychle.",
-    "install_steam_audio_drivers": "Instalace ovladačů zvuku služby Steam",
-    "install_steam_audio_drivers_desc": "Pokud je nainstalována služba Steam, automaticky se nainstaluje ovladač Steam Streaming Speakers pro podporu prostorového zvuku 5.1/7.1 a ztlumení zvuku hostitele.",
     "key_repeat_delay": "Zpoždění opakování kláves",
     "key_repeat_delay_desc": "Ovládání rychlosti opakování kláves. Počáteční prodleva v milisekundách před opakováním kláves.",
     "key_repeat_frequency": "Frekvence opakování kláves",

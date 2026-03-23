@@ -224,8 +224,6 @@
     "hevc_mode_desc": "Permet au client de demander des flux vidéo HEVC Main ou HEVC Main10. HEVC est plus gourmand en CPU pour l'encodage, ce qui peut réduire les performances lors de l'utilisation de l'encodage logiciel.",
     "high_resolution_scrolling": "Prise en charge du défilement haute résolution",
     "high_resolution_scrolling_desc": "Lorsque cette option est activée, Vibepollo passera par les événements de défilement haute résolution des clients Moonlight. Cela peut être utile pour désactiver pour les anciennes applications qui font défiler trop vite avec des événements de défilement haute résolution.",
-    "install_steam_audio_drivers": "Installer les pilotes audio Steam",
-    "install_steam_audio_drivers_desc": "Si Steam est installé, cela installera automatiquement le pilote Steam Streaming Speakers pour prendre en charge le son surround 5.1/7.1 et rendre muet l'audio de l'hôte.",
     "key_repeat_delay": "Délai de répétition de la clé",
     "key_repeat_delay_desc": "Contrôle la vitesse à laquelle les clés se répètent. Le délai initial en millisecondes avant de répéter les clés.",
     "key_repeat_frequency": "Fréquence de répétition des touches",

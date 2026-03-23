@@ -805,7 +805,6 @@ namespace config {
     50,  // mic_buffer_ms
     3,   // mic_buffer_packets
     true,  // stream audio
-    true,  // install_steam_drivers
     true,  // install_vbcable
     true,  // keep_sink_default
     true,  // auto_capture
@@ -1669,7 +1668,6 @@ namespace config {
     int_between_f(vars, "mic_buffer_ms", audio.mic_buffer_ms, {10, 200});
     int_between_f(vars, "mic_buffer_packets", audio.mic_buffer_packets, {1, 16});
     bool_f(vars, "stream_audio", audio.stream);
-    bool_f(vars, "install_steam_audio_drivers", audio.install_steam_drivers);
     bool_f(vars, "install_vbcable", audio.install_vbcable);
     bool_f(vars, "keep_sink_default", audio.keep_default);
     bool_f(vars, "auto_capture_sink", audio.auto_capture);

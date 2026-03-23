@@ -224,8 +224,6 @@
     "hevc_mode_desc": "允许客户端请求HEVC 主流或 HEVC Main10 视频流。 HEVC更需要编码，因此在使用软件编码时可能降低性能。",
     "high_resolution_scrolling": "高分辨率滚动支持",
     "high_resolution_scrolling_desc": "启用后，Vibepollo 将透传来自 Moonlight 客户端的高分辨率滚动事件。对于那些使用高分辨率滚动事件时滚动速度过快的旧版应用程序来说，禁用此功能非常有用。",
-    "install_steam_audio_drivers": "安装 Steam 音频驱动程序",
-    "install_steam_audio_drivers_desc": "如果安装了 Steam，则会自动安装 Steam Streaming Speakers 驱动程序，以支持 5.1/7.1 环绕声和主机音频静音。",
     "key_repeat_delay": "按键重复延迟",
     "key_repeat_delay_desc": "控制按键重复的速度。重复按键前的初始延迟（毫秒）。",
     "key_repeat_frequency": "按键重复频率",

@@ -4,7 +4,7 @@
 
 ### Added
 - Mic passthrough via 0x3003 control stream packets — streams client
-  microphone audio to host PC in real time via VB-Audio Virtual Cable
+  microphone audio to host PC in real time via VB-Audio Virtual Cable at 96kbps VBR
 - VB-Audio Virtual Cable auto-install on first run (skipped if already present)
 - Configurable `mic_sink`, `mic_capture_device`, `mic_buffer_packets`,
   and `mic_buffer_ms` settings in sunshine.conf
@@ -33,6 +33,13 @@
 - WinSock include ordering conflict with Boost.Asio headers in update.cpp
 
 ### Changed
+- Removed `install_steam_audio_drivers` config option and UI checkbox —
+  Steam Streaming Speakers are not usable with Apollo/Moonlight protocol;
+  VB-Audio Virtual Cable is the correct and only supported architecture
+- VB-Audio Virtual Cable now installed automatically by the Vibepollo installer;
+  auto-install at runtime via `install_vbcable` option remains as fallback
+- `virtual_sink_placeholder` UI hint updated from "Steam Streaming Speakers"
+  to "CABLE Input"
 - Update checks now target `xenstalker02/Vibepollo` stable releases only;
   pre-release versions never auto-applied
 - `mic_capture_device` no longer hardcoded — configurable in sunshine.conf
