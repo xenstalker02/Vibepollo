@@ -1,18 +1,11 @@
-﻿/**
+/**
  * @file src/platform/windows/audio.cpp
  * @brief Definitions for Windows audio capture.
  */
 #define INITGUID
 
 // standard includes
-#include <algorithm>
-#include <atomic>
-#include <chrono>
-#include <cmath>
-#include <deque>
 #include <format>
-#include <mutex>
-#include <thread>
 
 // platform includes
 #include <winsock2.h>
@@ -595,14 +588,7 @@ namespace platf::audio {
         return capture_e::reinit;
       }
 
-      // Cap the wait to 100 ms regardless of what the device reports.
-      // default_latency_ms is REFERENCE_TIME/1000 (100-ns → μs, then used as ms),
-      // which can be arbitrarily large for virtual audio devices (e.g. VB-CABLE).
-      // Without the cap, WaitForSingleObjectEx can block longer than the 10-second
-      // session-teardown watchdog, causing a forced crash on every clean disconnect.
-      constexpr DWORD MAX_CAPTURE_WAIT_MS = 100;
-      status = WaitForSingleObjectEx(audio_event.get(),
-        std::min<DWORD>(static_cast<DWORD>(default_latency_ms), MAX_CAPTURE_WAIT_MS), FALSE);
+      status = WaitForSingleObjectEx(audio_event.get(), default_latency_ms, FALSE);
       switch (status) {
         case WAIT_OBJECT_0:
           break;
@@ -692,104 +678,51 @@ namespace platf::audio {
   };
 
   /**
-   * WASAPI render client for mic passthrough.
-   * Direct port of Logan's mic_write_wasapi_t (logabell/Apollo) adapted to
-   * the platf::speaker_t interface.
+   * @brief WASAPI render endpoint for mic passthrough (writes to VB-Cable Input).
    *
-   * Flow:
-   *   write(samples, count) → push mono samples to pending_frames + SetEvent
-   *   render_loop (dedicated thread) → wakes on event or 20ms timeout
-   *     → waits for playout prebuffer (4 packets = 3840 mono samples)
-   *     → writes each mono sample duplicated to L+R stereo into WASAPI
-   *   WASAPI started in init() BEFORE render thread launch (Logan's order)
+   * write() queues mono float32 samples and signals render_loop via event.
+   * render_loop waits for a 4-packet prebuffer then drains into WASAPI stereo.
    */
   class speaker_wasapi_t: public platf::speaker_t {
   public:
-    // Called from control stream thread — queue + signal only, zero WASAPI ops.
     int write(const float *samples, std::uint32_t frame_count) override {
-      if (!render_event) return -1;
+      if (!render_event || render_dead.load(std::memory_order_acquire)) return -1;
       {
         std::lock_guard<std::mutex> lk(queue_mutex);
-        for (std::uint32_t i = 0; i < frame_count; ++i) {
+        for (std::uint32_t i = 0; i < frame_count; ++i)
           pending_frames.push_back(std::clamp(samples[i], -1.0f, 1.0f));
-        }
-        // Cap to 1 second of mono audio to bound latency.
+        // Cap to 1 second to bound latency.
         if (pending_frames.size() > 48000) {
           auto trim = pending_frames.size() - 48000;
-          pending_frames.erase(pending_frames.begin(),
-                               pending_frames.begin() + (std::ptrdiff_t)trim);
+          pending_frames.erase(pending_frames.begin(), pending_frames.begin() + (std::ptrdiff_t)trim);
         }
       }
       SetEvent(render_event);
       return 0;
     }
 
-    int init(const std::wstring &device_id, int /*channel_count*/,
-             std::uint32_t /*sample_rate*/) {
-
-      // Step 1: SetDeviceFormat via IPolicyConfig BEFORE IMMDevice activation.
-      // Logan's ensure_recommended_steam_mic_format() order.
-      {
-        policy_t pol;
-        auto hr = CoCreateInstance(CLSID_CPolicyConfigClient, nullptr,
-          CLSCTX_ALL, IID_IPolicyConfig, (void **)&pol);
-        if (SUCCEEDED(hr) && pol) {
-          WAVEFORMATEXTENSIBLE wfx {};
-          wfx.Format.wFormatTag           = WAVE_FORMAT_EXTENSIBLE;
-          wfx.Format.nChannels            = 2;
-          wfx.Format.nSamplesPerSec       = 48000;
-          wfx.Format.wBitsPerSample       = 32;
-          wfx.Format.nBlockAlign          = 8;
-          wfx.Format.nAvgBytesPerSec      = 48000 * 8;
-          wfx.Format.cbSize               = sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX);
-          wfx.Samples.wValidBitsPerSample = 32;
-          wfx.dwChannelMask               = SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT;
-          wfx.SubFormat                   = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
-          WAVEFORMATEXTENSIBLE prev {};
-          hr = pol->SetDeviceFormat(device_id.c_str(),
-            reinterpret_cast<WAVEFORMATEX *>(&wfx),
-            reinterpret_cast<WAVEFORMATEX *>(&prev));
-          if (SUCCEEDED(hr)) {
-            BOOST_LOG(info) << "[mic] SetDeviceFormat float32/2ch/48kHz: ok"sv;
-          } else {
-            BOOST_LOG(warning) << "[mic] SetDeviceFormat float32/2ch/48kHz failed 0x"sv
-                               << util::hex(hr).to_string_view();
-          }
-        }
-        else {
-          BOOST_LOG(warning) << "[mic] IPolicyConfig unavailable 0x"sv
-                             << util::hex(hr).to_string_view();
-        }
-      }
-
-      // Step 2: Activate IAudioClient.
+    int init(const std::wstring &device_id, std::uint32_t /*sample_rate*/) {
+      // Activate IAudioClient
       device_enum_t dev_enum;
       auto status = CoCreateInstance(CLSID_MMDeviceEnumerator, nullptr,
         CLSCTX_ALL, IID_IMMDeviceEnumerator, (void **)&dev_enum);
       if (FAILED(status)) {
-        BOOST_LOG(error) << "speaker_wasapi_t: CoCreateInstance MMDeviceEnumerator failed 0x"sv
-                         << util::hex(status).to_string_view();
+        BOOST_LOG(error) << "[mic] speaker_wasapi_t: CoCreateInstance failed 0x"sv << util::hex(status).to_string_view();
         return -1;
       }
-
       device_t device;
       status = dev_enum->GetDevice(device_id.c_str(), &device);
       if (FAILED(status)) {
-        BOOST_LOG(error) << "speaker_wasapi_t: GetDevice failed 0x"sv
-                         << util::hex(status).to_string_view();
+        BOOST_LOG(error) << "[mic] speaker_wasapi_t: GetDevice failed 0x"sv << util::hex(status).to_string_view();
         return -1;
       }
-
-      status = device->Activate(IID_IAudioClient, CLSCTX_ALL, nullptr,
-                                 (void **)&audio_client);
+      status = device->Activate(IID_IAudioClient, CLSCTX_ALL, nullptr, (void **)&audio_client);
       if (FAILED(status)) {
-        BOOST_LOG(error) << "speaker_wasapi_t: Activate failed 0x"sv
-                         << util::hex(status).to_string_view();
+        BOOST_LOG(error) << "[mic] speaker_wasapi_t: Activate failed 0x"sv << util::hex(status).to_string_view();
         return -1;
       }
 
-      // Step 3: Initialize with float32/2ch/48kHz + EVENTCALLBACK.
-      // Logan's make_required_steam_mic_render_waveformat() format.
+      // Preferred format: float32 stereo 48kHz
       WAVEFORMATEXTENSIBLE fmt {};
       fmt.Format.wFormatTag           = WAVE_FORMAT_EXTENSIBLE;
       fmt.Format.nChannels            = 2;
@@ -802,75 +735,68 @@ namespace platf::audio {
       fmt.dwChannelMask               = SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT;
       fmt.SubFormat                   = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
 
+      // Fix 3: negotiate format instead of hardcoding
+      WAVEFORMATEX *closest_match = nullptr;
+      HRESULT fmt_hr = audio_client->IsFormatSupported(
+        AUDCLNT_SHAREMODE_SHARED, reinterpret_cast<WAVEFORMATEX *>(&fmt), &closest_match);
+
+      const WAVEFORMATEX *use_fmt = reinterpret_cast<WAVEFORMATEX *>(&fmt);
+      wave_format_t mix_fmt_guard;
+      wave_format_t closest_guard;
+
+      if (fmt_hr == S_FALSE && closest_match) {
+        closest_guard.reset(closest_match);
+        use_fmt = closest_match;
+        BOOST_LOG(info) << "[mic] IsFormatSupported S_FALSE — using closest match "sv
+                        << use_fmt->nChannels << "ch "sv << use_fmt->nSamplesPerSec << "Hz"sv;
+      } else if (FAILED(fmt_hr)) {
+        WAVEFORMATEX *mix_fmt = nullptr;
+        if (FAILED(audio_client->GetMixFormat(&mix_fmt)) || !mix_fmt) {
+          BOOST_LOG(error) << "[mic] speaker_wasapi_t: GetMixFormat failed — cannot initialize"sv;
+          return -1;
+        }
+        mix_fmt_guard.reset(mix_fmt);
+        use_fmt = mix_fmt;
+        BOOST_LOG(info) << "[mic] IsFormatSupported failed — falling back to mix format "sv
+                        << use_fmt->nChannels << "ch "sv << use_fmt->nSamplesPerSec << "Hz"sv;
+      }
+
       status = audio_client->Initialize(AUDCLNT_SHAREMODE_SHARED,
-        AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-        1000000LL,  // 100ms buffer in 100ns units
-        0, reinterpret_cast<WAVEFORMATEX *>(&fmt), nullptr);
+        AUDCLNT_STREAMFLAGS_EVENTCALLBACK, 1000000LL, 0, use_fmt, nullptr);
       if (FAILED(status)) {
-        BOOST_LOG(error) << "speaker_wasapi_t: Initialize failed 0x"sv
-                         << util::hex(status).to_string_view();
+        BOOST_LOG(error) << "[mic] speaker_wasapi_t: Initialize failed 0x"sv << util::hex(status).to_string_view();
         return -1;
       }
 
-      // Log actual mix format for diagnostics
-      {
-        WAVEFORMATEX *mix_fmt = nullptr;
-        if (SUCCEEDED(audio_client->GetMixFormat(&mix_fmt)) && mix_fmt) {
-          BOOST_LOG(info) << "[mic] WASAPI mix format: "
-                          << mix_fmt->nChannels << "ch, "
-                          << mix_fmt->nSamplesPerSec << "Hz, "
-                          << mix_fmt->wBitsPerSample << "-bit, "
-                          << "tag=0x" << util::hex(mix_fmt->wFormatTag).to_string_view();
-          CoTaskMemFree(mix_fmt);
-        }
-      }
-
-      // Step 4: GetBufferSize + GetService.
       status = audio_client->GetBufferSize(&buffer_frames);
       if (FAILED(status)) {
-        BOOST_LOG(error) << "speaker_wasapi_t: GetBufferSize failed 0x"sv
-                         << util::hex(status).to_string_view();
+        BOOST_LOG(error) << "[mic] speaker_wasapi_t: GetBufferSize failed"sv;
         return -1;
       }
-
       status = audio_client->GetService(IID_IAudioRenderClient, (void **)&audio_render);
       if (FAILED(status)) {
-        BOOST_LOG(error) << "speaker_wasapi_t: GetService IAudioRenderClient failed 0x"sv
-                         << util::hex(status).to_string_view();
+        BOOST_LOG(error) << "[mic] speaker_wasapi_t: GetService IAudioRenderClient failed"sv;
         return -1;
       }
 
-      // Step 5: Create event + SetEventHandle.
       render_event = CreateEvent(nullptr, FALSE, FALSE, nullptr);
       if (!render_event) {
-        BOOST_LOG(error) << "speaker_wasapi_t: CreateEvent failed"sv;
+        BOOST_LOG(error) << "[mic] speaker_wasapi_t: CreateEvent failed"sv;
         return -1;
       }
+      audio_client->SetEventHandle(render_event);
 
-      status = audio_client->SetEventHandle(render_event);
-      if (FAILED(status)) {
-        BOOST_LOG(warning) << "[mic] SetEventHandle failed 0x"sv
-                           << util::hex(status).to_string_view()
-                           << " — render_loop will poll on 20ms timeout"sv;
-      }
-
-      // Step 6: Start WASAPI NOW, before render thread (Logan's order).
-      // Device runs idle until playout_started is set in render_loop.
       status = audio_client->Start();
       if (FAILED(status)) {
-        BOOST_LOG(error) << "speaker_wasapi_t: Start failed 0x"sv
-                         << util::hex(status).to_string_view();
+        BOOST_LOG(error) << "[mic] speaker_wasapi_t: Start failed 0x"sv << util::hex(status).to_string_view();
         CloseHandle(render_event);
         render_event = nullptr;
         return -1;
       }
 
-      // Step 7: Launch render thread.
       stop_flag = false;
       render_thread = std::thread(&speaker_wasapi_t::render_loop, this);
-
-      BOOST_LOG(info) << "[mic] speaker_wasapi_t ready — WASAPI running, "sv
-                      << "render thread waiting for prebuffer"sv;
+      BOOST_LOG(info) << "[mic] speaker_wasapi_t ready"sv;
       return 0;
     }
 
@@ -879,78 +805,61 @@ namespace platf::audio {
       if (render_event) SetEvent(render_event);
       if (render_thread.joinable()) render_thread.join();
       if (audio_client) audio_client->Stop();
-      // audio_render released by safe_ptr destructor; render_event closed last.
       if (render_event) { CloseHandle(render_event); render_event = nullptr; }
     }
 
   private:
-    static constexpr std::size_t kPrebufFrames = 960 * 4;  // 3840 mono samples (4 Opus packets)
+    static constexpr std::size_t kPrebufFrames = 960 * 4;  // 4 Opus packets
 
     void render_loop() {
       CoInitializeEx(nullptr, COINIT_MULTITHREADED | COINIT_SPEED_OVER_MEMORY);
-
       bool playout_started = false;
-
       while (!stop_flag) {
         WaitForSingleObject(render_event, 20);
         if (stop_flag) break;
-
-        // WASAPI is already running. Delay writes until prebuffer is full.
         if (!playout_started) {
           std::size_t qsz;
           { std::lock_guard<std::mutex> lk(queue_mutex); qsz = pending_frames.size(); }
           if (qsz < kPrebufFrames) continue;
           playout_started = true;
-          BOOST_LOG(info) << "[mic] Playout started (prebuffer: "sv << qsz << " mono frames)"sv;
+          BOOST_LOG(info) << "[mic] Playout started (prebuffer: "sv << qsz << " frames)"sv;
         }
-
         UINT32 padding = 0;
-        auto hr = audio_client->GetCurrentPadding(&padding);
-        if (FAILED(hr)) {
-          BOOST_LOG(warning) << "[mic] GetCurrentPadding failed 0x"sv
-                             << util::hex(hr).to_string_view()
-                             << " — render thread stopping"sv;
+        if (FAILED(audio_client->GetCurrentPadding(&padding))) {
+          render_dead.store(true, std::memory_order_release);
           break;
         }
-
         auto avail = buffer_frames - padding;
         if (avail == 0) continue;
-
         UINT32 to_write;
-        {
-          std::lock_guard<std::mutex> lk(queue_mutex);
-          to_write = std::min(avail, (UINT32)pending_frames.size());
-        }
+        { std::lock_guard<std::mutex> lk(queue_mutex); to_write = std::min(avail, (UINT32)pending_frames.size()); }
         if (to_write == 0) continue;
-
         BYTE *buf = nullptr;
-        hr = audio_render->GetBuffer(to_write, &buf);
-        if (FAILED(hr) || !buf) continue;
-
+        if (FAILED(audio_render->GetBuffer(to_write, &buf)) || !buf) continue;
         auto *dst = reinterpret_cast<float *>(buf);
         {
           std::lock_guard<std::mutex> lk(queue_mutex);
           for (UINT32 f = 0; f < to_write; ++f) {
             const float s = pending_frames.front();
             pending_frames.pop_front();
-            dst[f * 2]     = s;  // L
-            dst[f * 2 + 1] = s;  // R
+            dst[f * 2]     = s;
+            dst[f * 2 + 1] = s;
           }
         }
         audio_render->ReleaseBuffer(to_write, 0);
       }
-
       CoUninitialize();
     }
 
-    audio_client_t     audio_client;
-    audio_render_t     audio_render;
-    HANDLE             render_event { nullptr };
-    UINT32             buffer_frames { 0 };
-    std::atomic<bool>  stop_flag { false };
-    std::thread        render_thread;
-    std::mutex         queue_mutex;
-    std::deque<float>  pending_frames;
+    audio_client_t    audio_client;
+    audio_render_t    audio_render;
+    HANDLE            render_event { nullptr };
+    UINT32            buffer_frames { 0 };
+    std::atomic<bool> stop_flag { false };
+    std::atomic<bool> render_dead { false };
+    std::thread       render_thread;
+    std::mutex        queue_mutex;
+    std::deque<float> pending_frames;
   };
 
   class audio_control_t: public ::platf::audio_control_t {
@@ -1053,25 +962,90 @@ namespace platf::audio {
       return mic;
     }
 
-    std::unique_ptr<platf::speaker_t> virtual_microphone(const std::string &device_name, int channels, std::uint32_t sample_rate) override {
-      // "CABLE Input" is a render (playback) endpoint from WASAPI's perspective,
-      // so find_device_id (which enumerates eRender) will locate it correctly.
+    std::unique_ptr<platf::speaker_t> virtual_microphone(const std::string &device_name, std::uint32_t sample_rate, std::uint32_t /*frame_size*/) override {
       auto matched = find_device_id(match_all_fields(from_utf8(device_name)));
       if (!matched) {
-        BOOST_LOG(warning) << "[mic] WARNING: no suitable mic sink — mic passthrough disabled for this session"sv;
+        BOOST_LOG(warning) << "[mic] virtual_microphone: device not found: " << device_name
+                           << " — mic passthrough disabled for this session"sv;
         return nullptr;
       }
-
       auto spk = std::make_unique<speaker_wasapi_t>();
-      if (spk->init(matched->second, channels, sample_rate)) {
+      if (spk->init(matched->second, sample_rate)) {
         return nullptr;
       }
-
       return spk;
     }
 
-    bool is_steam_mic_available() override {
-      return static_cast<bool>(find_device_id(match_steam_microphone()));
+    platf::capture_snapshot_t snapshot_capture_defaults() override {
+      platf::capture_snapshot_t snap;
+      auto get_id = [&](ERole role) -> std::wstring {
+        device_t dev;
+        if (FAILED(device_enum->GetDefaultAudioEndpoint(eCapture, role, &dev))) return {};
+        wstring_t id;
+        if (FAILED(dev->GetId(&id))) return {};
+        return std::wstring(id.get());
+      };
+      snap.console_id    = get_id(eConsole);
+      snap.comms_id      = get_id(eCommunications);
+      snap.multimedia_id = get_id(eMultimedia);
+      return snap;
+    }
+
+    void switch_capture_to(const std::string &device_name) override {
+      auto target_id = find_capture_device_id(from_utf8(device_name));
+      if (target_id.empty()) {
+        BOOST_LOG(warning) << "[mic] switch_capture_to: device not found: " << device_name;
+        return;
+      }
+      for (int x = 0; x < (int) ERole_enum_count; ++x)
+        policy->SetDefaultEndpoint(target_id.c_str(), (ERole) x);
+      BOOST_LOG(info) << "[mic] default capture switched to: " << device_name;
+    }
+
+    void restore_capture_from(const platf::capture_snapshot_t &snap) override {
+      auto restore_role = [&](const std::wstring &id, ERole role) {
+        if (id.empty()) return;
+        policy->SetDefaultEndpoint(id.c_str(), role);
+      };
+      restore_role(snap.console_id,    eConsole);
+      restore_role(snap.comms_id,      eCommunications);
+      restore_role(snap.multimedia_id, eMultimedia);
+      BOOST_LOG(info) << "[mic] default capture roles restored"sv;
+    }
+
+    std::string get_current_default_capture_name() override {
+      device_t dev;
+      if (FAILED(device_enum->GetDefaultAudioEndpoint(eCapture, eConsole, &dev))) return {};
+      prop_t prop;
+      if (FAILED(dev->OpenPropertyStore(STGM_READ, &prop))) return {};
+      prop_var_t pv;
+      if (SUCCEEDED(prop->GetValue(PKEY_Device_FriendlyName, &pv.prop)) && pv.prop.vt == VT_LPWSTR)
+        return to_utf8(pv.prop.pwszVal);
+      return {};
+    }
+
+    void reset_default_capture_to_first_real() override {
+      collection_t collection;
+      if (FAILED(device_enum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &collection))) return;
+      UINT count = 0;
+      collection->GetCount(&count);
+      for (UINT i = 0; i < count; ++i) {
+        device_t dev;
+        if (FAILED(collection->Item(i, &dev))) continue;
+        prop_t prop;
+        if (FAILED(dev->OpenPropertyStore(STGM_READ, &prop))) continue;
+        prop_var_t pv;
+        if (FAILED(prop->GetValue(PKEY_Device_FriendlyName, &pv.prop)) || pv.prop.vt != VT_LPWSTR) continue;
+        std::string name = to_utf8(pv.prop.pwszVal);
+        if (name.find("CABLE") != std::string::npos) continue;
+        wstring_t id;
+        if (FAILED(dev->GetId(&id))) continue;
+        for (int x = 0; x < (int) ERole_enum_count; ++x)
+          policy->SetDefaultEndpoint(id.get(), (ERole) x);
+        BOOST_LOG(info) << "[mic] reset_default_capture_to_first_real: " << name;
+        return;
+      }
+      BOOST_LOG(warning) << "[mic] reset_default_capture_to_first_real: no non-CABLE capture device found"sv;
     }
 
     /**
@@ -1174,8 +1148,7 @@ namespace platf::audio {
 
     enum class match_field_e {
       device_id,  ///< Match device_id
-      device_friendly_name,  ///< Match endpoint friendly name (exact)
-      device_friendly_name_contains,  ///< Match endpoint friendly name (substring)
+      device_friendly_name,  ///< Match endpoint friendly name
       adapter_friendly_name,  ///< Match adapter friendly name
       device_description,  ///< Match endpoint description
     };
@@ -1186,25 +1159,6 @@ namespace platf::audio {
     audio_control_t::match_fields_list_t match_steam_speakers() {
       return {
         {match_field_e::adapter_friendly_name, L"Steam Streaming Speakers"}
-      };
-    }
-
-    // Steam Streaming Microphone render-side matching (eRender endpoint only).
-    // Priority:
-    //   1. device_friendly_name exact "Speakers (Steam Streaming Microphone)" — primary
-    //   2. device_friendly_name exact "Steam Streaming Microphone" — locale-prefix fallback
-    // Intentionally NOT using device_friendly_name_contains: the substring "Steam Streaming
-    // Microphone" would also match the eCapture endpoint "Microphone (Steam Streaming
-    // Microphone)" if Steam registers it in both flow directions.  Exact match on the
-    // eRender name avoids silently opening the wrong endpoint.
-    // Notes:
-    //   adapter_friendly_name ({026e516e-b814-414b-83cd-856d6fef4822},2) is not populated
-    //   by the Steam driver on this system; device_description (pid=2) is "Speakers" which
-    //   is too broad to use as a discriminator.
-    audio_control_t::match_fields_list_t match_steam_microphone() {
-      return {
-        {match_field_e::device_friendly_name, L"Speakers (Steam Streaming Microphone)"},
-        {match_field_e::device_friendly_name, L"Steam Streaming Microphone"},
       };
     }
 
@@ -1269,14 +1223,6 @@ namespace platf::audio {
                 match_value = device_friendly_name.prop.pwszVal;
                 break;
 
-              case match_field_e::device_friendly_name_contains:
-                // substring match — handled below
-                if (device_friendly_name.prop.pwszVal &&
-                    std::wcsstr(device_friendly_name.prop.pwszVal, match_list[i].second.c_str())) {
-                  matched[i] = device_id;
-                }
-                continue;
-
               case match_field_e::adapter_friendly_name:
                 match_value = adapter_friendly_name.prop.pwszVal;
                 break;
@@ -1299,6 +1245,31 @@ namespace platf::audio {
       }
 
       return std::nullopt;
+    }
+
+    /**
+     * @brief Search for a capture (input) device ID by friendly name.
+     */
+    std::wstring find_capture_device_id(const std::wstring &name) {
+      collection_t collection;
+      if (FAILED(device_enum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &collection))) return {};
+      UINT count = 0;
+      collection->GetCount(&count);
+      for (UINT i = 0; i < count; ++i) {
+        device_t dev;
+        if (FAILED(collection->Item(i, &dev))) continue;
+        prop_t prop;
+        if (FAILED(dev->OpenPropertyStore(STGM_READ, &prop))) continue;
+        prop_var_t pv;
+        if (SUCCEEDED(prop->GetValue(PKEY_Device_FriendlyName, &pv.prop)) && pv.prop.vt == VT_LPWSTR) {
+          if (std::wcscmp(pv.prop.pwszVal, name.c_str()) == 0) {
+            wstring_t id;
+            if (SUCCEEDED(dev->GetId(&id)))
+              return std::wstring(id.get());
+          }
+        }
+      }
+      return {};
     }
 
     /**
@@ -1392,167 +1363,6 @@ namespace platf::audio {
       return 0;
     }
 
-    std::wstring find_capture_device_id(const std::wstring &name) {
-      collection_t collection;
-      auto status = device_enum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &collection);
-      if (FAILED(status)) return {};
-      UINT count = 0;
-      collection->GetCount(&count);
-      for (UINT i = 0; i < count; ++i) {
-        device_t device;
-        if (FAILED(collection->Item(i, &device))) continue;
-        prop_t prop;
-        if (FAILED(device->OpenPropertyStore(STGM_READ, &prop))) continue;
-        prop_var_t pv;
-        if (SUCCEEDED(prop->GetValue(PKEY_Device_FriendlyName, &pv.prop)) &&
-            pv.prop.vt == VT_LPWSTR && std::wcscmp(pv.prop.pwszVal, name.c_str()) == 0) {
-          wstring_t id;
-          if (SUCCEEDED(device->GetId(&id)))
-            return std::wstring(id.get());
-        }
-      }
-      return {};
-    }
-
-    std::string switch_default_capture_device(const std::string &device_name) override {
-      // Enumerate all active capture devices for diagnostics
-      {
-        collection_t dbg_collection;
-        if (SUCCEEDED(device_enum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &dbg_collection))) {
-          UINT dbg_count = 0;
-          dbg_collection->GetCount(&dbg_count);
-          BOOST_LOG(info) << "switch_default_capture_device: enumerating " << dbg_count
-                          << " active capture device(s), looking for: \"" << device_name << "\"";
-          for (UINT i = 0; i < dbg_count; ++i) {
-            device_t dbg_dev;
-            if (FAILED(dbg_collection->Item(i, &dbg_dev))) continue;
-            prop_t dbg_prop;
-            if (FAILED(dbg_dev->OpenPropertyStore(STGM_READ, &dbg_prop))) continue;
-            prop_var_t dbg_pv;
-            if (SUCCEEDED(dbg_prop->GetValue(PKEY_Device_FriendlyName, &dbg_pv.prop)) && dbg_pv.prop.vt == VT_LPWSTR)
-              BOOST_LOG(info) << "  capture device[" << i << "]: \"" << to_utf8(dbg_pv.prop.pwszVal) << "\"";
-          }
-        }
-      }
-
-      device_t prev_dev;
-      std::wstring prev_id;
-      std::string prev_name;
-      if (SUCCEEDED(device_enum->GetDefaultAudioEndpoint(eCapture, eConsole, &prev_dev))) {
-        wstring_t id;
-        if (SUCCEEDED(prev_dev->GetId(&id))) prev_id = id.get();
-        prop_t prev_prop;
-        if (SUCCEEDED(prev_dev->OpenPropertyStore(STGM_READ, &prev_prop))) {
-          prop_var_t pv;
-          if (SUCCEEDED(prev_prop->GetValue(PKEY_Device_FriendlyName, &pv.prop)) && pv.prop.vt == VT_LPWSTR)
-            prev_name = to_utf8(pv.prop.pwszVal);
-        }
-      }
-      auto target_id = find_capture_device_id(from_utf8(device_name));
-      if (target_id.empty()) {
-        BOOST_LOG(warning) << "switch_default_capture_device: not found: " << device_name;
-        return {};
-      }
-      if (target_id == prev_id) return to_utf8(prev_id);
-      for (int x = 0; x < (int) ERole_enum_count; ++x)
-        policy->SetDefaultEndpoint(target_id.c_str(), (ERole) x);
-      BOOST_LOG(info) << "[mic] default capture: '" << prev_name << "' -> '" << device_name << "'";
-      // Verify the switch took effect; retry up to 3 times with 500 ms intervals.
-      for (int retry = 0; retry < 3; ++retry) {
-        device_t verify_dev;
-        std::wstring verify_id;
-        if (SUCCEEDED(device_enum->GetDefaultAudioEndpoint(eCapture, eConsole, &verify_dev))) {
-          wstring_t vid;
-          if (SUCCEEDED(verify_dev->GetId(&vid))) verify_id = vid.get();
-        }
-        if (verify_id == target_id) break;  // switch confirmed
-        BOOST_LOG(info) << "[mic] switch_default_capture_device: verify failed (attempt " << (retry + 1) << "), retrying in 500 ms";
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        for (int x = 0; x < (int) ERole_enum_count; ++x)
-          policy->SetDefaultEndpoint(target_id.c_str(), (ERole) x);
-        if (retry == 2) {
-          BOOST_LOG(warning) << "[mic] switch_default_capture_device: switch did not take effect after 3 retries";
-        }
-      }
-      return to_utf8(prev_id);
-    }
-
-    void restore_default_capture_device(const std::string &prev_id) override {
-      if (prev_id.empty()) return;
-      auto wide = from_utf8(prev_id);
-      // Capture current (CABLE Output) and restored device names for logging.
-      std::string current_name;
-      {
-        device_t cur_dev;
-        if (SUCCEEDED(device_enum->GetDefaultAudioEndpoint(eCapture, eConsole, &cur_dev))) {
-          prop_t prop;
-          if (SUCCEEDED(cur_dev->OpenPropertyStore(STGM_READ, &prop))) {
-            prop_var_t pv;
-            if (SUCCEEDED(prop->GetValue(PKEY_Device_FriendlyName, &pv.prop)) && pv.prop.vt == VT_LPWSTR)
-              current_name = to_utf8(pv.prop.pwszVal);
-          }
-        }
-      }
-      std::string restored_name;
-      {
-        device_t restored_dev;
-        if (SUCCEEDED(device_enum->GetDevice(wide.c_str(), &restored_dev))) {
-          prop_t prop;
-          if (SUCCEEDED(restored_dev->OpenPropertyStore(STGM_READ, &prop))) {
-            prop_var_t pv;
-            if (SUCCEEDED(prop->GetValue(PKEY_Device_FriendlyName, &pv.prop)) && pv.prop.vt == VT_LPWSTR)
-              restored_name = to_utf8(pv.prop.pwszVal);
-          }
-        }
-      }
-      for (int x = 0; x < (int) ERole_enum_count; ++x)
-        policy->SetDefaultEndpoint(wide.c_str(), (ERole) x);
-      BOOST_LOG(info) << "[mic] default capture restored: '" << current_name << "' -> '" << restored_name << "'";
-    }
-
-    std::string get_current_default_capture_name() override {
-      device_t dev;
-      if (FAILED(device_enum->GetDefaultAudioEndpoint(eCapture, eConsole, &dev))) return {};
-      prop_t prop;
-      if (FAILED(dev->OpenPropertyStore(STGM_READ, &prop))) return {};
-      prop_var_t pv;
-      if (SUCCEEDED(prop->GetValue(PKEY_Device_FriendlyName, &pv.prop)) && pv.prop.vt == VT_LPWSTR)
-        return to_utf8(pv.prop.pwszVal);
-      return {};
-    }
-
-    std::string get_current_default_capture_id() override {
-      device_t dev;
-      if (FAILED(device_enum->GetDefaultAudioEndpoint(eCapture, eConsole, &dev))) return {};
-      wstring_t id;
-      if (FAILED(dev->GetId(&id))) return {};
-      return to_utf8(id.get());
-    }
-
-    void reset_default_capture_to_first_real() override {
-      collection_t collection;
-      if (FAILED(device_enum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &collection))) return;
-      UINT count = 0;
-      collection->GetCount(&count);
-      for (UINT i = 0; i < count; ++i) {
-        device_t dev;
-        if (FAILED(collection->Item(i, &dev))) continue;
-        prop_t prop;
-        if (FAILED(dev->OpenPropertyStore(STGM_READ, &prop))) continue;
-        prop_var_t pv;
-        if (FAILED(prop->GetValue(PKEY_Device_FriendlyName, &pv.prop)) || pv.prop.vt != VT_LPWSTR) continue;
-        std::string name = to_utf8(pv.prop.pwszVal);
-        if (name.find("CABLE") != std::string::npos) continue;
-        wstring_t id;
-        if (FAILED(dev->GetId(&id))) continue;
-        for (int x = 0; x < (int) ERole_enum_count; ++x)
-          policy->SetDefaultEndpoint(id.get(), (ERole) x);
-        BOOST_LOG(info) << "Startup crash recovery: reset default capture to: " << name;
-        return;
-      }
-      BOOST_LOG(warning) << "Startup crash recovery: no non-CABLE capture device found";
-    }
-
     bool install_vbcable() {
       static std::atomic_bool attempted {false};
       if (attempted.exchange(true, std::memory_order_acq_rel)) return false;
@@ -1573,33 +1383,24 @@ namespace platf::audio {
       BOOL launched = FALSE;
 
       if (platf::is_running_as_system()) {
-        // Vibepollo is running as the SYSTEM service. Use the SudoVDA elevation pattern:
-        // acquire the logged-in user's linked admin token so the installer runs with
-        // administrator rights inside the user's interactive session (not session 0),
-        // which is required for audio device registration.
         HANDLE user_token = platf::retrieve_users_token(/*elevated=*/true);
         if (!user_token) {
           BOOST_LOG(warning) << "VB-Cable install: no active user session available; cannot elevate installer";
           return false;
         }
-
         STARTUPINFOW si_user {}; si_user.cb = sizeof(si_user); si_user.dwFlags = STARTF_USESHOWWINDOW; si_user.wShowWindow = SW_HIDE;
         launched = CreateProcessAsUserW(
           user_token, nullptr, cmd.data(), nullptr, nullptr, FALSE,
           CREATE_NO_WINDOW, nullptr, exe_dir.wstring().c_str(), &si_user, &pi
         );
         const DWORD launch_err = GetLastError();
-
         CloseHandle(user_token);
-
         if (!launched) {
           BOOST_LOG(warning) << "VB-Cable install: elevated launch failed (error=" << launch_err << ")";
           return false;
         }
       }
       else {
-        // Not running as SYSTEM — inherit current process token (elevation depends on
-        // how Vibepollo was started; e.g. run-as-admin shortcut or UAC-elevated shell).
         launched = CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW,
                                   nullptr, exe_dir.wstring().c_str(), &si, &pi);
         if (!launched) {
@@ -1621,7 +1422,8 @@ namespace platf::audio {
       return true;
     }
 
-    ~audio_control_t() override {}
+    ~audio_control_t() override {
+    }
 
     policy_t policy;
     audio::device_enum_t device_enum;
