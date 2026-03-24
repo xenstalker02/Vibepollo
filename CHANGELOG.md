@@ -33,6 +33,13 @@
 - WinSock include ordering conflict with Boost.Asio headers in update.cpp
 
 ### Changed
+- Opus packets validated via `opus_packet_parse()` before jitter buffer insertion — malformed packets silently discarded instead of passed to decoder
+- Frame size derived per-packet via `opus_packet_get_nb_samples()` replacing hardcoded 960 — compatible with variable Opus frame durations
+- Wire header ch/flags validated on every mic packet (ch=1, flags=0 required) — invalid mic stream headers rejected before decoding
+- WASAPI render thread failure propagated to `write()` via `render_dead` atomic — mic session self-terminates cleanly on device loss instead of queuing silently
+- Capture device switching snapshots all 3 ERole defaults (eConsole, eCommunications, eMultimedia) before switching — all three roles restored on session end, no lingering capture override
+- Mic session initialization refactored from 4-level nested conditionals to flat early-return lambda — no behavior change
+- `virtual_microphone()` interface updated to `(device_name, sample_rate, frame_size)` removing unused `channels` parameter
 - Removed `install_steam_audio_drivers` config option and UI checkbox —
   Steam Streaming Speakers are not usable with Apollo/Moonlight protocol;
   VB-Audio Virtual Cable is the correct and only supported architecture
