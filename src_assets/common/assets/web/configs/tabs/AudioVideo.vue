@@ -205,38 +205,41 @@ function selectVirtualDisplayLayout(v: unknown) {
           :placeholder="$t('config.virtual_sink_placeholder')"
         />
 
-        <!-- Mic Passthrough Sink -->
-        <ConfigFieldRenderer
-          setting-key="mic_sink"
-          v-model="config.mic_sink"
-          class="mb-4"
-          :placeholder="$t('config.mic_sink_placeholder')"
-        />
+        <!-- Mic Passthrough Section -->
+        <div class="mb-6 rounded-lg border border-dark/10 dark:border-light/10 overflow-hidden">
+          <div class="bg-surface/40 px-4 py-3 border-b border-dark/10 dark:border-light/10">
+            <h3 class="text-sm font-medium">{{ $t('config.mic_section_title') }}</h3>
+            <p class="text-[11px] opacity-70 mt-1">{{ $t('config.mic_section_desc') }}</p>
+          </div>
+          <div class="p-4 space-y-4">
+            <ConfigFieldRenderer
+              setting-key="mic_sink"
+              v-model="config.mic_sink"
+              :placeholder="$t('config.mic_sink_placeholder')"
+            />
 
-        <ConfigFieldRenderer
-          setting-key="mic_capture_device"
-          v-model="config.mic_capture_device"
-          class="mb-4"
-          :placeholder="$t('config.mic_capture_device_placeholder')"
-        />
+            <ConfigFieldRenderer
+              setting-key="mic_capture_device"
+              v-model="config.mic_capture_device"
+              :placeholder="$t('config.mic_capture_device_placeholder')"
+            />
 
-        <ConfigFieldRenderer
-          setting-key="mic_buffer_ms"
-          v-model="config.mic_buffer_ms"
-          class="mb-4"
-        />
+            <ConfigFieldRenderer
+              setting-key="mic_buffer_ms"
+              v-model="config.mic_buffer_ms"
+            />
 
-        <ConfigFieldRenderer
-          setting-key="mic_buffer_packets"
-          v-model="config.mic_buffer_packets"
-          class="mb-4"
-        />
+            <ConfigFieldRenderer
+              setting-key="mic_buffer_packets"
+              v-model="config.mic_buffer_packets"
+            />
 
-        <ConfigFieldRenderer
-          setting-key="install_vbcable"
-          v-model="config.install_vbcable"
-          class="mb-3"
-        />
+            <ConfigFieldRenderer
+              setting-key="install_vbcable"
+              v-model="config.install_vbcable"
+            />
+          </div>
+        </div>
       </template>
     </PlatformLayout>
 
