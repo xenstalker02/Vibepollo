@@ -2598,6 +2598,15 @@ namespace stream {
             session.mic.audio_ctrl->switch_capture_to(config::audio.mic_capture_device);
             session.mic.capture_snap = snap;
             session.mic.capture_switched = true;
+            std::thread([&session]() {
+              std::this_thread::sleep_for(std::chrono::seconds(2));
+              if (session.mic.capture_switched && session.mic.audio_ctrl &&
+                  !config::audio.mic_capture_device.empty()) {
+                session.mic.audio_ctrl->switch_capture_to(
+                  config::audio.mic_capture_device);
+                BOOST_LOG(info) << "[mic] delayed capture re-apply fired"sv;
+              }
+            }).detach();
           }
 
           BOOST_LOG(info) << "[mic] passthrough active → "sv << config::audio.mic_sink;
