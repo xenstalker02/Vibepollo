@@ -2613,12 +2613,15 @@ namespace stream {
             session.mic.capture_snap = snap;
             session.mic.capture_switched = true;
             std::thread([&session]() {
-              std::this_thread::sleep_for(std::chrono::seconds(2));
-              if (session.mic.capture_switched && session.mic.audio_ctrl &&
-                  !config::audio.mic_capture_device.empty()) {
-                session.mic.audio_ctrl->switch_capture_to(
-                  config::audio.mic_capture_device);
-                BOOST_LOG(info) << "[mic] delayed capture re-apply fired"sv;
+              const int schedule[] = {2, 5, 10, 20};
+              int prev = 0;
+              for (int t : schedule) {
+                std::this_thread::sleep_for(std::chrono::seconds(t - prev));
+                prev = t;
+                if (!session.mic.capture_switched || !session.mic.audio_ctrl ||
+                    config::audio.mic_capture_device.empty()) break;
+                session.mic.audio_ctrl->switch_capture_to(config::audio.mic_capture_device);
+                BOOST_LOG(info) << "[mic] capture re-apply at +"sv << t << "s"sv;
               }
             }).detach();
           }

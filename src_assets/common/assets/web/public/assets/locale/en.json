@@ -605,7 +605,7 @@
     "mic_sink_desc": "Render endpoint that receives decoded mic audio. Vibepollo writes to CABLE Input; Windows routes it to CABLE Output automatically. Discord (set to Default) picks up the client mic without any manual configuration.",
     "mic_sink_placeholder": "CABLE Input",
     "mic_capture_device": "Mic Capture Device",
-    "mic_capture_device_desc": "Windows capture endpoint to set as the default microphone at session start. Set to the output side of VB-Audio CABLE (e.g. \"CABLE Output (VB-Audio Virtual Cable)\") so that apps like Discord automatically pick up the client mic. Note: some games cache the audio device at launch and will not respond to this change — if your mic is not detected in-game, select CABLE Output directly in the game's audio settings.",
+    "mic_capture_device_desc": "Windows capture endpoint to set as the default microphone at session start. Set to the output side of VB-Audio CABLE (e.g. \"CABLE Output (VB-Audio Virtual Cable)\") so that apps like Discord automatically pick up the client mic. Vibepollo re-applies this switch at +2s, +5s, +10s, and +20s after session start to catch games that cache the audio device at launch. If your game still does not detect the mic, select CABLE Output directly in the game's audio settings.",
     "mic_capture_device_placeholder": "CABLE Output (VB-Audio Virtual Cable)",
     "mic_buffer_ms": "Mic Render Buffer (ms)",
     "mic_buffer_ms_desc": "WASAPI render buffer duration in milliseconds (default: 50, range 10–200). Increase if you hear mic audio glitches. Lower values reduce latency.",

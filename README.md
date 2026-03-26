@@ -29,6 +29,10 @@ for voice chat, Discord, games, and anything else.
 - **VB-Audio Virtual Cable** — decoded mic audio is written to CABLE Input (render
   endpoint). Windows routes it to CABLE Output automatically. Discord and other apps
   read from CABLE Output via the Windows default capture device — no manual setup needed.
+  VB-Cable was chosen over Steam Streaming Microphone because the Steam audio devices
+  are a bridge pair, not a loopback: they only route audio when Steam's Remote Play
+  service is actively bridging a session. In a Moonlight-based session where Steam has
+  no role in the connection, that bridge never activates and the endpoint produces no audio.
 - **Opus audio** — 96kbps VBR, complexity 10, FEC enabled, 20ms frames. Low latency,
   excellent voice quality, robust to packet loss.
 - **Per-session decoder** — each streaming session gets its own Opus decoder and WASAPI
@@ -118,6 +122,16 @@ Set Discord (and other voice apps) input to **Default** — that's all. At sessi
 Vibepollo switches the Windows default capture device to **CABLE Output (VB-Audio Virtual Cable)**,
 so Discord automatically picks up the client mic. At session end, the default capture restores
 to your AT2040 (or whatever was default before). No manual switching needed.
+
+**Games that don't pick up the device switch automatically:** Some games
+cache the Windows default audio device at launch and ignore changes made
+mid-session. If a game doesn't detect the client mic, go into the game's
+own audio settings and manually select **CABLE Output (VB-Audio Virtual
+Cable)** as the microphone input — this is a one-time per-game setting.
+Vibepollo re-applies the device switch at 2, 5, 10, and 20 seconds after
+session start to catch games that init audio after process launch, but
+games that cache the device before the stream starts may still require
+manual selection.
 
 ---
 

@@ -23,18 +23,67 @@ jobs:
           git fetch classicoldsong master --no-tags 2>/dev/null || true
           UPSTREAM=$(git rev-parse classicoldsong/master 2>/dev/null || echo "unknown")
           echo "CLASSIC_COMMIT=$UPSTREAM" >> $GITHUB_ENV
+      - name: Fetch upstream commit log
+        run: |
+          LOG=$(git log HEAD..nonary/master --oneline --no-merges 2>/dev/null | head -20 || echo "(log unavailable)")
+          echo "NONARY_LOG<<EOF" >> $GITHUB_ENV
+          echo "$LOG" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
       - name: Open issue if behind
         if: env.NONARY_BEHIND != '0'
         uses: actions/github-script@v7
         with:
           script: |
-            const behind = process.env.NONARY_BEHIND;
+            const behind = parseInt(process.env.NONARY_BEHIND);
             const commit = process.env.NONARY_COMMIT;
             const classic = process.env.CLASSIC_COMMIT;
+            const commitLog = process.env.NONARY_LOG || '(log unavailable)';
+
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'upstream-update',
+              per_page: 5
+            });
+            if (issues.data.length > 0) {
+              console.log('Open upstream-update issue already exists — skipping');
+              return;
+            }
+
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `Upstream update available: Nonary/vibepollo (${behind} commits behind)`,
-              body: `## Upstream Commits Available\n\n**Nonary/vibepollo** is ${behind} commit(s) ahead.\nLatest upstream commit: \`${commit}\`\n\n**ClassicOldSong/Apollo** latest: \`${classic}\`\n\n## Review Before Merging\nDo NOT auto-merge. Review each upstream commit manually:\n\`\`\`\ngit fetch nonary\ngit log HEAD..nonary/main --oneline\n\`\`\`\nThen cherry-pick or merge selectively after verifying no conflicts with mic passthrough code.`,
+              title: `Upstream update available: Nonary/vibepollo (${behind} commit${behind > 1 ? 's' : ''} behind)`,
+              body: [
+                '## Upstream Commits Available',
+                '',
+                `**Nonary/vibepollo** is ${behind} commit(s) ahead of our master.`,
+                '',
+                '### New commits (newest first)',
+                '```',
+                commitLog,
+                '```',
+                '',
+                `**ClassicOldSong/Apollo** latest: \`${classic}\``,
+                '',
+                '## How to review',
+                '```bash',
+                'cd C:\\Vibepollo',
+                'git fetch upstream',
+                'git log HEAD..upstream/master --oneline',
+                '```',
+                '',
+                '## Files needing careful review (contain our mic passthrough code)',
+                '- `src/platform/windows/audio.cpp`',
+                '- `src/stream.cpp`',
+                '- `src/config.h` and `src/config.cpp`',
+                '- `src_assets/common/assets/web/configs/tabs/AudioVideo.vue`',
+                '- `src_assets/common/assets/web/public/assets/locale/en.json`',
+                '',
+                'All other files: take Nonary\'s version.',
+                '',
+                'Close this issue after merging or deciding to skip.'
+              ].join('\n'),
               labels: ['upstream-update']
             });
