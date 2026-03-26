@@ -1413,6 +1413,15 @@ namespace stream {
           return;
         }
         mic.frames_written++;
+        if (mic.packets_received % 100 == 0) {
+          std::size_t qsz = mic.pending_packets.size();
+          BOOST_LOG(info) << "[mic] stats: recv="sv << mic.packets_received
+                          << " decoded="sv << mic.frames_written
+                          << " plc="sv << mic.plc_events
+                          << " silence="sv << mic.silence_frames
+                          << " errors="sv << mic.decode_errors
+                          << " queue="sv << qsz;
+        }
       }
     });
 
@@ -2448,6 +2457,11 @@ namespace stream {
       session.mic.speaker.reset();
       session.mic.decoder.reset();
       session.mic.audio_ctrl.reset();
+      BOOST_LOG(info) << "[mic] session end: recv="sv << session.mic.packets_received
+                      << " decoded="sv << session.mic.frames_written
+                      << " plc="sv << session.mic.plc_events
+                      << " silence="sv << session.mic.silence_frames
+                      << " errors="sv << session.mic.decode_errors;
 
       if (!session.undo_cmds.empty()) {
         auto exec_thread = std::thread([cmd_list = session.undo_cmds] {

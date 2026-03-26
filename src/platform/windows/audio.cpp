@@ -794,6 +794,17 @@ namespace platf::audio {
         return -1;
       }
 
+      BOOST_LOG(info) << "[mic] WASAPI init ok: device="sv << to_utf8(device_id)
+                      << " format="sv << use_fmt->nChannels << "ch/"sv
+                      << use_fmt->nSamplesPerSec << "Hz/"sv
+                      << use_fmt->wBitsPerSample << "bit/"sv
+                      << (use_fmt->wFormatTag == WAVE_FORMAT_IEEE_FLOAT ||
+                          (use_fmt->wFormatTag == WAVE_FORMAT_EXTENSIBLE &&
+                           reinterpret_cast<const WAVEFORMATEXTENSIBLE*>(use_fmt)->SubFormat ==
+                           KSDATAFORMAT_SUBTYPE_IEEE_FLOAT)
+                         ? "float32"sv : "pcm"sv)
+                      << " buf="sv << buffer_frames << " frames"sv;
+
       stop_flag = false;
       render_thread = std::thread(&speaker_wasapi_t::render_loop, this);
       BOOST_LOG(info) << "[mic] speaker_wasapi_t ready"sv;
@@ -814,6 +825,7 @@ namespace platf::audio {
     void render_loop() {
       CoInitializeEx(nullptr, COINIT_MULTITHREADED | COINIT_SPEED_OVER_MEMORY);
       bool playout_started = false;
+      std::uint32_t render_cycles = 0;
       while (!stop_flag) {
         WaitForSingleObject(render_event, 20);
         if (stop_flag) break;
@@ -824,10 +836,24 @@ namespace platf::audio {
           playout_started = true;
           BOOST_LOG(info) << "[mic] Playout started (prebuffer: "sv << qsz << " frames)"sv;
         }
+        render_cycles++;
         UINT32 padding = 0;
-        if (FAILED(audio_client->GetCurrentPadding(&padding))) {
+        HRESULT pad_hr = audio_client->GetCurrentPadding(&padding);
+        if (FAILED(pad_hr)) {
+          BOOST_LOG(error) << "[mic] GetCurrentPadding failed 0x"sv
+                           << util::hex(pad_hr).to_string_view()
+                           << " -- render dead"sv;
           render_dead.store(true, std::memory_order_release);
           break;
+        }
+        if (render_cycles % 300 == 0) {
+          std::size_t qsz;
+          { std::lock_guard<std::mutex> lk(queue_mutex); qsz = pending_frames.size(); }
+          BOOST_LOG(debug) << "[mic] render stats: cycles="sv << render_cycles
+                           << " queue="sv << qsz
+                           << " buf="sv << buffer_frames
+                           << " padding="sv << padding
+                           << " dead="sv << render_dead.load(std::memory_order_relaxed);
         }
         auto avail = buffer_frames - padding;
         if (avail == 0) continue;
