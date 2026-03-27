@@ -578,6 +578,25 @@ namespace platf {
 
     virtual std::optional<sink_t> sink_info() = 0;
 
+    /**
+     * @brief Initialize the Steam Streaming Microphone redirect backend.
+     * @return 0 on success, -1 if unavailable (Steam not running or driver absent).
+     */
+    virtual int init_mic_redirect_device() { return -1; }
+
+    /**
+     * @brief Release the Steam Streaming Microphone redirect backend.
+     */
+    virtual void release_mic_redirect_device() {}
+
+    /**
+     * @brief Write pre-decoded mono float PCM to the active mic redirect backend.
+     * @param samples Pointer to mono float32 samples.
+     * @param count   Number of frames.
+     * @return 0 on success, -1 on unrecoverable render error.
+     */
+    virtual int write_mic_pcm(const float * /*samples*/, std::uint32_t /*count*/) { return -1; }
+
     virtual ~audio_control_t() = default;
   };
 

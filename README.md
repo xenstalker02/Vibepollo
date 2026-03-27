@@ -26,16 +26,13 @@ for voice chat, Discord, games, and anything else.
 
 - **Encrypted mic passthrough** — mic audio rides the AES-GCM encrypted control stream
   (SS_ENC_CONTROL_V2). Plaintext mic is refused. No unencrypted audio on the network.
-- **VB-Audio Virtual Cable** — decoded mic audio is written to CABLE Input (render
-  endpoint). Windows routes it to CABLE Output automatically. Discord and other apps
+- **VB-Audio Virtual Cable** — decoded mic audio is written to Steam Streaming
+  Microphone (render endpoint) when Steam is running on the host — Vibepollo
+  normalizes the endpoint format to 2ch/32-bit/48kHz before WASAPI initialization.
+  If Steam Streaming Microphone is unavailable, Vibepollo falls back to writing to
+  CABLE Input (VB-Audio Virtual Cable), which handles format conversion automatically.
+  Windows routes CABLE Input to CABLE Output automatically. Discord and other apps
   read from CABLE Output via the Windows default capture device — no manual setup needed.
-  VB-Cable was chosen as the current backend because it handles audio format
-  conversion automatically — it accepts audio at any sample rate or bit depth
-  and resamples internally. Steam Streaming Microphone is also a pure software
-  loopback but requires the endpoint to be explicitly forced to 2ch/32-bit/48kHz
-  before WASAPI initialization since it does not auto-resample. Without that
-  normalization step, format mismatches produce garbled audio. Steam mic support
-  may be added as a configurable alternative backend in a future update.
 - **Opus audio** — 96kbps VBR, complexity 10, FEC enabled, 20ms frames. Low latency,
   excellent voice quality, robust to packet loss.
 - **Per-session decoder** — each streaming session gets its own Opus decoder and WASAPI
