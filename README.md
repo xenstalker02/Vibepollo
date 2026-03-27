@@ -29,10 +29,13 @@ for voice chat, Discord, games, and anything else.
 - **VB-Audio Virtual Cable** — decoded mic audio is written to CABLE Input (render
   endpoint). Windows routes it to CABLE Output automatically. Discord and other apps
   read from CABLE Output via the Windows default capture device — no manual setup needed.
-  VB-Cable was chosen over Steam Streaming Microphone because the Steam audio devices
-  are a bridge pair, not a loopback: they only route audio when Steam's Remote Play
-  service is actively bridging a session. In a Moonlight-based session where Steam has
-  no role in the connection, that bridge never activates and the endpoint produces no audio.
+  VB-Cable was chosen as the current backend because it handles audio format
+  conversion automatically — it accepts audio at any sample rate or bit depth
+  and resamples internally. Steam Streaming Microphone is also a pure software
+  loopback but requires the endpoint to be explicitly forced to 2ch/32-bit/48kHz
+  before WASAPI initialization since it does not auto-resample. Without that
+  normalization step, format mismatches produce garbled audio. Steam mic support
+  may be added as a configurable alternative backend in a future update.
 - **Opus audio** — 96kbps VBR, complexity 10, FEC enabled, 20ms frames. Low latency,
   excellent voice quality, robust to packet loss.
 - **Per-session decoder** — each streaming session gets its own Opus decoder and WASAPI
@@ -133,6 +136,13 @@ session start to catch games that init audio after process launch, but
 games that cache the device before the stream starts may still require
 manual selection.
 
+**Headphones required for echo-free mic passthrough:** The Deck's
+built-in microphone is physically close to its speakers. If you
+stream game audio to the Deck's speakers while mic passthrough is
+active, the mic will pick up the speaker output and create an echo
+loop. Use headphones or a headset on the Deck during any session
+where mic passthrough is enabled.
+
 ---
 
 ## Security
@@ -140,6 +150,20 @@ manual selection.
 Mic packets are encrypted as part of the AES-GCM encrypted Moonlight control stream
 (`SS_ENC_CONTROL_V2`). Vibepollo **refuses to render mic audio** from clients that did not
 negotiate an encrypted control stream. Plaintext mic passthrough is never permitted.
+
+---
+
+## Known Limitations
+
+**"Streaming paused" tray icon for multi-stage launchers:** Some
+games launch via a wrapper or launcher process that exits within a
+few seconds of starting the real game. Vibepollo detects the
+launcher process exiting and switches the tray icon to "Streaming
+paused for [App]" even though the stream is still active. This is
+a cosmetic issue — the stream continues normally. It affects games
+launched through Playnite or other multi-stage launchers.
+
+**Echo with Deck speakers:** See Windows Application Setup above.
 
 ---
 

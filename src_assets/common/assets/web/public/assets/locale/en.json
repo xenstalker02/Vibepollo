@@ -602,7 +602,7 @@
     "mic_section_title": "Mic Passthrough",
     "mic_section_desc": "Streams your microphone from the Deck to your PC via VB-Audio Virtual Cable. VB-Cable is installed automatically — no manual setup required.",
     "mic_sink": "Mic Passthrough Sink",
-    "mic_sink_desc": "Render endpoint that receives decoded mic audio. Vibepollo writes to CABLE Input; Windows routes it to CABLE Output automatically. Discord (set to Default) picks up the client mic without any manual configuration.",
+    "mic_sink_desc": "Render endpoint that receives decoded mic audio. Default: CABLE Input (VB-Audio Virtual Cable). Advanced: set to Speakers (Steam Streaming Microphone) if you prefer the Steam audio driver — Vibepollo will automatically normalize the Steam endpoint format before use. Discord (set to Default) picks up the client mic without any manual configuration.",
     "mic_sink_placeholder": "CABLE Input",
     "mic_capture_device": "Mic Capture Device",
     "mic_capture_device_desc": "Windows capture endpoint to set as the default microphone at session start. Set to the output side of VB-Audio CABLE (e.g. \"CABLE Output (VB-Audio Virtual Cable)\") so that apps like Discord automatically pick up the client mic. Vibepollo re-applies this switch at +2s, +5s, +10s, and +20s after session start to catch games that cache the audio device at launch. If your game still does not detect the mic, select CABLE Output directly in the game's audio settings.",

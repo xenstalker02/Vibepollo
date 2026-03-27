@@ -702,6 +702,77 @@ namespace platf::audio {
     }
 
     int init(const std::wstring &device_id, std::uint32_t /*sample_rate*/) {
+      // If this is a Steam Streaming Microphone endpoint, force it to
+      // float32/2ch/48kHz via IPolicyConfig before WASAPI init.
+      // Steam mic does not auto-resample — format must match exactly.
+      // VB-Cable handles resampling implicitly so this is a no-op for it.
+      {
+        using policy_t = util::safe_ptr<IPolicyConfig, Release<IPolicyConfig>>;
+        policy_t policy;
+        if (SUCCEEDED(CoCreateInstance(CLSID_CPolicyConfigClient, nullptr,
+            CLSCTX_ALL, IID_IPolicyConfig, (void **)&policy)) && policy) {
+          // Get the friendly name of this device to check if it's Steam mic
+          device_enum_t check_enum;
+          if (SUCCEEDED(CoCreateInstance(CLSID_MMDeviceEnumerator, nullptr,
+              CLSCTX_ALL, IID_IMMDeviceEnumerator, (void **)&check_enum)) && check_enum) {
+            device_t check_dev;
+            if (SUCCEEDED(check_enum->GetDevice(device_id.c_str(), &check_dev)) && check_dev) {
+              prop_t prop;
+              if (SUCCEEDED(check_dev->OpenPropertyStore(STGM_READ, &prop)) && prop) {
+                prop_var_t pv;
+                if (SUCCEEDED(prop->GetValue(PKEY_Device_FriendlyName, &pv.prop)) &&
+                    pv.prop.vt == VT_LPWSTR && pv.prop.pwszVal) {
+                  std::wstring name(pv.prop.pwszVal);
+                  bool is_steam_mic = name.find(L"Steam Streaming") != std::wstring::npos;
+                  if (is_steam_mic) {
+                    // Force float32/2ch/48kHz on both render and capture endpoints
+                    WAVEFORMATEXTENSIBLE wfx {};
+                    wfx.Format.wFormatTag      = WAVE_FORMAT_EXTENSIBLE;
+                    wfx.Format.nChannels       = 2;
+                    wfx.Format.nSamplesPerSec  = 48000;
+                    wfx.Format.wBitsPerSample  = 32;
+                    wfx.Format.nBlockAlign     = 8;
+                    wfx.Format.nAvgBytesPerSec = 48000 * 8;
+                    wfx.Format.cbSize          = sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX);
+                    wfx.Samples.wValidBitsPerSample = 32;
+                    wfx.dwChannelMask          = SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT;
+                    wfx.SubFormat              = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
+                    auto hr = policy->SetDeviceFormat(device_id.c_str(),
+                        reinterpret_cast<WAVEFORMATEX *>(&wfx), nullptr);
+                    BOOST_LOG(info) << "[mic] Steam mic SetDeviceFormat render: 0x"sv
+                                    << util::hex(hr).to_string_view();
+                    // Also normalize the paired capture endpoint
+                    collection_t captures;
+                    if (SUCCEEDED(check_enum->EnumAudioEndpoints(eCapture,
+                        DEVICE_STATE_ACTIVE, &captures)) && captures) {
+                      UINT count = 0;
+                      captures->GetCount(&count);
+                      for (UINT i = 0; i < count; ++i) {
+                        device_t cap_dev;
+                        if (FAILED(captures->Item(i, &cap_dev)) || !cap_dev) continue;
+                        wstring_t cap_id;
+                        if (FAILED(cap_dev->GetId(&cap_id)) || !cap_id) continue;
+                        prop_t cap_prop;
+                        if (FAILED(cap_dev->OpenPropertyStore(STGM_READ, &cap_prop))) continue;
+                        prop_var_t cap_pv;
+                        if (FAILED(cap_prop->GetValue(PKEY_Device_FriendlyName, &cap_pv.prop))) continue;
+                        if (cap_pv.prop.vt != VT_LPWSTR || !cap_pv.prop.pwszVal) continue;
+                        std::wstring cap_name(cap_pv.prop.pwszVal);
+                        if (cap_name.find(L"Steam Streaming") != std::wstring::npos) {
+                          auto cap_hr = policy->SetDeviceFormat(cap_id.get(),
+                              reinterpret_cast<WAVEFORMATEX *>(&wfx), nullptr);
+                          BOOST_LOG(info) << "[mic] Steam mic SetDeviceFormat capture: 0x"sv
+                                          << util::hex(cap_hr).to_string_view();
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
       // Activate IAudioClient
       device_enum_t dev_enum;
       auto status = CoCreateInstance(CLSID_MMDeviceEnumerator, nullptr,
