@@ -1280,7 +1280,7 @@ namespace stream {
     server->map(packetTypes[IDX_MIC_AUDIO_DATA], [](session_t *session, const std::string_view &payload) {
       BOOST_LOG(verbose) << "type [IDX_MIC_AUDIO_DATA]"sv;
 
-      if (!session->mic.speaker || !session->mic.decoder) return;
+      if ((!session->mic.speaker && !session->mic.audio_ctrl) || !session->mic.decoder) return;
 
       // Require encrypted control stream
       if (!(session->config.encryptionFlagsEnabled & SS_ENC_CONTROL_V2)) {
