@@ -610,7 +610,7 @@
     "mic_buffer_ms": "Mic Render Buffer (ms)",
     "mic_buffer_ms_desc": "WASAPI render buffer duration in milliseconds (default: 50, range 10–200). Increase if you hear mic audio glitches. Lower values reduce latency.",
     "mic_buffer_packets": "Mic Jitter Buffer Depth",
-    "mic_buffer_packets_desc": "Number of Opus packets to prebuffer before mic playback starts (default: 1). Increase to 2-3 if mic audio breaks up on unstable Wi-Fi. Lower = less latency, higher = more stability.",
+    "mic_buffer_packets_desc": "Number of Opus packets to prebuffer before mic playback starts (default: 2 = 40ms). Increase to 3-4 on unstable Wi-Fi. Lower = less latency before first word, higher = smoother delivery.",
     "install_vbcable": "Auto-install VB-Audio CABLE",
     "install_vbcable_desc": "Automatically download and install VB-Audio Virtual Cable. Required for mic passthrough — CABLE Input is the render target and CABLE Output is the capture device switched to at session start."
   },
