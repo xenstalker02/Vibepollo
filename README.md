@@ -42,8 +42,6 @@ for voice chat, Discord, games, and anything else.
   render client. Multiple concurrent sessions do not corrupt each other's audio.
 - **Session stats and diagnostics** — logs packet count, PLC events, decode errors,
   audio level, and latency every 30 seconds during active mic sessions.
-- **Moonwake integration** — pairs with the wake-on-LAN system in Vibelight for
-  one-tap sleep-and-stream from the Steam Deck with HOME/AWAY path detection.
 - **All Apollo/Nonary features** — virtual display, HDR, Playnite integration, and
   everything else from the upstream forks.
 
@@ -196,15 +194,7 @@ Steam Deck mic
 
 ---
 
-## Moonwake (One-Tap Stream)
-
-Vibepollo pairs with the Moonwake system built into Vibelight:
-- **HOME path**: detects LAN, connects directly at full speed (150Mbps+, HDR)
-- **AWAY path**: detects remote network, wakes PC via Raspberry Pi WOL, connects via Tailscale
-- One tap in Steam Game Mode — the PC wakes up and streaming starts automatically
-
----
-
+---\r\n
 ## Related Projects
 
 | Project | Description |
