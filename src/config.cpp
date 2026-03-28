@@ -803,7 +803,7 @@ namespace config {
     "CABLE Input",  // mic_sink
     "CABLE Output (VB-Audio Virtual Cable)",  // mic_capture_device
     50,  // mic_buffer_ms
-    1,   // mic_buffer_packets (default 1; higher values add latency before first utterance)
+    2,   // mic_buffer_packets (default 2 = 40ms prebuffer; smooths packet delivery jitter)
     true,  // stream audio
     true,  // install_vbcable
     true,  // keep_sink_default
