@@ -189,7 +189,7 @@ namespace proc {
     bp::environment get_env();
     void resume();
     void pause();
-    void terminate(bool immediate = false, bool needs_refresh = true);
+    void terminate(bool immediate = false, bool needs_refresh = true, bool skip_display_revert = false);
     bool last_run_app_frame_gen_limiter_fix() const;
     /**
      * @brief Returns true when the running app is a status-driven placebo (Desktop / auto-detached
