@@ -26,15 +26,18 @@ for voice chat, Discord, games, and anything else.
 
 - **Encrypted mic passthrough** — mic audio rides the AES-GCM encrypted control stream
   (SS_ENC_CONTROL_V2). Plaintext mic is refused. No unencrypted audio on the network.
-- **VB-Audio Virtual Cable** — decoded mic audio is written to Steam Streaming
-  Microphone (render endpoint) when Steam is running on the host — Vibepollo
-  normalizes the endpoint format to 2ch/32-bit/48kHz before WASAPI initialization.
-  If Steam Streaming Microphone is unavailable, Vibepollo falls back to writing to
-  CABLE Input (VB-Audio Virtual Cable), which handles format conversion automatically.
-  Windows routes CABLE Input to CABLE Output automatically. Discord and other apps
-  read from CABLE Output via the Windows default capture device — no manual setup needed.
-- **Opus audio** — 96kbps VBR, complexity 10, FEC enabled, 20ms frames. Low latency,
-  excellent voice quality, robust to packet loss.
+- **Steam Streaming Microphone (primary)** — decoded mic audio is written directly
+  to the Steam Streaming Microphone render endpoint. No third-party driver required —
+  uses the Steam audio driver already installed with Steam. Vibepollo normalizes the
+  endpoint format to 2ch/32-bit/48kHz before WASAPI initialization.
+- **VB-Audio Virtual Cable (automatic fallback)** — if Steam is not running or the
+  Steam Streaming Microphone endpoint is unavailable, Vibepollo automatically falls
+  back to writing to CABLE Input (VB-Audio Virtual Cable), which handles format
+  conversion automatically. Windows routes CABLE Input to CABLE Output automatically.
+  Discord and other apps read from the Windows default capture device — no manual
+  setup needed.
+- **Opus audio** — 64kbps mono, FEC enabled, 20ms frames. Low latency, excellent
+  voice quality, robust to packet loss.
 - **Per-session decoder** — each streaming session gets its own Opus decoder and WASAPI
   render client. Multiple concurrent sessions do not corrupt each other's audio.
 - **Session stats and diagnostics** — logs packet count, PLC events, decode errors,
@@ -110,18 +113,19 @@ Key mic passthrough options:
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `mic_sink` | `CABLE Input` | Render endpoint for mic passthrough. Vibepollo writes decoded Opus audio here; Windows routes it to CABLE Output automatically. |
-| `mic_capture_device` | `CABLE Output (VB-Audio Virtual Cable)` | Capture device Vibepollo switches Windows default input to at session start, so Discord (on Default) picks up the client mic. Restored to previous default on session end. |
-| `mic_buffer_ms` | `50` | WASAPI render buffer size in ms (10-200). 50ms recommended for stability. |
+| `mic_sink` | `Speakers (Steam Streaming Microphone)` | Render endpoint for mic passthrough. Vibepollo writes decoded Opus audio here. Falls back to `CABLE Input` automatically if unavailable. |
+| `mic_capture_device` | `Microphone (Steam Streaming Microphone)` | Capture device Vibepollo switches Windows default input to at session start, so Discord (on Default) picks up the client mic. Restored to previous default on session end. |
+| `mic_buffer_packets` | `2` | Jitter buffer prebuffer depth in Opus packets (1 packet = 20ms). Default 2 = 40ms prebuffer. Range 1–16. Increase if audio drops; decrease if latency is too high. |
 
 The web UI at `https://localhost:47990` provides a graphical interface for most settings.
 
 ### Windows Application Setup
 
 Set Discord (and other voice apps) input to **Default** — that's all. At session start,
-Vibepollo switches the Windows default capture device to **CABLE Output (VB-Audio Virtual Cable)**,
-so Discord automatically picks up the client mic. At session end, the default capture restores
-to your AT2040 (or whatever was default before). No manual switching needed.
+Vibepollo switches the Windows default capture device to **Microphone (Steam Streaming
+Microphone)** (or **CABLE Output** when falling back to VB-Cable), so Discord automatically
+picks up the client mic. At session end, the default capture restores to your previous
+default (AT2040 or whatever was set before). No manual switching needed.
 
 **Games that don't pick up the device switch automatically:** Some games
 cache the Windows default audio device at launch and ignore changes made
@@ -160,7 +164,11 @@ paused for [App]" even though the stream is still active. This is
 a cosmetic issue — the stream continues normally. It affects games
 launched through Playnite or other multi-stage launchers.
 
-**Echo with Deck speakers:** See Windows Application Setup above.
+**Headphones required on Deck for echo-free operation:** The Deck's
+built-in microphone is physically close to its speakers. Game audio
+playing through the Deck's speakers will be re-captured by the
+microphone and echoed back to the host. Use headphones or a headset
+on the Deck during any session where mic passthrough is enabled.
 
 ---
 
@@ -168,15 +176,20 @@ launched through Playnite or other multi-stage launchers.
 
 ```
 Steam Deck mic
-→ SDL2 capture (48kHz, 16-bit, mono)
-→ Opus encode (96kbps, VBR, FEC, 20ms frames)
-→ Deadline-based pacer (exactly 20ms intervals with re-sync guard)
+→ SDL2 capture (48kHz, 16-bit, stereo or mono)
+→ (L+R)/2 downmix to mono
+→ Opus encode (64kbps mono, FEC, 20ms frames)
+→ 4-byte header prepended (channel/flags)
 → AES-GCM encrypted control stream (SS_ENC_CONTROL_V2)
 → Vibepollo receives 0x3003 packets
+→ Jitter buffer (40ms prebuffer, 2 packets default)
 → Opus decode with PLC on packet loss
-→ WASAPI render → CABLE Input (VB-Audio Virtual Cable render endpoint)
-→ Windows routes CABLE Input → CABLE Output automatically
-→ Vibepollo switches Windows default capture to CABLE Output
+→ WASAPI render:
+     PRIMARY  → Steam Streaming Microphone render endpoint
+     FALLBACK → CABLE Input (VB-Audio Virtual Cable), if Steam mic unavailable
+→ Vibepollo switches Windows default capture to:
+     PRIMARY  → Microphone (Steam Streaming Microphone)
+     FALLBACK → CABLE Output (VB-Audio Virtual Cable)
 → Discord (set to Default) picks up client mic automatically
 → Session end: default capture restores to previous default device
 ```

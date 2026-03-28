@@ -2,6 +2,42 @@
 
 ## [Unreleased]
 
+### Added (2026-03-28)
+- **Steam Streaming Microphone as primary mic backend** (`mic_write_wasapi_t` +
+  `apollo_vmic_t`) — writes decoded Opus audio directly to the Steam audio driver
+  render endpoint. No third-party driver required. Endpoint format normalized to
+  2ch/32-bit/48kHz via IPolicyConfig before WASAPI initialization.
+- **VB-Audio Virtual Cable as automatic fallback** — if Steam Streaming Microphone
+  is unavailable (Steam not running or endpoint absent), Vibepollo automatically
+  falls back to CABLE Input without any configuration change.
+- **Abstract mic redirect backend** (`mic_redirect_backend_t`) — clean interface
+  allowing future backends without touching stream.cpp or audio.cpp call sites.
+- `init_mic_redirect_device()`, `release_mic_redirect_device()`, `write_mic_pcm()`
+  virtual methods added to `audio_control_t` for backend-agnostic session routing.
+
+### Fixed (2026-03-28)
+- **Root cause of Steam Streaming Microphone failures**: `SetDeviceFormat` (IPolicyConfig)
+  requires `KSDATAFORMAT_SUBTYPE_PCM` for the device format. Previous attempts used
+  `KSDATAFORMAT_SUBTYPE_IEEE_FLOAT`, causing WASAPI `Initialize()` to fail with
+  `0x88890008`. WASAPI `Initialize()` itself still uses float32 — these are separate
+  calls with different format requirements.
+- **Stream.cpp null-speaker guard** — `if (!session->mic.speaker || ...)` was
+  short-circuiting the Steam mic path (which intentionally leaves `speaker` null
+  when `audio_ctrl` is set). Fixed to `if ((!speaker && !audio_ctrl) || ...)`.
+
+### Changed (2026-03-28)
+- `mic_buffer_packets` default raised from 3 to 2 (40ms prebuffer) — confirmed
+  stable at 40ms with friend test 2026-03-28 evening.
+- Default `mic_sink` changed from `CABLE Input` to `Speakers (Steam Streaming Microphone)`.
+- Default `mic_capture_device` changed from `CABLE Output (VB-Audio Virtual Cable)`
+  to `Microphone (Steam Streaming Microphone)`.
+- Opus bitrate on the client (Vibelight) changed from 96kbps to 64kbps mono;
+  (L+R)/2 stereo downmix applied before encode.
+- `mic_buffer_ms` config option superseded by `mic_buffer_packets` for
+  packet-count-based prebuffer tuning.
+
+
+
 ### Added
 - Mic passthrough via 0x3003 control stream packets — streams client
   microphone audio to host PC in real time via VB-Audio Virtual Cable at 96kbps VBR
