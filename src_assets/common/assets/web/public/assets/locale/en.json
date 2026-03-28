@@ -1196,5 +1196,6 @@
     },
     "noticeTitle": "RTSS recommended",
     "noticeCopy": "RTSS offers the most stable frame pacing. Vibepollo will use it automatically when available; NVIDIA's limiter is not recommended because it cannot guarantee perfect frame pacing."
-  }
+  },
+  "mic_section_desc": "Streams your microphone from the Deck to your PC via Steam Streaming Microphone. VB-Audio Virtual Cable is used as an automatic fallback if Steam is unavailable."
 }
