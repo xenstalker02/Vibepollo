@@ -150,6 +150,8 @@ if (-not $UninstallOnly) {
 
 $sourceFile = Resolve-PathStrict (Join-Path $scriptDir "VibeshineInstaller.cs")
 $manifestFile = Resolve-PathStrict (Join-Path $scriptDir "app.manifest")
+# Keep the branded product icon on the bootstrapper; the installer now uses
+# explicit process/window shell metadata to stay distinct from the installed app.
 $iconPath = Resolve-PathStrict (Join-Path $repoRoot "apollo.ico")
 $licensePath = Resolve-PathStrict (Join-Path $repoRoot "LICENSE")
 $cscPath = Resolve-CscPath
@@ -208,7 +210,8 @@ if ($UninstallOnly) {
 $assemblyInfoContent = @(
     "using System.Reflection;",
     "[assembly: AssemblyTitle(""$assemblyTitle"")]",
-    "[assembly: AssemblyProduct(""Vibepollo"")]",
+    "[assembly: AssemblyDescription(""$assemblyTitle"")]",
+    "[assembly: AssemblyProduct(""$assemblyTitle"")]",
     "[assembly: AssemblyCompany(""Nonary"")]",
     "[assembly: AssemblyVersion(""$assemblyVersion"")]",
     "[assembly: AssemblyFileVersion(""$assemblyVersion"")]",

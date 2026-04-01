@@ -82,6 +82,8 @@ namespace VDISPLAY {
     std::atomic<bool> g_watchdog_feed_requested {false};
     std::atomic<bool> g_watchdog_stop_requested {false};
     std::atomic<std::int64_t> g_watchdog_grace_deadline_ns {0};
+    std::mutex g_watchdog_thread_mutex;
+    std::thread g_watchdog_thread;
     std::atomic<std::int64_t> g_last_teardown_ns {0};
     std::atomic<std::int64_t> g_last_restart_failure_ns {0};
     std::atomic<bool> g_reinstall_attempted {false};
@@ -130,6 +132,35 @@ namespace VDISPLAY {
         return false;
       }
       return now < time_from_steady_ticks(deadline_ticks);
+    }
+
+    void stop_watchdog_thread(bool wait_for_exit) {
+      g_watchdog_stop_requested.store(true, std::memory_order_release);
+
+      std::thread watchdog_thread;
+      {
+        std::lock_guard<std::mutex> lock(g_watchdog_thread_mutex);
+        if (!g_watchdog_thread.joinable()) {
+          return;
+        }
+        watchdog_thread = std::move(g_watchdog_thread);
+      }
+
+      if (!watchdog_thread.joinable()) {
+        return;
+      }
+
+      if (watchdog_thread.get_id() == std::this_thread::get_id()) {
+        // Failure callbacks can tear down the driver from within the watchdog itself.
+        watchdog_thread.detach();
+        return;
+      }
+
+      if (wait_for_exit) {
+        watchdog_thread.join();
+      } else {
+        watchdog_thread.detach();
+      }
     }
 
     bool should_skip_restart_attempt(std::chrono::steady_clock::time_point now, std::chrono::milliseconds &cooldown_remaining) {
@@ -2019,7 +2050,6 @@ namespace VDISPLAY {
     constexpr auto RECOVERY_POST_SUCCESS_GRACE = std::chrono::seconds(3);
     constexpr auto RECOVERY_MAX_ATTEMPTS_BACKOFF = std::chrono::seconds(5);
     constexpr auto RECOVERY_MAX_BACKOFF = std::chrono::seconds(60);
-    constexpr unsigned int MAX_NEVER_ACTIVE_BACKOFF_CYCLES = 5;
     constexpr auto DRIVER_RECOVERY_WARMUP_DELAY = std::chrono::milliseconds(500);
 
     std::mutex g_virtual_display_recovery_abort_mutex;
@@ -2061,6 +2091,7 @@ namespace VDISPLAY {
     struct RecoveryMonitorState {
       VirtualDisplayRecoveryParams params;
       uuid_util::uuid_t guid_uuid;
+      bool confirmed_active_at_schedule = false;
       std::optional<std::wstring> current_display_name;
       std::optional<std::string> normalized_display_name;
       std::optional<std::string> current_device_id;
@@ -2133,6 +2164,20 @@ namespace VDISPLAY {
       present_active,
       unknown,
     };
+
+    const char *monitor_target_presence_name(const MonitorTargetPresence presence) {
+      switch (presence) {
+        case MonitorTargetPresence::missing:
+          return "missing";
+        case MonitorTargetPresence::present_inactive:
+          return "inactive";
+        case MonitorTargetPresence::present_active:
+          return "active";
+        case MonitorTargetPresence::unknown:
+          return "unknown";
+      }
+      return "unknown";
+    }
 
     MonitorTargetPresence monitor_target_presence(RecoveryMonitorState &state) {
       auto devices = platf::display_helper::Coordinator::instance().enumerate_devices(display_device::DeviceEnumerationDetail::Minimal);
@@ -2248,9 +2293,10 @@ namespace VDISPLAY {
     void run_virtual_display_recovery_monitor(RecoveryMonitorState state) {
       unsigned int attempts = 0;
       unsigned int backoff_cycles = 0;
-      bool observed_active = false;
-      bool ever_observed_active = false;
-      std::optional<std::chrono::steady_clock::time_point> active_since;
+      constexpr unsigned int MAX_RECOVERY_BACKOFF_CYCLES = 5;
+      bool observed_active = state.confirmed_active_at_schedule;
+      std::optional<std::chrono::steady_clock::time_point> active_since =
+        state.confirmed_active_at_schedule ? std::make_optional(std::chrono::steady_clock::now()) : std::nullopt;
       std::optional<std::chrono::steady_clock::time_point> inactive_since;
       std::optional<std::chrono::steady_clock::time_point> missing_since;
       auto recovery_cooldown_until = std::chrono::steady_clock::now();
@@ -2271,7 +2317,6 @@ namespace VDISPLAY {
 
         if (presence == MonitorTargetPresence::present_active) {
           observed_active = true;
-          ever_observed_active = true;
           backoff_cycles = 0;
           missing_since.reset();
           inactive_since.reset();
@@ -2326,6 +2371,12 @@ namespace VDISPLAY {
         }
 
         if (attempts >= state.params.max_attempts) {
+          if (backoff_cycles >= MAX_RECOVERY_BACKOFF_CYCLES) {
+            BOOST_LOG(warning) << "Virtual display recovery monitor exhausted retry backoffs for "
+                               << state.describe_target() << "; disabling automatic recovery.";
+            return;
+          }
+
           const auto base_backoff = RECOVERY_MAX_ATTEMPTS_BACKOFF;
           const auto multiplier = std::min<unsigned int>(backoff_cycles, 4U);
           auto backoff = base_backoff * (1U << multiplier);
@@ -2333,14 +2384,6 @@ namespace VDISPLAY {
             backoff = RECOVERY_MAX_BACKOFF;
           }
           backoff_cycles += 1;
-
-          if (!ever_observed_active && backoff_cycles >= MAX_NEVER_ACTIVE_BACKOFF_CYCLES) {
-            BOOST_LOG(warning) << "Virtual display recovery monitor permanently stopped for "
-                               << state.describe_target() << ": display was never observed as active after "
-                               << backoff_cycles << " backoff cycles (" << (backoff_cycles * state.params.max_attempts)
-                               << " total recovery attempts).";
-            return;
-          }
 
           const auto backoff_ms = std::chrono::duration_cast<std::chrono::milliseconds>(backoff).count();
           BOOST_LOG(warning) << "Virtual display recovery monitor reached max attempts for "
@@ -2473,6 +2516,21 @@ namespace VDISPLAY {
       return;
     }
 
+    RecoveryMonitorState initial_state(params);
+    if (monitor_should_abort(initial_state)) {
+      BOOST_LOG(debug) << "Virtual display recovery monitor skipped for " << initial_state.describe_target()
+                       << ": already aborted before scheduling.";
+      return;
+    }
+
+    const auto initial_presence = monitor_target_presence(initial_state);
+    if (initial_presence != MonitorTargetPresence::present_active) {
+      BOOST_LOG(info) << "Virtual display recovery monitor not armed for " << initial_state.describe_target()
+                      << ": display was not confirmed active at schedule time (presence="
+                      << monitor_target_presence_name(initial_presence) << ").";
+      return;
+    }
+
     const auto abort_flag = reset_recovery_monitor_abort_flag(guid_uuid);
     VirtualDisplayRecoveryParams wrapped = params;
     const auto external_abort = params.should_abort;
@@ -2484,6 +2542,7 @@ namespace VDISPLAY {
     };
 
     RecoveryMonitorState state(wrapped);
+    state.confirmed_active_at_schedule = true;
     BOOST_LOG(debug) << "Virtual display recovery monitor scheduled for " << state.describe_target()
                      << " (max_attempts=" << params.max_attempts << ").";
     std::thread monitor_thread([state = std::move(state)]() mutable {
@@ -2499,6 +2558,7 @@ namespace VDISPLAY {
 
   void closeVDisplayDevice() {
     g_watchdog_stop_requested.store(true, std::memory_order_release);
+    stop_watchdog_thread(true);
     if (SUDOVDA_DRIVER_HANDLE == INVALID_HANDLE_VALUE) {
       setWatchdogFeedingEnabled(false);
       return;
@@ -2685,6 +2745,8 @@ namespace VDISPLAY {
   }
 
   bool startPingThread(std::function<void()> failCb) {
+    stop_watchdog_thread(true);
+
     if (SUDOVDA_DRIVER_HANDLE == INVALID_HANDLE_VALUE) {
       return false;
     }
@@ -2753,8 +2815,10 @@ namespace VDISPLAY {
         if (!PingDriver(ping_handle)) {
           fail_count += 1;
           if (fail_count > 3) {
-            failCb();
             close_ping_handle();
+            if (failCb) {
+              failCb();
+            }
             return;
           }
         } else {
@@ -2765,7 +2829,10 @@ namespace VDISPLAY {
       }
     });
 
-    ping_thread.detach();
+    {
+      std::lock_guard<std::mutex> lock(g_watchdog_thread_mutex);
+      g_watchdog_thread = std::move(ping_thread);
+    }
 
     return true;
   }
