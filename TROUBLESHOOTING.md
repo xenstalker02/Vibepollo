@@ -1,30 +1,38 @@
 # Vibepollo Troubleshooting Guide
 
-## 1. Mic passthrough not working — diagnosis
+## 1. Mic passthrough not working on session start
 
-**Step 1 — Read the mic init log lines:**
+**Symptom:** Host apps (Discord, etc.) don't pick up the client microphone.
+
+**Step 1 — Check the log:**
 ```powershell
-Get-Content (Get-ChildItem C:\Vibepollo\build\config\logs\sunshine-*.log | `
-  Sort-Object LastWriteTime | Select-Object -Last 1).FullName | `
-  Select-String '\[mic\]' | Select-Object -First 20
+Get-Content (Get-ChildItem C:\Vibepollo\build\config\logs\sunshine-*.log | Sort-Object LastWriteTime | Select-Object -Last 1).FullName | Select-String '\[mic\]' | Select-Object -First 20
 ```
+Look for:
+- `[mic] using Steam Streaming Microphone backend` — primary path working ✓
+- `[mic] using VB-Cable fallback` — Steam unavailable, fallback used ✓
+- `[mic] both Steam mic and VB-Cable backends failed` — neither found ✗
+- `[mic] mic_sink not configured` — mic_sink missing from sunshine.conf ✗
 
-**What to look for:**
-- `[mic] using Steam Streaming Microphone backend` — primary path ✅
-- `[mic] using VB-Cable fallback → CABLE Input` — Steam mic unavailable, fallback active ✅
-- `[mic] both Steam mic and VB-Cable backends failed` — neither found ❌ (see items 2 and 3)
-- `[mic] mic_sink not configured — passthrough disabled` — set mic_sink in sunshine.conf ❌
-- `[mic] no encrypted control stream — passthrough disabled` — client not using encrypted session ❌
+**Step 2 — Verify sunshine.conf has the correct values:**
+```
+mic_sink = Speakers (Steam Streaming Microphone)
+mic_capture_device = Microphone (Steam Streaming Microphone)
+```
+Or via Web UI at https://localhost:47990 → Configuration → Mic Passthrough section.
 
-**Step 2 — Verify Discord is set to Default input:**
+**Step 3 — If Steam mic unavailable:**
+Ensure Steam is running before starting a stream. The Steam Streaming Microphone
+endpoint is created by Steam's audio driver and only exists while Steam is running.
+
+**Step 4 — If VB-Cable fallback also failed:**
+Run the Vibepollo installer to auto-install VB-Audio CABLE, or download from
+https://vb-audio.com/Cable/
+
+**Step 5 — Verify Discord is using Default microphone:**
 Discord → Settings → Voice & Video → Input Device → Default.
 Vibepollo switches the Windows default capture device at session start.
-If Discord is pinned to a specific device, it won't follow the switch.
-
-**Step 3 — After stream ends, verify capture device restored:**
-Open Windows Sound settings → Recording tab. Your normal mic (AT2040 or similar)
-should be the default again. If it's still set to Steam Streaming Microphone,
-the RAII restore may have failed — restart Vibepollo and try again.
+Discord must be set to Default (not a specific device) to pick it up automatically.
 
 ## 2. Steam Streaming Microphone not found
 

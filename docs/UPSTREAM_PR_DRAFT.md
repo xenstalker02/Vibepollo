@@ -17,7 +17,7 @@ via Steam Streaming Microphone. Satisfies ClassicOldSong's stated requirements:
 - **Codec**: Opus 64 kbps, VBR, complexity 10, FEC enabled, DTX disabled, 20ms frames
 - **Client capture**: SDL2 at 48kHz, deadline-based 20ms pacer with re-sync guard, 12-frame buffer cap
 - **Server render**: WASAPI to Steam Streaming Microphone (primary) or VB-Cable (fallback)
-- **Config options**: mic_sink, mic_capture_device, mic_buffer_ms in sunshine.conf
+- **Config options**: mic_sink, mic_capture_device, mic_buffer_ms, mic_buffer_packets in sunshine.conf
 
 ## Files Changed
 - `src/stream.cpp` -- 0x3003 packet handler, mic render thread lifecycle

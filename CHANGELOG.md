@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.15.2] — 2026-04-01
+### Merged
+- Upstream Nonary/Vibepollo 1.15.0-stable.2: monitor position preservation,
+  monitor refresh rate fixes during virtual display setup, display cleanup fixes,
+  bootstrapper improvements.
+
 ## [1.15.1] — 2026-04-01
 
 ### Fixed
