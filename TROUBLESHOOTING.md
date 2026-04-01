@@ -137,8 +137,12 @@ Current uniqueid: `199A0803-9643-F727-3F19-7B4278FAC269` — never change this.
   "Failed to create system tray".
 - Check Windows notification settings: Settings → System → Notifications → make
   sure notifications are enabled for sunshine.exe.
-- If the tray icon is present but no toasts fire after the very first session:
-  this was a known bug fixed in Vibepollo 1.15.0. Upgrade to 1.15.0 or later.
+- If the tray icon is present but no toasts fire at all: this was a known
+  bug fixed in Vibepollo 1.15.1. The root cause was the tray GUID being
+  orphaned in the Windows Shell database after any unclean shutdown, causing
+  tray initialization to fail silently on all 30 retry attempts. Upgrade to
+  1.15.1 or later, or do a clean restart of Vibepollo (Stop-Service ApolloService
+  first, then relaunch — this clears the orphaned GUID).
 
 ## 12. Web UI not reachable at localhost:47990
 
