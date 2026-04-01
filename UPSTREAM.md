@@ -52,5 +52,5 @@ Then build, privacy scan, commit, push.
 - `src/config.h` / `src/config.cpp` — new config options
 
 ## Current state
-- Upstream base: Nonary 1.15.0-stable.1
+- Upstream base: Nonary 1.15.0-stable.2
 - Our fork: xenstalker02/Vibepollo — see CHANGELOG.md for our additions

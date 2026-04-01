@@ -1,12 +1,12 @@
 # Vibepollo Quick Reference
-Last updated: 2026-03-31
+Last updated: 2026-04-01
 
 ## Current State
 | Item | Value |
 |------|-------|
-| Vibepollo HEAD | (update after this session's commits) |
-| Vibelight HEAD | (update after this session's commits) |
-| Upstream base | Nonary 1.15.0-stable.1 |
+| Vibepollo HEAD | `3d0a25bf` — fix(tray): show idle state for Desktop/placebo on client disconnect |
+| Vibelight HEAD | `22b7a694` — fix(ui): revert setApplicationName to Moonlight |
+| Upstream base | Nonary 1.15.0-stable.2 |
 | Mic architecture | Steam Streaming Mic PRIMARY, VB-Cable FALLBACK |
 | Bitrate | 64kbps Opus mono |
 | Jitter buffer | 2 packets = 40ms |
@@ -46,7 +46,7 @@ cd C:\Vibepollo && claude --dangerously-skip-permissions
 ## Key Facts
 - Windows service name: ApolloService (registered by sunshinesvc.exe)
 - sunshine_state.json uniqueid: 199A0803-9643-F727-3F19-7B4278FAC269 — NEVER CHANGE
-- moonwake MD5: c1d41731c6b7f53e9dc9878437b40bd1 — NEVER CHANGE WITHOUT UPDATING NOTION
+- moonwake MD5: 0dbe976bd9cfeeafe677826ffb96369d — NEVER CHANGE WITHOUT UPDATING NOTION
 - Port for moonwake: 47989 (NOT 47990)
 - Auto-update always targets xenstalker02/Vibepollo — NEVER Nonary/vibepollo
 - NEVER delete xenstalker02/vibepollo-upstream-pr fork — holds PR #168/#169 branches
@@ -55,7 +55,7 @@ cd C:\Vibepollo && claude --dangerously-skip-permissions
 ```powershell
 & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" C:\Vibepollo\installer\vibepollo.iss
 ```
-Output: `installer\output\Vibepollo-1.15.0-Setup.exe`
+Output: `installer\output\Vibepollo-1.15.2-Setup.exe`
 
 ## Privacy scan
 ```bash

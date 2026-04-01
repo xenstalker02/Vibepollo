@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.15.3] — 2026-04-01
+
 ### Fixed (2026-04-01)
 - **Startup capture restore guard**: if Vibepollo is hard-killed mid-stream
   (power loss, forced kill), Windows default capture is automatically restored
