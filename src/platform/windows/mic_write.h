@@ -75,6 +75,7 @@ namespace platf::audio {
     std::string backend_name;
     std::string target_device_name;
     bool first_packet_written_logged = false;
+    bool render_dead_logged = false;
     util::safe_ptr_v2<void, BOOL, CloseHandle> render_event;
     std::mutex queue_mutex;
     std::deque<float> pending_frames;

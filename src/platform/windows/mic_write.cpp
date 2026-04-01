@@ -339,6 +339,10 @@ namespace platf::audio {
   int mic_write_wasapi_t::write_pcm(const float *samples, std::uint32_t frame_count) {
     if (!render_event || stop_render_thread.load(std::memory_order_acquire) ||
         render_dead.load(std::memory_order_acquire)) {
+      if (render_dead.load(std::memory_order_acquire) && !render_dead_logged) {
+        render_dead_logged = true;
+        BOOST_LOG(warning) << "[mic] write_pcm: render thread dead — mic audio being dropped"sv;
+      }
       return -1;
     }
     {
@@ -387,10 +391,24 @@ namespace platf::audio {
       UINT32 padding = 0;
       HRESULT pad_hr = audio_client->GetCurrentPadding(&padding);
       if (FAILED(pad_hr)) {
-        BOOST_LOG(error) << "[mic] GetCurrentPadding failed 0x"sv
-                         << util::hex(pad_hr).to_string_view() << " — render dead"sv;
-        render_dead.store(true, std::memory_order_release);
-        break;
+        BOOST_LOG(warning) << "[mic] GetCurrentPadding failed 0x"sv
+                           << util::hex(pad_hr).to_string_view()
+                           << " — attempting WASAPI re-init"sv;
+        // Stop the existing client before re-init
+        if (audio_client) audio_client->Stop();
+        if (audio_render) { audio_render->Release(); audio_render = nullptr; }
+        audio_client.reset();
+        playout_started = false;
+        playout_wait_logged = false;
+        // Re-find device and re-initialize
+        std::wstring device_id;
+        if (!find_target_device(device_id) || !initialize_device(device_id)) {
+          BOOST_LOG(error) << "[mic] WASAPI re-init failed — render dead"sv;
+          render_dead.store(true, std::memory_order_release);
+          break;
+        }
+        BOOST_LOG(info) << "[mic] WASAPI re-init succeeded — resuming render"sv;
+        continue;
       }
 
       auto avail = buffer_frame_count - padding;
