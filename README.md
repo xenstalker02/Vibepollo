@@ -64,7 +64,7 @@ for voice chat, Discord, games, and anything else.
 
 ### Easy Install (Recommended)
 
-1. Download `Vibepollo-1.14.13-beta.2-Setup.exe` from
+1. Download `Vibepollo-1.15.0-Setup.exe` from
    [Releases](https://github.com/xenstalker02/Vibepollo/releases)
 2. Run the installer — it handles everything automatically:
    - Installs to `C:\Program Files\Vibepollo\`
@@ -201,7 +201,7 @@ Steam Deck mic
 |---------|-------------|
 | [Vibelight](https://github.com/xenstalker02/Vibelight) | Companion Moonlight fork with client mic capture |
 | [logabell/Apollo](https://github.com/logabell/Apollo) | Parallel server-side mic passthrough implementation |
-| [logabell/moonlight-qt-mic](https://github.com/logabell/moonlight-qt-mic) | Parallel client-side mic implementation |
+| [logabell/moonlight-qt-mic](https://github.com/logabell/moonlight-qt-mic) | Parallel client-side mic implementation — **not compatible with Vibelight** (uses LiSendMicrophoneOpusDataEx on a separate UDP port; Vibelight uses 0x3003 on the encrypted control stream) |
 | [Nonary/vibepollo](https://github.com/Nonary/vibepollo) | Our direct upstream |
 | [ClassicOldSong/Apollo](https://github.com/ClassicOldSong/Apollo) | Apollo upstream |
 | [LizardByte/Sunshine](https://github.com/LizardByte/Sunshine) | Sunshine upstream |
@@ -223,5 +223,6 @@ community testing is complete. The PR draft is at
 See [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md) for full credits.
 
 Mic passthrough was developed in parallel with [logabell](https://github.com/logabell).
-We compared implementations and adopted Opus encoder tuning (96kbps, FEC, VBR,
-complexity 10, FRAMESIZE_20_MS) and the deadline-based send pacer from that work.
+We compared implementations and adopted Opus encoder tuning (64kbps mono, reduced
+from Logan's original 96kbps for VOIP tuning; FEC, VBR, complexity 10,
+FRAMESIZE_20_MS) and the deadline-based send pacer from that work.

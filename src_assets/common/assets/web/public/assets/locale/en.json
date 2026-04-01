@@ -600,7 +600,6 @@
     "legacy_ordering": "App ordering for legacy clients",
     "legacy_ordering_desc": "Enable ordering support workaround for legacy clients. Can cause issues with clients or scripts that can't handle UTF8 correctly. Artemis clients support this by default.",
     "mic_section_title": "Mic Passthrough",
-    "mic_section_desc": "Streams your microphone from the Deck to your PC via VB-Audio Virtual Cable. VB-Cable is installed automatically — no manual setup required.",
     "mic_sink": "Mic Passthrough Sink",
     "mic_sink_desc": "VB-Cable fallback endpoint (used when Steam Streaming Microphone is unavailable). Default: CABLE Input (VB-Audio Virtual Cable). Vibepollo uses Steam Streaming Microphone automatically when Steam is running. Discord (set to Default) picks up the client mic without any manual configuration.",
     "mic_sink_placeholder": "CABLE Input",

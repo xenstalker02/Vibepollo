@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## [1.15.0] — 2026-03-31
+
+### Fixed
+- **Toast notifications restored** — per-app flags now reset after 30-second gap
+  between sessions, restoring started/stopped toasts for intentional new sessions
+  while still suppressing toasts during rapid client reconnect cycles (< 30s).
+  Previously flags were never reset for the same app name, causing all toasts to
+  disappear after the first session.
+
+### Changed
+- **WASAPI render prebuffer reduced from 80ms to 40ms** — both Steam mic and
+  VB-Cable render backends now prebuffer 2 Opus packets (40ms) matching the jitter
+  buffer depth, reducing time-to-first-audio from ~120ms to ~80ms.
+- **Installer version bumped to 1.15.0** to reflect current upstream base.
+
 ### Added (2026-03-28)
 - **Steam Streaming Microphone as primary mic backend** (`mic_write_wasapi_t` +
   `apollo_vmic_t`) — writes decoded Opus audio directly to the Steam audio driver

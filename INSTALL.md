@@ -4,7 +4,7 @@
 
 - **Windows 10 or 11** (64-bit)
 - **NVIDIA GPU** recommended (NVENC hardware encoding); AMD and Intel GPUs also supported
-- **VB-Cable** virtual audio driver (for mic passthrough)
+- **Steam** running on the PC (provides the Steam Streaming Microphone virtual audio device used for mic passthrough). VB-Audio Virtual Cable is installed as an automatic fallback.
 - A Vibelight or Moonlight client on your streaming device
 
 ## Download and Run
@@ -14,18 +14,25 @@
 3. Run `sunshine.exe` or use the provided `Launch.bat` to start without a console window.
 4. On first launch, Vibepollo will open the web UI at `https://localhost:47990` to set an admin username and password.
 
-## VB-Cable Setup
+## Mic Passthrough Setup
 
-VB-Cable is required for mic passthrough (forwarding your client device's microphone to the host PC).
+Vibepollo uses **Steam Streaming Microphone** as the primary mic backend — no
+third-party driver required. Steam's audio driver (installed with Steam) provides
+the virtual microphone endpoint. VB-Audio Virtual Cable is installed automatically
+as a fallback in case Steam is unavailable.
 
-1. Download VB-Cable from [vb-audio.com/Cable](https://vb-audio.com/Cable/).
-2. Run the installer **as Administrator**.
-3. Reboot after installation.
-4. Verify two new audio devices appear:
-   - **CABLE Input** (playback device)
-   - **CABLE Output (VB-Audio Virtual Cable)** (recording device)
+No manual audio device setup is required. At session start, Vibepollo switches the
+Windows default capture device to Microphone (Steam Streaming Microphone), and
+restores it to your previous default when the session ends. Discord set to
+"Default" picks up the client mic automatically.
 
-Vibepollo can also auto-install VB-Cable if `install_vbcable = enabled` is set in your config.
+### Key config options (sunshine.conf)
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `mic_sink` | `Speakers (Steam Streaming Microphone)` | Render endpoint for mic audio |
+| `mic_capture_device` | `Microphone (Steam Streaming Microphone)` | Windows default capture device set at session start |
+| `mic_buffer_packets` | `2` | Jitter buffer prebuffer depth (1 packet = 20ms) |
 
 ## Configuration (sunshine.conf)
 
@@ -33,20 +40,12 @@ Vibepollo reads its configuration from `sunshine.conf` in the config directory (
 
 See `sunshine.conf.template` in the repository root for all available options with descriptions.
 
-### Key Mic Passthrough Options
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `mic_sink` | `CABLE Input` | The WASAPI render endpoint where decoded client mic audio is written. Set to empty to disable mic passthrough. |
-| `mic_capture_device` | `CABLE Output (VB-Audio Virtual Cable)` | The recording device set as Windows default input during streaming so host apps (Discord, etc.) pick up the client mic. |
-| `sunshine_name` | *(hostname)* | The name advertised to Moonlight/Vibelight clients. |
-
 ### Example sunshine.conf
 
 ```
 sunshine_name = MyGamingPC
-mic_sink = CABLE Input
-mic_capture_device = CABLE Output (VB-Audio Virtual Cable)
+mic_sink = Speakers (Steam Streaming Microphone)
+mic_capture_device = Microphone (Steam Streaming Microphone)
 ```
 
 ## Pairing with Vibelight Client

@@ -104,3 +104,6 @@ sunshine_err.txt
 
 # Compiled installer output
 installer/output/
+
+# Claude Code dev environment (personal session state, not for distribution)
+.claude/
