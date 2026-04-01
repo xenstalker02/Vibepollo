@@ -406,6 +406,20 @@ namespace system_tray {
     tray_update(&tray);
   }
 
+  void update_tray_idle() {
+    if (!tray_initialized) {
+      return;
+    }
+    tray.notification_cb = nullptr;
+    tray.notification_icon = nullptr;
+    tray.notification_text = nullptr;
+    tray.notification_title = nullptr;
+    tray.icon = TRAY_ICON;
+    tray.tooltip = PROJECT_NAME;
+    tray.menu[2].text = TRAY_MSG_NO_APP_RUNNING;
+    tray_update(&tray);
+  }
+
   void update_tray_stopped(std::string app_name) {
     if (!tray_initialized) {
       return;

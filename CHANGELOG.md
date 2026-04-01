@@ -8,6 +8,19 @@
   on next startup. Saves pre-session default to `build/config/mic_capture_prev.txt`
   at session start; reads and restores on next boot if the file exists and the
   default is still pointing at the passthrough device.
+- **Tray paused/stopped race fixed**: stream teardown now polls `proc.running()` for
+  up to 2 seconds before deciding paused vs stopped. Prevents the race where quitting
+  a game and immediately disconnecting always showed "Streaming paused" instead of
+  "Application Stopped" because the process was still alive during teardown.
+- **Desktop/placebo tray idle state**: when the running app is a Desktop pseudo-app
+  (placebo), the tray now resets to idle state on client disconnect instead of
+  showing "Streaming paused for Desktop". `proc.running()` always returns true for
+  placebo apps; the previous behaviour incorrectly flagged every Desktop session end
+  as paused. New `update_tray_idle()` resets icon and tooltip silently with no toast.
+- **WASAPI device-lost recovery**: mic render thread now detects `GetCurrentPadding`
+  failure, automatically re-finds the render endpoint, and re-initialises WASAPI
+  without dropping the session. Only marks `render_dead` if re-init also fails.
+  Logs the first dropped `write_pcm` call after a dead render client is detected.
 
 ## [1.15.2] — 2026-04-01
 ### Merged

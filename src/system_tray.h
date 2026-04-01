@@ -72,6 +72,13 @@ namespace system_tray {
   void update_tray_pausing(std::string app_name);
 
   /**
+   * @brief Resets the tray icon to idle state silently (no toast).
+   * Used when a placebo/Desktop session ends — the process is technically "still running"
+   * but it is not a real app, so we show idle rather than "Streaming paused".
+   */
+  void update_tray_idle();
+
+  /**
    * @brief Sets the tray icon in stopped mode (app and stream stopped) and spawns the appropriate notification
    * @param app_name The started application name
    */
