@@ -2510,12 +2510,25 @@ namespace stream {
         // Only revert on disconnect when explicitly enabled by config.
         bool revert_display_config {config::video.dd.config_revert_on_disconnect};
 
-        const bool is_paused = proc::proc.running();
+        // Poll for up to 2 seconds to let the game process finish exiting before
+        // deciding paused vs stopped. Fixes the race where the user quits the game
+        // and immediately hits the disconnect combo — the process is still alive for
+        // a brief moment during teardown and would otherwise always show "paused".
+        bool is_paused = proc::proc.running();
         if (is_paused) {
-#if defined SUNSHINE_TRAY && SUNSHINE_TRAY >= 1
-          system_tray::update_tray_pausing(proc::proc.get_last_run_app_name());
-#endif
+          const auto poll_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+          while (proc::proc.running() && std::chrono::steady_clock::now() < poll_deadline) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+          }
+          is_paused = proc::proc.running();
         }
+#if defined SUNSHINE_TRAY && SUNSHINE_TRAY >= 1
+        if (is_paused) {
+          system_tray::update_tray_pausing(proc::proc.get_last_run_app_name());
+        } else {
+          system_tray::update_tray_stopped(proc::proc.get_last_run_app_name());
+        }
+#endif
 
         const bool webrtc_active = webrtc_stream::has_active_sessions();
         const int paused_timeout_secs = std::max(0, config::video.dd.paused_virtual_display_timeout_secs);
