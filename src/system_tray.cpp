@@ -270,6 +270,7 @@ namespace system_tray {
 
     BOOST_LOG(info) << "System tray created"sv;
     tray_initialized = true;
+
     return 0;
   }
 
@@ -343,11 +344,6 @@ namespace system_tray {
       s_stopped_notification_fired = false;
       s_started_notification_fired = false;
       s_last_playing_app = app_name;
-    }
-
-    // Skip full update if icon is already playing and started toast already fired.
-    if (s_started_notification_fired && tray.icon && std::strcmp(tray.icon, TRAY_ICON_PLAYING) == 0) {
-      return;
     }
 
     tray.notification_title = nullptr;

@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [1.15.1] — 2026-04-01
+
+### Fixed
+- **System tray now initializes reliably on first launch** — `Shell_NotifyIconA(NIM_DELETE)`
+  is now called before `NIM_ADD` to clear any orphaned GUID entry left by a previous
+  crash. Previously the tray GUID (kTrayGuid) could persist in the Windows Shell database
+  after an unclean shutdown, causing all 30 initialization attempts to fail with
+  `0x80004005 E_FAIL`, leaving the process with no tray icon and no toast notifications.
+- **Toast notification early-return guard removed** — the guard that skipped
+  notification field assignment when the tray icon was already `TRAY_ICON_PLAYING`
+  prevented all subsequent toasts from ever firing after the first session. Toast
+  flags are now managed solely by the 30-second gap reset logic.
+
 ## [1.15.0] — 2026-03-31
 
 ### Fixed
