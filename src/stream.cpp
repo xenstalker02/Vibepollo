@@ -2608,6 +2608,19 @@ namespace stream {
 
           const auto snap = audio_ctrl->snapshot_capture_defaults();
 
+          // Write pre-session default capture name to state file.
+          // Used by startup restore guard to recover if Vibepollo is hard-killed.
+          if (!config::audio.mic_capture_device.empty() && !snap.console_id.empty()) {
+            const auto state_file = platf::appdata() / "mic_capture_prev.txt";
+            const auto pre_session_name = audio_ctrl->get_current_default_capture_name();
+            if (!pre_session_name.empty() && pre_session_name != config::audio.mic_capture_device) {
+              std::ofstream f(state_file, std::ios::trunc);
+              f << pre_session_name;
+              f.close();
+              BOOST_LOG(debug) << "[mic] state file written: pre-session default = " << pre_session_name;
+            }
+          }
+
           // Try Steam Streaming Microphone backend first
           if (audio_ctrl->init_mic_redirect_device() != 0) {
             // Fall back to VB-Cable via virtual_microphone()

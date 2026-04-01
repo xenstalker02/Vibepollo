@@ -86,6 +86,7 @@ watchdog.vbs
 *.bak
 audio_errors.txt
 build_out.txt
+mic_capture_prev.txt
 build_output.txt
 bundle_drivers.ps1
 diag.ps1

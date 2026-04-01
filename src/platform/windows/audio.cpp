@@ -6,6 +6,7 @@
 
 // standard includes
 #include <format>
+#include <fstream>
 
 // platform includes
 #include <winsock2.h>
@@ -1547,6 +1548,44 @@ namespace platf {
       } else {
         BOOST_LOG(warning) << "VB-Audio CABLE Input not found — mic passthrough will not work. "
                               "Install VB-Audio Virtual Cable from https://vb-audio.com/Cable/"sv;
+      }
+    }
+
+    // Startup capture restore guard:
+    // If Vibepollo was hard-killed during a previous stream session, the RAII
+    // guard never ran and Windows default capture may still be set to the mic
+    // passthrough device. Detect and restore it now.
+    if (!config::audio.mic_capture_device.empty()) {
+      const auto state_file = platf::appdata() / "mic_capture_prev.txt";
+      const auto current_default = control->get_current_default_capture_name();
+
+      if (current_default == config::audio.mic_capture_device) {
+        // Current default matches the passthrough device — previous session
+        // did not clean up. Attempt restore.
+        if (std::filesystem::exists(state_file)) {
+          // State file contains the real pre-session default device name.
+          std::ifstream f(state_file);
+          std::string prev_device;
+          std::getline(f, prev_device);
+          f.close();
+          if (!prev_device.empty()) {
+            BOOST_LOG(info) << "[mic] Startup restore: previous session left default capture as '"
+                            << current_default << "' — restoring to '" << prev_device << "'";
+            control->switch_capture_to(prev_device);
+          } else {
+            BOOST_LOG(warning) << "[mic] Startup restore: state file empty — using reset_default_capture_to_first_real()";
+            control->reset_default_capture_to_first_real();
+          }
+          std::filesystem::remove(state_file);
+          BOOST_LOG(info) << "[mic] Startup restore: state file removed";
+        } else {
+          // State file missing but default is still on passthrough device.
+          // Fall back to resetting to first real non-CABLE capture device.
+          BOOST_LOG(warning) << "[mic] Startup restore: default capture is '"
+                             << current_default << "' but no state file found — "
+                             "using reset_default_capture_to_first_real()";
+          control->reset_default_capture_to_first_real();
+        }
       }
     }
 

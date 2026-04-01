@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed (2026-04-01)
+- **Startup capture restore guard**: if Vibepollo is hard-killed mid-stream
+  (power loss, forced kill), Windows default capture is automatically restored
+  on next startup. Saves pre-session default to `build/config/mic_capture_prev.txt`
+  at session start; reads and restores on next boot if the file exists and the
+  default is still pointing at the passthrough device.
+
 ## [1.15.2] — 2026-04-01
 ### Merged
 - Upstream Nonary/Vibepollo 1.15.0-stable.2: monitor position preservation,
