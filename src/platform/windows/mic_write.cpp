@@ -364,7 +364,7 @@ namespace platf::audio {
     CoInitializeEx(nullptr, COINIT_MULTITHREADED | COINIT_SPEED_OVER_MEMORY);
     platf::adjust_thread_priority(platf::thread_priority_e::high);
 
-    static constexpr std::size_t kPrebufFrames = 960 * 4;  // 4 Opus packets
+    static constexpr std::size_t kPrebufFrames = 960 * 2;  // 2 Opus packets — matches mic_buffer_packets default
 
     while (!stop_render_thread.load(std::memory_order_acquire)) {
       WaitForSingleObject(render_event.get(), 20);

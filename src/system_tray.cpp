@@ -317,9 +317,10 @@ namespace system_tray {
   static std::string s_notification_text;
   static std::string s_last_playing_app;
   static std::chrono::steady_clock::time_point s_last_stopped_notification_time;
-  // Per-app-name toast flags. Both reset only when the app name changes.
-  // Same-app reconnects keep the flags set, preventing repeated toasts during
-  // reconnect cycles. Flags persist until a genuinely different app starts.
+  // Per-session toast flags. Both reset when the app name changes OR when
+  // >30s has passed since the last session ended. Rapid reconnects (< 30s,
+  // same app) keep flags set — no repeated toasts. Intentional new sessions
+  // (> 30s gap) reset flags so toasts fire again.
   static bool s_stopped_notification_fired = false;
   static bool s_started_notification_fired = false;
 
@@ -328,9 +329,17 @@ namespace system_tray {
       return;
     }
 
-    // Reset per-app toast flags only when the app name changes.
-    // Same-app reconnects keep existing flags → no repeated started/stopped toasts.
-    if (app_name != s_last_playing_app) {
+    // Reset toast flags when either:
+    //   (a) the app name changed — always a new session
+    //   (b) same app but >30s since last session ended — intentional new session,
+    //       not a rapid client drop/reconnect (which happens within a few seconds)
+    // This preserves rapid-reconnect suppression while restoring toasts for real
+    // new sessions.
+    const auto now_tp = std::chrono::steady_clock::now();
+    const bool app_changed = (app_name != s_last_playing_app);
+    const bool long_gap = (std::chrono::duration_cast<std::chrono::seconds>(
+                             now_tp - s_last_stopped_notification_time).count() > 30);
+    if (app_changed || long_gap) {
       s_stopped_notification_fired = false;
       s_started_notification_fired = false;
       s_last_playing_app = app_name;

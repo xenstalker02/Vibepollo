@@ -821,7 +821,7 @@ namespace platf::audio {
     }
 
   private:
-    static constexpr std::size_t kPrebufFrames = 960 * 4;  // 4 Opus packets
+    static constexpr std::size_t kPrebufFrames = 960 * 2;  // 2 Opus packets — matches mic_buffer_packets default
 
     void render_loop() {
       CoInitializeEx(nullptr, COINIT_MULTITHREADED | COINIT_SPEED_OVER_MEMORY);
