@@ -1,5 +1,3 @@
-# Vibepollo
-
 ![Vibepollo](vibepollo_final.png)
 
 > **Vibepollo** is a fork of [Nonary/vibepollo](https://github.com/Nonary/vibepollo)
