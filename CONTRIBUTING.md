@@ -43,9 +43,8 @@ ninja sunshine
 ## Branch Strategy
 
 - **master** — stable, release-ready code
-- **dev** — active development, may contain work-in-progress changes
 
-All pull requests should target **master** for fixes and **dev** for new features.
+All pull requests should target **master**.
 
 ## Syncing Upstream
 
@@ -64,7 +63,7 @@ Resolve any conflicts, paying special attention to mic passthrough code paths th
 1. Keep PRs focused on a single change or feature.
 2. Include a clear description of what changed and why.
 3. Test your changes locally (build and run).
-4. For mic passthrough changes, test with VB-Cable and a Moonlight/Vibelight client if possible.
+4. For mic passthrough changes, test with a Vibelight client if possible.
 5. Run a privacy scan before submitting: ensure no personal IPs, passwords, MAC addresses, or hostnames are included.
 
 ## What NOT to Commit

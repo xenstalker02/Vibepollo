@@ -12,7 +12,7 @@
 
 ## What Is This?
 
-When you stream games from your Windows PC to a Steam Deck (or other Moonlight client),
+When you stream games from your Windows PC to your Steam Deck,
 your microphone stays on your PC — the client mic is ignored. Vibepollo fixes that.
 
 It pairs with **[Vibelight](https://github.com/xenstalker02/Vibelight)** on the client side.
@@ -213,5 +213,5 @@ See [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md) for full credits.
 
 Mic passthrough was developed in parallel with [logabell](https://github.com/logabell).
 We compared implementations and adopted Opus encoder tuning (64kbps mono, reduced
-from Logan's original 64kbps for VOIP tuning; FEC, VBR, complexity 10,
+from Logan's original 96kbps for VOIP tuning; FEC, VBR, complexity 10,
 FRAMESIZE_20_MS) and the deadline-based send pacer from that work.
