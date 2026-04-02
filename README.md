@@ -207,16 +207,6 @@ Steam Deck mic
 
 ---
 
-## Contributing
-
-PRs are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions and guidelines.
-
-Our goal is to contribute mic passthrough upstream to ClassicOldSong/Apollo once
-community testing is complete. The PR draft is at
-[docs/UPSTREAM_PR_DRAFT.md](docs/UPSTREAM_PR_DRAFT.md).
-
----
-
 ## Acknowledgments
 
 See [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md) for full credits.
