@@ -50,7 +50,7 @@ mic_capture_device = Microphone (Steam Streaming Microphone)
 ## Pairing with Vibelight Client
 
 1. Start Vibepollo on your Windows PC.
-2. On your client device, open Vibelight (or Moonlight).
+2. On your Steam Deck, open Vibelight.
 3. Add a new host using your PC's IP address.
 4. The client will display a 4-digit PIN.
 5. Enter the PIN in the Vibepollo web UI at `https://localhost:47990` under the PIN pairing section.

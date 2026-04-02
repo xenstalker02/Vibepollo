@@ -122,7 +122,7 @@ Set Discord (and other voice apps) input to **Default** — that's all. At sessi
 Vibepollo switches the Windows default capture device to **Microphone (Steam Streaming
 Microphone)** (or **CABLE Output** when falling back to VB-Cable), so Discord automatically
 picks up the client mic. At session end, the default capture restores to your previous
-default (AT2040 or whatever was set before). No manual switching needed.
+default device. No manual switching needed.
 
 **Games that don't pick up the device switch automatically:** Some games
 cache the Windows default audio device at launch and ignore changes made

@@ -92,15 +92,15 @@
 - `mic_buffer_ms` config option superseded by `mic_buffer_packets` for
   packet-count-based prebuffer tuning.
 
-
+## [Initial Release]
 
 ### Added
 - Mic passthrough via 0x3003 control stream packets — streams client
-  microphone audio to host PC in real time via VB-Audio Virtual Cable at 96kbps VBR
+  microphone audio to host PC in real time via VB-Audio Virtual Cable
 - VB-Audio Virtual Cable auto-install on first run (skipped if already present)
 - Configurable `mic_sink`, `mic_capture_device`, `mic_buffer_packets`,
   and `mic_buffer_ms` settings in sunshine.conf
-- `mic_buffer_packets` — jitter buffer prebuffer depth (default 3, range 1–16);
+- `mic_buffer_packets` — jitter buffer prebuffer depth (default 2, range 1–16)
   tunable without rebuild for latency vs stability tradeoff
 - VB-Cable startup detection — logs driver version when found, warning when absent
 - Per-session Opus decoder isolation — decoder and speaker re-created fresh on
