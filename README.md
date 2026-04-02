@@ -5,7 +5,6 @@
 > that adds **encrypted microphone passthrough** from a Vibelight client
 > to the Windows host during a game streaming session.
 
-[![Build](https://github.com/xenstalker02/Vibepollo/actions/workflows/build.yml/badge.svg)](https://github.com/xenstalker02/Vibepollo/actions)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
 
 ---
