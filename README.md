@@ -64,17 +64,7 @@ for voice chat, Discord, games, and anything else.
 
 ### Easy Install (Recommended)
 
-1. Download `Vibepollo-1.15.2-Setup.exe` from
-   [Releases](https://github.com/xenstalker02/Vibepollo/releases)
-2. Run the installer — it handles everything automatically:
-   - Installs to `C:\Program Files\Vibepollo\`
-   - Configures Windows Firewall rules (TCP 47984/47989/47990, UDP 47998-48010)
-   - Sets up autostart on login via Task Scheduler (30-second delay for audio init)
-   - Detects VB-Audio Virtual Cable installation
-   - Creates Start Menu shortcut
-   - Opens the web UI on first run for initial setup
-3. Install [Vibelight](https://github.com/xenstalker02/Vibelight) on your Steam Deck
-4. Pair Vibelight with Vibepollo via the web UI at `https://localhost:47990`
+> **Release coming soon.** In the meantime, build from source below.
 
 ### Build From Source
 
@@ -213,5 +203,5 @@ See [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md) for full credits.
 
 Mic passthrough was developed in parallel with [logabell](https://github.com/logabell).
 We compared implementations and adopted Opus encoder tuning (64kbps mono, reduced
-from Logan's original 96kbps for VOIP tuning; FEC, VBR, complexity 10,
+from Logan's original 64kbps for VOIP tuning; FEC, VBR, complexity 10,
 FRAMESIZE_20_MS) and the deadline-based send pacer from that work.
