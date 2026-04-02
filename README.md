@@ -206,6 +206,14 @@ Steam Deck mic
 
 ---
 
+## About This Fork
+
+Vibepollo was built with AI assistance (Claude Code) by a UX designer — hence the name.
+The architecture and design decisions are intentional; the implementation was AI-generated
+and iteratively refined. It works. If you find issues or want to contribute, PRs are welcome.
+
+---
+
 ## Acknowledgments
 
 See [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md) for full credits.
