@@ -64,7 +64,17 @@ for voice chat, Discord, games, and anything else.
 
 ### Easy Install (Recommended)
 
-> **Release coming soon.** In the meantime, build from source below.
+1. Download `Vibepollo-1.15.2-Setup.exe` from
+   [Releases](https://github.com/xenstalker02/Vibepollo/releases)
+2. Run the installer — it handles everything automatically:
+   - Installs to `C:\Program Files\Vibepollo\`
+   - Configures Windows Firewall rules (TCP 47984/47989/47990, UDP 47998-48010)
+   - Sets up autostart on login via Task Scheduler (30-second delay for audio init)
+   - Detects VB-Audio Virtual Cable installation
+   - Creates Start Menu shortcut
+   - Opens the web UI on first run for initial setup
+3. Install [Vibelight](https://github.com/xenstalker02/Vibelight) on your Steam Deck
+4. Pair Vibelight with Vibepollo via the web UI at `https://localhost:47990`
 
 ### Build From Source
 

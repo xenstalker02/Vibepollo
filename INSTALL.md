@@ -9,10 +9,7 @@
 
 ## Download and Run
 
-1. Download the latest release from [GitHub Releases](https://github.com/xenstalker02/Vibepollo/releases).
-2. Extract the archive to a folder of your choice (e.g., `C:\Vibepollo`).
-3. Run `sunshine.exe` or use the provided `Launch.bat` to start without a console window.
-4. On first launch, Vibepollo will open the web UI at `https://localhost:47990` to set an admin username and password.
+> **Release coming soon.** Build from source using the instructions below in the meantime.
 
 ## Mic Passthrough Setup
 
