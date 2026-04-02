@@ -4,6 +4,7 @@
 > (itself a fork of [ClassicOldSong/Apollo](https://github.com/ClassicOldSong/Apollo))
 > that adds **encrypted microphone passthrough** from a Vibelight client
 > to the Windows host during a game streaming session.
+> Built with AI assistance (Claude Code) by a UX designer — hence the name.
 
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
 
@@ -203,14 +204,6 @@ Steam Deck mic
 | [Nonary/vibepollo](https://github.com/Nonary/vibepollo) | Our direct upstream |
 | [ClassicOldSong/Apollo](https://github.com/ClassicOldSong/Apollo) | Apollo upstream |
 | [LizardByte/Sunshine](https://github.com/LizardByte/Sunshine) | Sunshine upstream |
-
----
-
-## About This Fork
-
-Vibepollo was built with AI assistance (Claude Code) by a UX designer — hence the name.
-The architecture and design decisions are intentional; the implementation was AI-generated
-and iteratively refined. It works. If you find issues or want to contribute, PRs are welcome.
 
 ---
 
