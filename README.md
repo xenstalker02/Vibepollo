@@ -2,7 +2,7 @@
 
 > **Vibepollo** is a fork of [Nonary/vibepollo](https://github.com/Nonary/vibepollo)
 > (itself a fork of [ClassicOldSong/Apollo](https://github.com/ClassicOldSong/Apollo))
-> that adds **encrypted microphone passthrough** from a Moonlight/Vibelight client
+> that adds **encrypted microphone passthrough** from a Vibelight client
 > to the Windows host during a game streaming session.
 
 [![Build](https://github.com/xenstalker02/Vibepollo/actions/workflows/build.yml/badge.svg)](https://github.com/xenstalker02/Vibepollo/actions)
