@@ -108,3 +108,4 @@ installer/output/
 
 # Claude Code dev environment (personal session state, not for distribution)
 .claude/
+QUICK_REFERENCE.md

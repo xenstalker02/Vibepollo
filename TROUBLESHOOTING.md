@@ -133,7 +133,6 @@ netsh advfirewall firewall add rule name="Vibepollo UDP" protocol=UDP dir=in loc
 
 **Fix:** The client stores the host's UUID. If `sunshine_state.json` was regenerated
 or its uniqueid changed, the client must re-pair. Do not modify the uniqueid.
-Current uniqueid: `199A0803-9643-F727-3F19-7B4278FAC269` — never change this.
 
 ## 11. No toast notifications on stream start/end
 
