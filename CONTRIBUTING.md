@@ -16,7 +16,8 @@ pacman -S mingw-w64-ucrt-x86_64-cmake \
           mingw-w64-ucrt-x86_64-opus \
           mingw-w64-ucrt-x86_64-curl \
           mingw-w64-ucrt-x86_64-nlohmann-json \
-          mingw-w64-ucrt-x86_64-miniupnpc
+          mingw-w64-ucrt-x86_64-miniupnpc \
+          mingw-w64-ucrt-x86_64-cppwinrt
 ```
 
 ### Build Steps
