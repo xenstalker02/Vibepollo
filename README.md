@@ -1,5 +1,7 @@
 # Vibepollo
 
+![Vibepollo](vibepollo_final.png)
+
 > **Vibepollo** is a fork of [Nonary/vibepollo](https://github.com/Nonary/vibepollo)
 > (itself a fork of [ClassicOldSong/Apollo](https://github.com/ClassicOldSong/Apollo))
 > that adds **encrypted microphone passthrough** from a Moonlight/Vibelight client
