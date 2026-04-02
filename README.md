@@ -152,24 +152,6 @@ negotiate an encrypted control stream. Plaintext mic passthrough is never permit
 
 ---
 
-## Known Limitations
-
-**"Streaming paused" tray icon for multi-stage launchers:** Some
-games launch via a wrapper or launcher process that exits within a
-few seconds of starting the real game. Vibepollo detects the
-launcher process exiting and switches the tray icon to "Streaming
-paused for [App]" even though the stream is still active. This is
-a cosmetic issue — the stream continues normally. It affects games
-launched through Playnite or other multi-stage launchers.
-
-**Headphones required on Deck for echo-free operation:** The Deck's
-built-in microphone is physically close to its speakers. Game audio
-playing through the Deck's speakers will be re-captured by the
-microphone and echoed back to the host. Use headphones or a headset
-on the Deck during any session where mic passthrough is enabled.
-
----
-
 ## How Mic Passthrough Works
 
 ```

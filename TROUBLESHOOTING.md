@@ -6,7 +6,10 @@
 
 **Step 1 — Check the log:**
 ```powershell
-Get-Content (Get-ChildItem C:\Vibepollo\build\config\logs\sunshine-*.log | Sort-Object LastWriteTime | Select-Object -Last 1).FullName | Select-String '\[mic\]' | Select-Object -First 20
+# Installed version:
+Get-Content (Get-ChildItem "$env:PROGRAMDATA\Vibepollo\config\logs\sunshine-*.log" | Sort-Object LastWriteTime | Select-Object -Last 1).FullName | Select-String '\[mic\]' | Select-Object -First 20
+# Build-from-source version:
+Get-Content (Get-ChildItem "C:\Vibepollo\build\config\logs\sunshine-*.log" | Sort-Object LastWriteTime | Select-Object -Last 1).FullName | Select-String '\[mic\]' | Select-Object -First 20
 ```
 Look for:
 - `[mic] using Steam Streaming Microphone backend` — primary path working ✓
