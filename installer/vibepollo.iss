@@ -60,8 +60,12 @@ Name: "{app}\plugins\SunshinePlaynite"
 ; Main executable
 Source: "..\build\sunshine.exe";               DestDir: "{app}";             Flags: ignoreversion
 
-; Required runtime DLL (OpenSSL/zlib dynamic load)
+; Required runtime DLLs
+; zlib1.dll: loaded dynamically by OpenSSL/zlib at runtime — must sit next to sunshine.exe
 Source: "C:\msys64\ucrt64\bin\zlib1.dll";     DestDir: "{app}";             Flags: ignoreversion
+; D3DCOMPILER_47.dll: in the PE import table — process dies before main() if missing on Win10 N/KN or VMs
+; Sourced from the build machine's System32; shipped so clean machines don't need a DirectX SDK install
+Source: "C:\Windows\System32\D3DCOMPILER_47.dll"; DestDir: "{app}";         Flags: ignoreversion
 
 ; Tools
 Source: "..\build\tools\sunshinesvc.exe";              DestDir: "{app}\tools"; Flags: ignoreversion
@@ -133,11 +137,36 @@ Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""Vibepoll
 Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""Vibepollo UDP"""; Flags: runhidden; RunOnceId: "DelFirewallUDP"
 
 [Code]
+// Runtime prerequisite check.
+//
+// NOTE: Vibepollo is built with MSYS2 UCRT64, NOT the MSVC toolchain.
+// It therefore does NOT need vc_redist.x64.exe (VCRUNTIME140.dll etc.).
+// It does depend on the Windows Universal CRT (ucrtbase.dll), which is
+// built into Windows 10 1809+ — satisfied by MinVersion=10.0.17763 above.
+// This check is a belt-and-suspenders guard for heavily stripped images.
+function CheckUCRT(): Boolean;
+begin
+  Result := FileExists(ExpandConstant('{sys}\ucrtbase.dll'));
+  if not Result then
+    MsgBox(
+      'The Windows Universal C Runtime (ucrtbase.dll) was not found in System32.' + #13#10 +
+      'Vibepollo requires the UCRT, which is normally included with Windows 10.' + #13#10#13#10 +
+      'Please install Windows Update KB2999226 or run Windows Update, then retry.',
+      mbError, MB_OK);
+end;
+
 // Prevent downgrade: check existing installed version
 function InitializeSetup(): Boolean;
 var
   InstalledVer: String;
 begin
+  // Fail fast if UCRT is absent
+  if not CheckUCRT() then
+  begin
+    Result := False;
+    Exit;
+  end;
+
   Result := True;
   if RegQueryStringValue(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{A3F1B2C4-7D8E-4F9A-B1C2-D3E4F5A6B7C8}_is1',
     'DisplayVersion', InstalledVer) then
