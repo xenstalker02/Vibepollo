@@ -5,7 +5,7 @@
 - **Windows 10 or 11** (64-bit)
 - **NVIDIA GPU** recommended (NVENC hardware encoding); AMD and Intel GPUs also supported
 - **Steam** running on the PC (provides the Steam Streaming Microphone virtual audio device used for mic passthrough). VB-Audio Virtual Cable is installed as an automatic fallback.
-- A Vibelight or Moonlight client on your streaming device
+- A [Vibelight](https://github.com/xenstalker02/Vibelight) client on your Steam Deck
 
 ## Download and Run
 

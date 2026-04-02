@@ -1,11 +1,11 @@
 # Vibepollo Quick Reference
-Last updated: 2026-04-01
+Last updated: 2026-04-02
 
 ## Current State
 | Item | Value |
 |------|-------|
-| Vibepollo HEAD | `3d0a25bf` — fix(tray): show idle state for Desktop/placebo on client disconnect |
-| Vibelight HEAD | `22b7a694` — fix(ui): revert setApplicationName to Moonlight |
+| Vibepollo HEAD | `dca1f1f5` — docs: replace Moonlight/Vibelight with Vibelight in intro |
+| Vibelight HEAD | `a6c225201` — docs: move Steam Deck Art section above Related Projects |
 | Upstream base | Nonary 1.15.0-stable.2 |
 | Mic architecture | Steam Streaming Mic PRIMARY, VB-Cable FALLBACK |
 | Bitrate | 64kbps Opus mono |
