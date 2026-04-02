@@ -54,7 +54,7 @@ for voice chat, Discord, games, and anything else.
 - VB-Audio Virtual Cable — installed automatically by the Vibepollo installer
 - GPU: NVIDIA (NVENC), AMD, or Intel (QuickSync)
 
-**Steam Deck / Client:**
+**Steam Deck (client):**
 - [Vibelight](https://github.com/xenstalker02/Vibelight) — the companion Moonlight fork
   with client-side mic capture
 
@@ -135,13 +135,6 @@ session start to catch games that init audio after process launch, but
 games that cache the device before the stream starts may still require
 manual selection.
 
-**Headphones required for echo-free mic passthrough:** The Deck's
-built-in microphone is physically close to its speakers. If you
-stream game audio to the Deck's speakers while mic passthrough is
-active, the mic will pick up the speaker output and create an echo
-loop. Use headphones or a headset on the Deck during any session
-where mic passthrough is enabled.
-
 ---
 
 ## Security
@@ -173,6 +166,16 @@ Steam Deck mic
 → Discord (set to Default) picks up client mic automatically
 → Session end: default capture restores to previous default device
 ```
+
+---
+
+## Platform Support
+
+| Platform | Status |
+|----------|--------|
+| Windows 10 / 11 (host) | Supported |
+| Linux | Not supported |
+| macOS | Not supported |
 
 ---
 
