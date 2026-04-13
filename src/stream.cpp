@@ -494,7 +494,6 @@ namespace stream {
     };
 
     struct {
-      std::unique_ptr<platf::speaker_t> speaker;
       std::unique_ptr<OpusDecoder, void (*)(OpusDecoder *)> decoder {nullptr, opus_decoder_destroy};
       int channels = 0;
 
@@ -1280,13 +1279,13 @@ namespace stream {
     server->map(packetTypes[IDX_MIC_AUDIO_DATA], [](session_t *session, const std::string_view &payload) {
       BOOST_LOG(verbose) << "type [IDX_MIC_AUDIO_DATA]"sv;
 
-      if ((!session->mic.speaker && !session->mic.audio_ctrl) || !session->mic.decoder) return;
+      if (!session->mic.audio_ctrl || !session->mic.decoder) return;
 
       // Require encrypted control stream
       if (!(session->config.encryptionFlagsEnabled & SS_ENC_CONTROL_V2)) {
         if (session->mic.encryption_failures++ == 0) {
           BOOST_LOG(warning) << "[mic] Plaintext control stream — mic passthrough disabled."sv;
-          session->mic.speaker.reset();
+          session->mic.audio_ctrl.reset();
           session->mic.decoder.reset();
         }
         return;
@@ -1343,16 +1342,7 @@ namespace stream {
       auto &mic = session->mic;
       mic.packets_received++;
 
-      // Underrun detection: write silence on long gap
-      if (mic.packets_received > 1) {
-        auto gap_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                        recv_time - mic.last_recv_time).count();
-        if (gap_ms > config::audio.mic_buffer_ms && mic.speaker) {
-          std::vector<float> silence((size_t)(960 * mic.channels), 0.0f);
-          mic.speaker->write(silence.data(), 960u);
-          mic.silence_frames++;
-        }
-      }
+      // (Underrun detection for VB-Cable path removed — Steam mic path handles gaps natively)
       mic.last_recv_time = recv_time;
 
       // Insert into jitter buffer
@@ -1406,23 +1396,11 @@ namespace stream {
         }
         if (frames == 0) continue;
 
-        int write_ret;
-        if (mic.speaker) {
-          // VB-Cable path: use speaker_wasapi_t
-          write_ret = mic.speaker->write(pcm.data(), (std::uint32_t) frames);
-          if (write_ret < 0) {
-            BOOST_LOG(error) << "[mic] WASAPI render device lost — disabling mic for this session"sv;
-            mic.speaker.reset();
-            return;
-          }
-        } else {
-          // Steam mic path: send pre-decoded PCM directly to audio_ctrl
-          write_ret = mic.audio_ctrl->write_mic_pcm(pcm.data(), (std::uint32_t) frames);
-          if (write_ret < 0) {
-            BOOST_LOG(error) << "[mic] Steam mic render path lost — disabling mic for this session"sv;
-            mic.audio_ctrl->release_mic_redirect_device();
-            return;
-          }
+        int write_ret = mic.audio_ctrl->write_mic_pcm(pcm.data(), (std::uint32_t) frames);
+        if (write_ret < 0) {
+          BOOST_LOG(error) << "[mic] Steam mic render path lost — disabling mic for this session"sv;
+          mic.audio_ctrl->release_mic_redirect_device();
+          return;
         }
         mic.frames_written++;
         if (mic.packets_received % 100 == 0) {
@@ -2468,10 +2446,9 @@ namespace stream {
         session.mic.audio_ctrl->restore_capture_from(session.mic.capture_snap);
         session.mic.capture_switched = false;
       }
-      if (!session.mic.speaker && session.mic.audio_ctrl) {
+      if (session.mic.audio_ctrl) {
         session.mic.audio_ctrl->release_mic_redirect_device();
       }
-      session.mic.speaker.reset();
       session.mic.decoder.reset();
       session.mic.audio_ctrl.reset();
       BOOST_LOG(info) << "[mic] session end: recv="sv << session.mic.packets_received
@@ -2641,20 +2618,12 @@ namespace stream {
             }
           }
 
-          // Try Steam Streaming Microphone backend first
+          // Initialize Steam Streaming Microphone backend
           if (audio_ctrl->init_mic_redirect_device() != 0) {
-            // Fall back to VB-Cable via virtual_microphone()
-            auto spk = audio_ctrl->virtual_microphone(config::audio.mic_sink, 48000, 960);
-            if (!spk) {
-              BOOST_LOG(warning) << "[mic] both Steam mic and VB-Cable backends failed"sv;
-              return false;
-            }
-            session.mic.speaker = std::move(spk);
-            BOOST_LOG(info) << "[mic] using VB-Cable fallback → "sv << config::audio.mic_sink;
-          } else {
-            BOOST_LOG(info) << "[mic] using Steam Streaming Microphone backend"sv;
-            // speaker stays null — write_mic_pcm goes directly to audio_ctrl
+            BOOST_LOG(warning) << "[mic] Steam Streaming Microphone unavailable — passthrough disabled"sv;
+            return false;
           }
+          BOOST_LOG(info) << "[mic] using Steam Streaming Microphone backend"sv;
 
           int err = OPUS_OK;
           auto *dec = opus_decoder_create(48000, 1, &err);
@@ -2691,12 +2660,10 @@ namespace stream {
 
         try {
           if (!init_mic()) {
-            session.mic.speaker.reset();
             session.mic.decoder.reset();
           }
         } catch (...) {
           BOOST_LOG(error) << "[mic] init threw exception — mic disabled"sv;
-          session.mic.speaker.reset();
           session.mic.decoder.reset();
         }
       }

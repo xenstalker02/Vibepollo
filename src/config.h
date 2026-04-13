@@ -189,12 +189,11 @@ namespace config {
   struct audio_t {
     std::string sink;
     std::string virtual_sink;
-    std::string mic_sink;  ///< Device name for upstream mic passthrough output (e.g. "CABLE Input")
-    std::string mic_capture_device;  ///< Capture device to set as Windows default input during mic passthrough (e.g. "CABLE Output")
+    std::string mic_sink;  ///< Render endpoint name for mic passthrough (Steam Streaming Microphone)
+    std::string mic_capture_device;  ///< Capture device switched to as Windows default input at session start
     int mic_buffer_ms;  ///< WASAPI render buffer duration in ms for mic passthrough (default 50, range 10-200)
     int mic_buffer_packets;  ///< Jitter buffer prebuffer depth in Opus packets (default 1, range 1-16)
     bool stream;
-    bool install_vbcable;  ///< Auto-install VB-Audio CABLE if not present
     bool keep_default;
     bool auto_capture;
   };

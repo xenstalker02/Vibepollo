@@ -601,17 +601,15 @@
     "legacy_ordering_desc": "Enable ordering support workaround for legacy clients. Can cause issues with clients or scripts that can't handle UTF8 correctly. Artemis clients support this by default.",
     "mic_section_title": "Mic Passthrough",
     "mic_sink": "Mic Passthrough Sink",
-    "mic_sink_desc": "VB-Cable fallback endpoint (used when Steam Streaming Microphone is unavailable). Default: CABLE Input (VB-Audio Virtual Cable). Vibepollo uses Steam Streaming Microphone automatically when Steam is running. Discord (set to Default) picks up the client mic without any manual configuration.",
-    "mic_sink_placeholder": "CABLE Input",
+    "mic_sink_desc": "Steam Streaming Microphone render endpoint. Vibepollo writes decoded Opus audio here. Default: Speakers (Steam Streaming Microphone). Leave at the default value unless the device name differs on your system.",
+    "mic_sink_placeholder": "Speakers (Steam Streaming Microphone)",
     "mic_capture_device": "Mic Capture Device",
-    "mic_capture_device_desc": "Windows capture endpoint to set as the default microphone at session start. Set to the output side of VB-Audio CABLE (e.g. \"CABLE Output (VB-Audio Virtual Cable)\") so that apps like Discord automatically pick up the client mic. Vibepollo re-applies this switch at +2s, +5s, +10s, and +20s after session start to catch games that cache the audio device at launch. If your game still does not detect the mic, select CABLE Output directly in the game's audio settings. For Steam Streaming Microphone: set to Microphone (Steam Streaming Microphone).",
-    "mic_capture_device_placeholder": "CABLE Output (VB-Audio Virtual Cable)",
+    "mic_capture_device_desc": "Windows capture endpoint switched to as the default microphone at session start, so apps like Discord (set to Default) automatically pick up the client mic. Vibepollo re-applies this switch at +2s, +5s, +10s, and +20s after session start to catch games that cache the audio device at launch. Default: Microphone (Steam Streaming Microphone).",
+    "mic_capture_device_placeholder": "Microphone (Steam Streaming Microphone)",
     "mic_buffer_ms": "Mic Render Buffer (ms)",
     "mic_buffer_ms_desc": "WASAPI render buffer duration in milliseconds (default: 50, range 10–200). Increase if you hear mic audio glitches. Lower values reduce latency.",
     "mic_buffer_packets": "Mic Jitter Buffer Depth",
     "mic_buffer_packets_desc": "Number of Opus packets to prebuffer before mic playback starts (default: 2 = 40ms). Increase to 3-4 on unstable Wi-Fi. Lower = less latency before first word, higher = smoother delivery.",
-    "install_vbcable": "Auto-install VB-Audio CABLE",
-    "install_vbcable_desc": "Automatically download and install VB-Audio Virtual Cable. Required for mic passthrough — CABLE Input is the render target and CABLE Output is the capture device switched to at session start."
   },
   "index": {
     "description": "Vibepollo is a self-hosted game stream host for Moonlight.",
@@ -1196,5 +1194,5 @@
     "noticeTitle": "RTSS recommended",
     "noticeCopy": "RTSS offers the most stable frame pacing. Vibepollo will use it automatically when available; NVIDIA's limiter is not recommended because it cannot guarantee perfect frame pacing."
   },
-  "mic_section_desc": "Streams your microphone from the Deck to your PC via Steam Streaming Microphone. VB-Audio Virtual Cable is used as an automatic fallback if Steam is unavailable."
+  "mic_section_desc": "Streams your microphone from the Deck to your PC via Steam Streaming Microphone. Steam must be running on the PC for the audio endpoint to be present."
 }

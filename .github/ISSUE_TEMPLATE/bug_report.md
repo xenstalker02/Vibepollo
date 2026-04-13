@@ -30,8 +30,6 @@ What actually happened.
 - **GPU:** (e.g., NVIDIA RTX 4070)
 - **Vibepollo version/commit:**
 - **Client:** (e.g., Vibelight on Steam Deck, Moonlight on Android)
-- **VB-Cable installed:** Yes / No
-
 ## Logs
 
 Paste relevant log lines from `%PROGRAMDATA%\Vibepollo\config\logs\` (remove any personal information).

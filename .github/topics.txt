@@ -1,1 +1,1 @@
-game-streaming, moonlight, sunshine, apollo, steam-deck, mic-passthrough, wasapi, opus, steam-streaming-microphone, vb-cable, windows
+game-streaming, moonlight, sunshine, apollo, steam-deck, mic-passthrough, wasapi, opus, steam-streaming-microphone, windows

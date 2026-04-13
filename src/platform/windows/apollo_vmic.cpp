@@ -36,7 +36,7 @@ namespace platf::audio {
     if (!missing_driver_logged) {
       missing_driver_logged = true;
       BOOST_LOG(warning) << "[mic] Steam Streaming Microphone render endpoint not found — "
-                            "is Steam running on this machine? Falling back to VB-Cable."sv;
+                            "is Steam running on this machine? Mic passthrough disabled."sv;
     }
   }
 

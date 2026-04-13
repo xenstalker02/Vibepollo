@@ -527,24 +527,6 @@ namespace platf {
     virtual ~mic_t() = default;
   };
 
-  /**
-   * @brief Abstract interface for writing PCM audio to an output device.
-   * Used for upstream mic passthrough: decoded client mic audio is pushed
-   * into a virtual audio device (e.g. VB-Audio CABLE Input) on the host.
-   */
-  class speaker_t {
-  public:
-    /**
-     * @brief Write interleaved float PCM samples to the output device.
-     * @param samples Pointer to interleaved float samples (all channels).
-     * @param frame_count Number of frames (samples / channel_count).
-     * @return 0 on success, -1 on unrecoverable error.
-     */
-    virtual int write(const float *samples, std::uint32_t frame_count) = 0;
-
-    virtual ~speaker_t() = default;
-  };
-
   struct capture_snapshot_t {
     std::wstring console_id;
     std::wstring comms_id;
@@ -556,8 +538,6 @@ namespace platf {
     virtual int set_sink(const std::string &sink) = 0;
 
     virtual std::unique_ptr<mic_t> microphone(const std::uint8_t *mapping, int channels, std::uint32_t sample_rate, std::uint32_t frame_size) = 0;
-
-    virtual std::unique_ptr<speaker_t> virtual_microphone(const std::string &device_name, std::uint32_t sample_rate, std::uint32_t frame_size) = 0;
 
     virtual capture_snapshot_t snapshot_capture_defaults() { return {}; }
 

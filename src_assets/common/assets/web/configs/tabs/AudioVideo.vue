@@ -234,10 +234,6 @@ function selectVirtualDisplayLayout(v: unknown) {
               v-model="config.mic_buffer_packets"
             />
 
-            <ConfigFieldRenderer
-              setting-key="install_vbcable"
-              v-model="config.install_vbcable"
-            />
           </div>
         </div>
       </template>

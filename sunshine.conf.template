@@ -25,35 +25,27 @@
 
 # ---- Mic Passthrough (Vibepollo-specific) ----
 
-# Fallback device if Steam Streaming Mic not detected.
-# This is the WASAPI render endpoint where decoded client mic audio is written.
-# Leave empty (default) to auto-detect Steam Streaming Microphone (recommended).
-# Set to "CABLE Input" only as a VB-Cable fallback if Steam is not installed.
-# mic_sink = CABLE Input
+# Steam Streaming Microphone render endpoint.
+# Vibepollo writes decoded Opus audio here. Steam must be running for this endpoint to exist.
+# mic_sink = Speakers (Steam Streaming Microphone)
 
-# Capture device to set as Windows default input during mic passthrough.
-# This should be the recording side of the virtual cable so that host apps
-# (Discord, etc.) pick up the client's mic audio.
-# For VB-Cable, use "CABLE Output (VB-Audio Virtual Cable)".
-# mic_capture_device = CABLE Output (VB-Audio Virtual Cable)
+# Windows capture device switched to as default microphone at session start.
+# Discord (set to Default) picks up the client mic automatically.
+# mic_capture_device = Microphone (Steam Streaming Microphone)
 
 # WASAPI render buffer duration in ms for mic passthrough.
 # Lower values reduce latency, higher values reduce underruns.
-# Range: 10-200, default: 30
-# mic_buffer_ms = 30
+# Range: 10-200, default: 50
+# mic_buffer_ms = 50
 
-# Priority: Steam Streaming Microphone is always tried first (primary).
-# mic_sink is only used as fallback when Steam Streaming Mic is not found.
-# No additional configuration is needed when Steam is installed.
+# Jitter buffer prebuffer depth in Opus packets (default 2 = 40ms).
+# mic_buffer_packets = 2
 
 # Automatically switch audio capture device when stream starts.
 # auto_capture_sink = enabled
 
 # Enable or disable audio streaming entirely.
 # stream_audio = enabled
-
-# Install VB-Cable virtual audio driver if not already present.
-# install_vbcable = enabled
 
 # ---- Network ----
 

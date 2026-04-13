@@ -494,18 +494,6 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  // Startup safety: if CABLE Output is the Windows default input (from a
-  // crashed session), reset it to the first real microphone now.
-  {
-    auto startup_audio = platf::audio_control();
-    if (startup_audio) {
-      auto def_name = startup_audio->get_current_default_capture_name();
-      if (!def_name.empty() && def_name.find("CABLE") != std::string::npos) {
-        BOOST_LOG(warning) << "Startup: CABLE Output is default input from crashed session — restoring first real capture device";
-        startup_audio->reset_default_capture_to_first_real();
-      }
-    }
-  }
 #endif
 
   reed_solomon_init();

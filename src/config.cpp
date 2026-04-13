@@ -814,12 +814,11 @@ namespace config {
   audio_t audio {
     {},  // audio_sink
     {},  // virtual_sink
-    "CABLE Input",  // mic_sink
-    "CABLE Output (VB-Audio Virtual Cable)",  // mic_capture_device
+    "Speakers (Steam Streaming Microphone)",  // mic_sink
+    "Microphone (Steam Streaming Microphone)",  // mic_capture_device
     50,  // mic_buffer_ms
     2,   // mic_buffer_packets (default 2 = 40ms prebuffer; smooths packet delivery jitter)
     true,  // stream audio
-    true,  // install_vbcable
     true,  // keep_sink_default
     true,  // auto_capture
   };
@@ -1682,7 +1681,6 @@ namespace config {
     int_between_f(vars, "mic_buffer_ms", audio.mic_buffer_ms, {10, 200});
     int_between_f(vars, "mic_buffer_packets", audio.mic_buffer_packets, {1, 16});
     bool_f(vars, "stream_audio", audio.stream);
-    bool_f(vars, "install_vbcable", audio.install_vbcable);
     bool_f(vars, "keep_sink_default", audio.keep_default);
     bool_f(vars, "auto_capture_sink", audio.auto_capture);
 

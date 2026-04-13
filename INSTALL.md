@@ -4,7 +4,7 @@
 
 - **Windows 10 or 11** (64-bit)
 - **NVIDIA GPU** recommended (NVENC hardware encoding); AMD and Intel GPUs also supported
-- **Steam** running on the PC (provides the Steam Streaming Microphone virtual audio device used for mic passthrough). VB-Audio Virtual Cable is installed as an automatic fallback.
+- **Steam** running on the PC (provides the Steam Streaming Microphone virtual audio device used for mic passthrough)
 - A [Vibelight](https://github.com/xenstalker02/Vibelight) client on your Steam Deck
 
 ## Download and Run
@@ -15,10 +15,9 @@
 
 ## Mic Passthrough Setup
 
-Vibepollo uses **Steam Streaming Microphone** as the primary mic backend — no
-third-party driver required. Steam's audio driver (installed with Steam) provides
-the virtual microphone endpoint. VB-Audio Virtual Cable is installed automatically
-as a fallback in case Steam is unavailable.
+Vibepollo uses **Steam Streaming Microphone** as the mic backend — no third-party
+driver required. Steam's audio driver (installed with Steam) provides the virtual
+microphone endpoint. Steam must be running on the PC when you stream.
 
 No manual audio device setup is required. At session start, Vibepollo switches the
 Windows default capture device to Microphone (Steam Streaming Microphone), and

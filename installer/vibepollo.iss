@@ -94,12 +94,8 @@ Source: "..\src_assets\windows\drivers\sudovda\uninstall.bat";DestDir: "{app}\dr
 ; Playnite plugin
 Source: "..\plugins\playnite\SunshinePlaynite\*"; DestDir: "{app}\plugins\SunshinePlaynite"; Flags: ignoreversion recursesubdirs createallsubdirs
 
-; VB-Audio CABLE driver (bundled for auto-install)
-Source: "..\src_assets\windows\drivers\vbcable\*"; DestDir: "{app}\drivers\vbcable"; Flags: ignoreversion recursesubdirs
-
 ; Installer helpers
 Source: "setup-task.ps1";    DestDir: "{app}"; Flags: ignoreversion
-Source: "setup-vbcable.ps1"; DestDir: "{app}"; Flags: ignoreversion
 
 ; Default config (only install if no existing config)
 Source: "sunshine_default.conf"; DestDir: "{app}\config"; DestName: "sunshine.conf"; Flags: onlyifdoesntexist uninsneveruninstall
@@ -117,9 +113,6 @@ Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""Vibepollo U
 
 ; Register Task Scheduler autostart (30s delay, HIGHEST privilege)
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NonInteractive -File ""{app}\setup-task.ps1"" -AppPath ""{app}"""; Flags: runhidden; StatusMsg: "Registering autostart task..."
-
-; VB-Audio Virtual Cable (required for mic passthrough)
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NonInteractive -File ""{app}\setup-vbcable.ps1"" -AppPath ""{app}"""; Flags: runhidden; StatusMsg: "Installing VB-Audio Virtual Cable for mic passthrough..."
 
 ; First-run: launch Vibepollo then open web UI
 Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent; Description: "Launch {#MyAppName}"; Parameters: "--cwd-required"

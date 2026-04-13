@@ -104,7 +104,7 @@
           <p class="text-xs opacity-70 leading-snug mt-1">
             {{
               $t('troubleshooting.mic_passthrough_desc') ||
-              'Mic passthrough is active when a client with mic enabled connects. Decoded audio is written to CABLE Input (VB-Audio Virtual Cable). Windows routes it to CABLE Output; Discord (set to Default) picks it up automatically.'
+              'Mic passthrough is active when a client with mic enabled connects. Decoded audio is written to Steam Streaming Microphone. Discord (set to Default) picks it up automatically.'
             }}
           </p>
         </div>

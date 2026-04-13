@@ -7,7 +7,7 @@ Adds bidirectional mic passthrough from Moonlight/Vibelight client (Steam Deck) 
 via Steam Streaming Microphone. Satisfies ClassicOldSong's stated requirements:
 
 ✅ **Encrypted mic stream** — mic data rides the AES-GCM encrypted control stream (SS_ENC_CONTROL_V2); plaintext mic is refused
-✅ **Steam Streaming Microphone** — no VB-Cable required; auto-installs from local Steam
+✅ **Steam Streaming Microphone** — no third-party driver required; uses Steam's audio driver
 ✅ **Per-session decoder** — concurrent session safe (no shared global state)
 ✅ **IP+port routing** — N/A to our 0x3003 approach (session context passed directly from control stream handler)
 
@@ -16,12 +16,12 @@ via Steam Streaming Microphone. Satisfies ClassicOldSong's stated requirements:
 - **Encryption**: mic data is AES-GCM encrypted as part of SS_ENC_CONTROL_V2; unencrypted sessions refused
 - **Codec**: Opus 64 kbps, VBR, complexity 10, FEC enabled, DTX disabled, 20ms frames
 - **Client capture**: SDL2 at 48kHz, deadline-based 20ms pacer with re-sync guard, 12-frame buffer cap
-- **Server render**: WASAPI to Steam Streaming Microphone (primary) or VB-Cable (fallback)
+- **Server render**: WASAPI to Steam Streaming Microphone
 - **Config options**: mic_sink, mic_capture_device, mic_buffer_ms, mic_buffer_packets in sunshine.conf
 
 ## Files Changed
 - `src/stream.cpp` -- 0x3003 packet handler, mic render thread lifecycle
-- `src/platform/windows/audio.cpp` -- WASAPI render, Steam mic 3-field matching, VB-Cable fallback
+- `src/platform/windows/audio.cpp` -- WASAPI render, Steam mic 3-field matching
 - `src/config.h` / `src/config.cpp` -- mic configuration options
 - `sunshine.conf.template` -- documented configuration reference
 
