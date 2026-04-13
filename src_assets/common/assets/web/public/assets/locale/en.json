@@ -541,7 +541,7 @@
     "vaapi_strict_rc_buffer_desc": "Enabling this option can avoid dropped frames over the network during scene changes, but video quality may be reduced during motion.",
     "virtual_sink": "Virtual Sink",
     "virtual_sink_desc": "Manually specify a virtual audio device to use. If unset, the device is chosen automatically. We strongly recommend leaving this field blank to use automatic device selection!",
-    "virtual_sink_placeholder": "CABLE Input",
+    "virtual_sink_placeholder": "Virtual Audio Device",
     "vt_coder": "VideoToolbox Coder",
     "vt_realtime": "VideoToolbox Realtime Encoding",
     "vt_software": "VideoToolbox Software Encoding",
@@ -610,6 +610,7 @@
     "mic_buffer_ms_desc": "WASAPI render buffer duration in milliseconds (default: 50, range 10–200). Increase if you hear mic audio glitches. Lower values reduce latency.",
     "mic_buffer_packets": "Mic Jitter Buffer Depth",
     "mic_buffer_packets_desc": "Number of Opus packets to prebuffer before mic playback starts (default: 2 = 40ms). Increase to 3-4 on unstable Wi-Fi. Lower = less latency before first word, higher = smoother delivery.",
+    "mic_section_desc": "Streams your microphone from the Deck to your PC via Steam Streaming Microphone. Steam must be running on the PC for the audio endpoint to be present."
   },
   "index": {
     "description": "Vibepollo is a self-hosted game stream host for Moonlight.",
@@ -1193,6 +1194,5 @@
     },
     "noticeTitle": "RTSS recommended",
     "noticeCopy": "RTSS offers the most stable frame pacing. Vibepollo will use it automatically when available; NVIDIA's limiter is not recommended because it cannot guarantee perfect frame pacing."
-  },
-  "mic_section_desc": "Streams your microphone from the Deck to your PC via Steam Streaming Microphone. Steam must be running on the PC for the audio endpoint to be present."
+  }
 }

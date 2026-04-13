@@ -1342,7 +1342,7 @@ namespace stream {
       auto &mic = session->mic;
       mic.packets_received++;
 
-      // (Underrun detection for VB-Cable path removed — Steam mic path handles gaps natively)
+      // Steam mic path handles underruns natively via jitter buffer
       mic.last_recv_time = recv_time;
 
       // Insert into jitter buffer
