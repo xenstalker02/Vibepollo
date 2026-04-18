@@ -8,13 +8,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Check Nonary/vibepollo upstream
         run: |
           git remote add nonary https://github.com/Nonary/vibepollo.git 2>/dev/null || true
-          git fetch nonary main --no-tags 2>/dev/null || git fetch nonary master --no-tags
-          LOCAL=$(git rev-parse HEAD)
-          UPSTREAM=$(git rev-parse nonary/main 2>/dev/null || git rev-parse nonary/master)
-          BEHIND=$(git rev-list --count HEAD..${UPSTREAM} 2>/dev/null || echo 0)
+          git fetch nonary master --no-tags
+          UPSTREAM=$(git rev-parse nonary/master)
+          BEHIND=$(git rev-list --count HEAD..nonary/master)
           echo "NONARY_BEHIND=$BEHIND" >> $GITHUB_ENV
           echo "NONARY_COMMIT=$UPSTREAM" >> $GITHUB_ENV
       - name: Check ClassicOldSong/Apollo upstream
