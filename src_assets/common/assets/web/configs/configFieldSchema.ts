@@ -63,6 +63,13 @@ function inferDurationUnit(key: string): ConfigFieldDefinition['durationUnit'] |
   return undefined;
 }
 
+function kindSampleValue(ctx: ConfigFieldSchemaContext): unknown {
+  // Anchor known config fields to their default type so the rendered control
+  // does not change while the user edits the value.
+  if (ctx.defaultValue !== undefined) return ctx.defaultValue;
+  return ctx.currentValue;
+}
+
 function isBooleanLike(value: unknown): boolean {
   if (value === true || value === false) return true;
   if (value === 1 || value === 0) return true;
@@ -149,10 +156,11 @@ export function getConfigFieldDefinition(
     };
   }
 
+  const sampleValue = kindSampleValue(ctx);
+
   if (
     Object.prototype.hasOwnProperty.call(NUMBER_FIELD_OVERRIDES, key) ||
-    isFiniteNumber(ctx.currentValue) ||
-    isFiniteNumber(ctx.defaultValue)
+    isFiniteNumber(sampleValue)
   ) {
     return {
       kind: 'number',
@@ -161,7 +169,7 @@ export function getConfigFieldDefinition(
     };
   }
 
-  if (isBooleanLike(ctx.currentValue) || isBooleanLike(ctx.defaultValue)) {
+  if (isBooleanLike(sampleValue)) {
     return {
       kind: 'checkbox',
       localePrefix: 'config',

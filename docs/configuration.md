@@ -1991,6 +1991,36 @@ editing the `conf` file in a text editor. Use the examples as reference.
     </tr>
 </table>
 
+### video_max_batch_size_kb
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Maximum size in KiB for each outgoing video send batch.
+            The default is 64 KiB.
+            Lower values can improve stream stability on cheaper switches, routers, and Wi-Fi hardware by reducing burst size,
+            but at the cost of less than 1 ms of additional host-side delay.
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            64
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Choices</td>
+        <td colspan="2">16, 32, 64</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            video_max_batch_size_kb = 32
+            @endcode</td>
+    </tr>
+</table>
+
 ## Config Files
 
 ### file_apps
@@ -2099,7 +2129,7 @@ editing the `conf` file in a text editor. Use the examples as reference.
         <td colspan="2">
             Determines where Sunshine stores log sessions. When this value points to a file (the default),
             Sunshine keeps a rolling <code>logs</code> folder next to that file and keeps the last 30 sessions,
-            each with up to 10 rollovers for files that grow beyond ~2MB. Pointing to a directory stores the
+            each capped at about 10 MiB by rolling ~2MB log files. Pointing to a directory stores the
             <code>logs</code> folder at the specified location.
         </td>
     </tr>
@@ -2870,7 +2900,7 @@ They appear in the Frame Limiter section of the settings UI.
     </tr>
 </table>
 
-### nvenc_force_split_encode
+### nvenc_split_encode
 
 <table>
     <tr>
@@ -2901,7 +2931,7 @@ They appear in the Frame Limiter section of the settings UI.
     <tr>
         <td>Example</td>
         <td colspan="2">@code{}
-            nvenc_force_split_encode = enabled
+            nvenc_split_encode = enabled
             @endcode</td>
     </tr>
 </table>

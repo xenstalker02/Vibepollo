@@ -355,6 +355,7 @@ namespace platf {
     std::int32_t row_pitch {};
 
     std::optional<std::chrono::steady_clock::time_point> frame_timestamp;
+    std::optional<std::chrono::steady_clock::time_point> host_processing_timestamp;
 
     virtual ~img_t() = default;
   };
@@ -576,6 +577,12 @@ namespace platf {
      * @return 0 on success, -1 on unrecoverable render error.
      */
     virtual int write_mic_pcm(const float * /*samples*/, std::uint32_t /*count*/) { return -1; }
+
+    /**
+     * @brief Resets the default audio device away from virtual streaming speakers.
+     * If no valid device is available, waits for one to appear before giving up.
+     */
+    virtual void reset_default_device() {}
 
     virtual ~audio_control_t() = default;
   };

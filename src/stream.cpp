@@ -1756,14 +1756,14 @@ namespace stream {
         frame_header.lastPayloadLen = session->config.packetsize - sizeof(NV_VIDEO_PACKET);
       }
 
-      const auto latency_timestamp = packet->capture_timestamp ? packet->capture_timestamp : packet->frame_timestamp;
-      if (latency_timestamp) {
+      auto host_processing_timestamp = packet->host_processing_timestamp ? packet->host_processing_timestamp : packet->frame_timestamp;
+      if (host_processing_timestamp) {
         auto duration_to_latency = [](const std::chrono::steady_clock::duration &duration) {
           const auto duration_us = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
           return (uint16_t) std::clamp<decltype(duration_us)>((duration_us + 50) / 100, 0, std::numeric_limits<uint16_t>::max());
         };
 
-        uint16_t latency = duration_to_latency(std::chrono::steady_clock::now() - *latency_timestamp);
+        uint16_t latency = duration_to_latency(std::chrono::steady_clock::now() - *host_processing_timestamp);
         frame_header.frame_processing_latency = latency;
         frame_processing_latency_logger.collect_and_log(latency / 10.);
       } else {
@@ -1839,7 +1839,10 @@ namespace stream {
         // On Windows, batches above 64K seem to bypass SO_SNDBUF regardless of its size,
         // appear in "Other I/O" and begin waiting for interrupts.
         // This gives inconsistent performance so we'd rather avoid it.
-        size_t send_batch_size = 64 * 1024 / blocksize;
+        size_t max_batch_size_bytes = 64 * 1024;
+        max_batch_size_bytes = std::min<size_t>(max_batch_size_bytes, (size_t) config::stream.video_max_batch_size_kb * 1024);
+
+        size_t send_batch_size = std::max<size_t>(1, max_batch_size_bytes / blocksize);
         // Also don't exceed 64 packets, which can happen when Moonlight requests
         // unusually small packet size.
         // Generic Segmentation Offload on Linux can't do more than 64.
@@ -1945,15 +1948,11 @@ namespace stream {
 
             if (x - next_shard_to_send + 1 >= send_batch_size ||
                 x + 1 == shards.size()) {
-              size_t current_batch_size = x - next_shard_to_send + 1;
-
               // Do pacing within the frame.
               // Also trigger pacing before the first send_batch() of the frame
               // to account for the last send_batch() of the previous frame.
-              // Pause before a batch that would exceed the current pacing group
-              // budget so we don't emit two full batches back-to-back.
-              if (ratecontrol_frame_packets_sent == 0 ||
-                  ratecontrol_group_packets_sent + current_batch_size > ratecontrol_packets_in_1ms) {
+              if (ratecontrol_group_packets_sent >= ratecontrol_packets_in_1ms ||
+                  ratecontrol_frame_packets_sent == 0) {
                 auto due = ratecontrol_frame_start +
                            std::chrono::duration_cast<std::chrono::nanoseconds>(1ms) *
                              ratecontrol_frame_packets_sent / ratecontrol_packets_in_1ms;
@@ -1966,6 +1965,7 @@ namespace stream {
                 ratecontrol_group_packets_sent = 0;
               }
 
+              size_t current_batch_size = x - next_shard_to_send + 1;
               batch_info.block_offset = next_shard_to_send;
               batch_info.block_count = current_batch_size;
 
@@ -2487,11 +2487,15 @@ namespace stream {
         // Only revert on disconnect when explicitly enabled by config.
         bool revert_display_config {config::video.dd.config_revert_on_disconnect};
 
+        const bool webrtc_active = webrtc_stream::has_active_sessions();
+        if (!webrtc_active) {
+          proc::proc.pause();
+        }
         // Poll for up to 2 seconds to let the game process finish exiting before
         // deciding paused vs stopped. Fixes the race where the user quits the game
         // and immediately hits the disconnect combo — the process is still alive for
         // a brief moment during teardown and would otherwise always show "paused".
-        bool is_paused = proc::proc.running();
+        bool is_paused = proc::proc.running() > 0;
         if (is_paused) {
           const auto poll_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
           while (proc::proc.running() && std::chrono::steady_clock::now() < poll_deadline) {
@@ -2513,8 +2517,6 @@ namespace stream {
           system_tray::update_tray_stopped(proc::proc.get_last_run_app_name());
         }
 #endif
-
-        const bool webrtc_active = webrtc_stream::has_active_sessions();
         const int paused_timeout_secs = std::max(0, config::video.dd.paused_virtual_display_timeout_secs);
 
         const bool skip_teardown_due_to_pause = is_paused && !revert_display_config;
