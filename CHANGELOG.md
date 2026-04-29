@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.15.4] — 2026-04-28
+
+### Changed
+- **VB-Cable fallback removed** — Steam Streaming Microphone is now the sole mic
+  backend. VB-Audio Virtual Cable is no longer required or supported. Mic passthrough
+  works out of the box via the Steam audio driver with no third-party software.
+- **Web UI cleaned up** — all VB-Cable references removed from settings UI and locale
+  strings. `mic_sink` placeholder updated to `Speakers (Steam Streaming Microphone)`.
+
+### Merged
+- Upstream Nonary/vibepollo 1.15.1-stable.1 (484bacaf): prep-cmd env-var fix,
+  playnite autosynced entry dedup, tray service relaunch fix, steam audio restore fix,
+  stream capture wait latency fix, playnite game focus fix, display SudoVDA watchdog fix,
+  tray lifecycle serialization, nvenc runtime API fix, playnite focus target fix.
+
+### Fixed (CI)
+- Upstream-check workflow: `fetch-depth: 0` + `issues: write` permission added so
+  weekly upstream diff runs correctly and can open GitHub issues.
+
 ## [1.15.3] — 2026-04-01
 
 ### Fixed (2026-04-01)
