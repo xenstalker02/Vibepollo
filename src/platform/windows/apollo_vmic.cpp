@@ -4,7 +4,9 @@
  */
 
 #include "apollo_vmic.h"
+#include "src/config.h"
 #include "src/logging.h"
+#include "src/platform/common.h"
 
 using namespace std::literals;
 
@@ -12,11 +14,23 @@ namespace platf::audio {
 
   int apollo_vmic_t::init() {
     auto backend = std::make_unique<mic_write_wasapi_t>();
-    backend->autodetect_patterns = {
-      L"Steam Streaming Microphone",
-      L"Speakers (Steam Streaming Microphone)",
-    };
-    backend->requested_device_name = "Steam Streaming Microphone";
+
+    // If mic_sink is configured, use it as the primary search pattern so
+    // find_target_device honours the user's explicit render endpoint choice.
+    // Fall back to well-known Steam Streaming Microphone names if mic_sink
+    // is empty or doesn't match any device.
+    std::vector<std::wstring> patterns;
+    if (!config::audio.mic_sink.empty()) {
+      patterns.push_back(platf::from_utf8(config::audio.mic_sink));
+      backend->requested_device_name = config::audio.mic_sink;
+    } else {
+      backend->requested_device_name = "Steam Streaming Microphone";
+    }
+    // Always include the canonical fallback names so the backend can
+    // auto-discover the device even when mic_sink uses a shorter alias.
+    patterns.push_back(L"Steam Streaming Microphone");
+    patterns.push_back(L"Speakers (Steam Streaming Microphone)");
+    backend->autodetect_patterns = std::move(patterns);
 
     if (backend->init() != 0) {
       log_missing_driver_once();

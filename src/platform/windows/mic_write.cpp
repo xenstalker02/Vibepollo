@@ -22,6 +22,7 @@
 // Must come after mmdeviceapi.h
 #include "PolicyConfig.h"
 #include "misc.h"
+#include "src/config.h"
 #include "src/logging.h"
 #include "src/platform/common.h"
 
@@ -286,10 +287,14 @@ namespace platf::audio {
     }
     audio_client.reset(raw_client);
 
-    // Use IEEE_FLOAT for WASAPI render stream (after PCM SetDeviceFormat above)
+    // Use IEEE_FLOAT for WASAPI render stream (after PCM SetDeviceFormat above).
+    // Buffer duration in REFERENCE_TIME (100-nanosecond units): ms * 10000.
+    // Uses mic_buffer_ms from config (default 50ms). Previously hardcoded to 100ms.
+    const REFERENCE_TIME buffer_duration =
+      static_cast<REFERENCE_TIME>(config::audio.mic_buffer_ms) * 10000LL;
     auto render_fmt = make_required_steam_mic_render_waveformat();
     hr = audio_client->Initialize(AUDCLNT_SHAREMODE_SHARED,
-      AUDCLNT_STREAMFLAGS_EVENTCALLBACK, 1000000LL, 0,
+      AUDCLNT_STREAMFLAGS_EVENTCALLBACK, buffer_duration, 0,
       reinterpret_cast<WAVEFORMATEX *>(&render_fmt), nullptr);
     if (FAILED(hr)) {
       BOOST_LOG(warning) << "[mic] initialize_device: Initialize failed 0x"sv

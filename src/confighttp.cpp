@@ -4049,6 +4049,7 @@ namespace confighttp {
    * @api_examples{/api/auth/login| POST| {"username": "admin", "password": "password"}}
    */
   void loginUser(resp_https_t response, req_https_t request) {
+    if (!checkIPOrigin(response, request)) return;
     print_req(request);
 
     std::stringstream ss;
@@ -4088,6 +4089,7 @@ namespace confighttp {
   }
 
   void refreshSession(resp_https_t response, req_https_t request) {
+    if (!checkIPOrigin(response, request)) return;
     print_req(request);
 
     std::string refresh_token;
@@ -4132,6 +4134,7 @@ namespace confighttp {
    * @api_examples{/api/auth/logout| POST| null}
    */
   void logoutUser(resp_https_t response, req_https_t request) {
+    if (!checkIPOrigin(response, request)) return;
     print_req(request);
 
     std::string session_token;
