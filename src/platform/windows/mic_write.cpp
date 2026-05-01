@@ -330,9 +330,14 @@ namespace platf::audio {
     BOOST_LOG(info) << "[mic] WASAPI init / render target: "sv << target_device_name
                     << " buf="sv << buffer_frame_count << " frames"sv;
 
-    stop_render_thread.store(false);
-    render_dead.store(false);
-    render_thread = std::thread(&mic_write_wasapi_t::render_loop, this);
+    // Only spawn the render thread on first init. When called from render_loop's
+    // WASAPI re-init path, render_thread is joinable (we ARE the thread).
+    // Assigning over a joinable std::thread calls std::terminate() — guard against that.
+    if (!render_thread.joinable()) {
+      stop_render_thread.store(false);
+      render_dead.store(false);
+      render_thread = std::thread(&mic_write_wasapi_t::render_loop, this);
+    }
     return true;
   }
 

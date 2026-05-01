@@ -502,10 +502,24 @@ namespace stream {
       bool capture_switched = false;
 
       // Kept alive across the session to avoid re-running audio_control() on teardown.
-      std::unique_ptr<platf::audio_control_t> audio_ctrl;
+      // Shared pointer so the capture-reapply detached thread can hold a reference
+      // past session teardown without use-after-free.
+      std::shared_ptr<platf::audio_control_t> audio_ctrl;
 
-      // Jitter buffer for reordering and FEC/PLC
-      std::map<std::uint16_t, mic_queued_packet_t> pending_packets;
+      // Cancel flag for the capture-reapply retry thread. Set to true on teardown
+      // so the thread exits early rather than retrying after session objects are gone.
+      std::shared_ptr<std::atomic<bool>> reapply_cancel;
+
+      // Jitter buffer for reordering and FEC/PLC.
+      // SeqOrder uses circular (modulo-65536) comparison so that the wraparound
+      // from seq 65535 → 0 doesn't cause begin() to return the newest packet.
+      // (int16_t)(a - b) < 0 is the standard RFC 1982 serial number comparator.
+      struct SeqOrder {
+        bool operator()(std::uint16_t a, std::uint16_t b) const {
+          return static_cast<std::int16_t>(a - b) < 0;
+        }
+      };
+      std::map<std::uint16_t, mic_queued_packet_t, SeqOrder> pending_packets;
       std::uint16_t expected_seq = 0;
       bool has_playout_cursor = false;
 
@@ -2441,6 +2455,14 @@ namespace stream {
       BOOST_LOG(debug) << "Resetting Input..."sv;
       input::reset(session.input);
 
+      // Cancel the capture-reapply retry thread so it doesn't access audio_ctrl
+      // after we reset it below. The detached thread holds shared ownership of
+      // audio_ctrl, so the object stays alive until the thread exits naturally.
+      if (session.mic.reapply_cancel) {
+        session.mic.reapply_cancel->store(true, std::memory_order_release);
+        session.mic.reapply_cancel.reset();
+      }
+
       // Restore default capture device if we switched it on session start
       if (session.mic.capture_switched && session.mic.audio_ctrl) {
         session.mic.audio_ctrl->restore_capture_from(session.mic.capture_snap);
@@ -2636,21 +2658,30 @@ namespace stream {
 
           session.mic.decoder.reset(dec);
           session.mic.channels = 1;
-          session.mic.audio_ctrl = std::move(audio_ctrl);
+          // Store as shared_ptr so the capture-reapply thread can co-own it safely.
+          session.mic.audio_ctrl = std::shared_ptr<platf::audio_control_t>(std::move(audio_ctrl));
 
           if (!config::audio.mic_capture_device.empty()) {
             session.mic.audio_ctrl->switch_capture_to(config::audio.mic_capture_device);
             session.mic.capture_snap = snap;
             session.mic.capture_switched = true;
-            std::thread([&session]() {
+
+            // Capture retry thread: re-applies the default capture device switch at
+            // increasing intervals because SteamOS/PipeWire may reset it asynchronously.
+            // Captures audio_ctrl by shared_ptr value and cancel by shared_ptr value —
+            // no reference to session, so session teardown cannot cause use-after-free.
+            auto cancel = std::make_shared<std::atomic<bool>>(false);
+            session.mic.reapply_cancel = cancel;
+            auto ctrl = session.mic.audio_ctrl;  // shared ownership
+            auto device = config::audio.mic_capture_device;
+            std::thread([cancel, ctrl, device]() {
               const int schedule[] = {2, 5, 10, 20};
               int prev = 0;
               for (int t : schedule) {
                 std::this_thread::sleep_for(std::chrono::seconds(t - prev));
                 prev = t;
-                if (!session.mic.capture_switched || !session.mic.audio_ctrl ||
-                    config::audio.mic_capture_device.empty()) break;
-                session.mic.audio_ctrl->switch_capture_to(config::audio.mic_capture_device);
+                if (cancel->load(std::memory_order_acquire) || device.empty()) break;
+                ctrl->switch_capture_to(device);
                 BOOST_LOG(info) << "[mic] capture re-apply at +"sv << t << "s"sv;
               }
             }).detach();
