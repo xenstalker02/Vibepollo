@@ -75,7 +75,7 @@ The following files contain personal or machine-specific data and must never be 
 - `build/config/apps.json` (personal app list)
 - `build/config/covers/` (personal cover images)
 - `build/config/credentials/` (TLS certificates and keys)
-- `fix_apps.ps1`, `cleanup_apollo.ps1`, `fix_firewall.ps1` (local automation scripts)
+- `fix_apps.ps1`, `cleanup_apollo.ps1`, `cleanup_vibepollo.ps1`, `fix_firewall.ps1` (local automation scripts)
 - `watchdog.vbs` (local watchdog script)
 - Any file containing IP addresses, passwords, MAC addresses, or hostnames
 
