@@ -160,6 +160,27 @@ int main(int argc, char *argv[]) {
     return 0;
   }
 
+#ifdef _WIN32
+  // Single-instance lock for the daemon. Without this, two sunshine.exe daemons
+  // (e.g. the Windows service plus a Task Scheduler at-logon launch) both register
+  // a tray icon under the same compile-time kTrayGuid. Each one's startup
+  // orphan-clear (Shell_NotifyIcon(NIM_DELETE, NIF_GUID) in third-party/tray)
+  // deletes the OTHER live process's icon — manifesting as an intermittently
+  // missing tray icon. CLI invocations (--restore-nvprefs-undo etc.) have
+  // already returned via config::parse above, so this only gates the daemon.
+  HANDLE single_instance_mutex = CreateMutexW(nullptr, FALSE, L"Global\\VibepolloSingleInstance");
+  if (single_instance_mutex == nullptr) {
+    return 1;  // logging not initialized yet — fail silently
+  }
+  if (GetLastError() == ERROR_ALREADY_EXISTS) {
+    CloseHandle(single_instance_mutex);
+    return 0;  // another daemon owns the tray; defer to it
+  }
+  auto single_instance_guard = util::fail_guard([single_instance_mutex]() {
+    CloseHandle(single_instance_mutex);
+  });
+#endif
+
   auto log_deinit_guard = logging::init(config::sunshine.min_log_level, config::sunshine.log_file);
   if (!log_deinit_guard) {
     BOOST_LOG(error) << "Logging failed to initialize"sv;
