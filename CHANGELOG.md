@@ -1,5 +1,47 @@
 # Changelog
 
+## [1.15.5] — 2026-04-30
+
+### Fixed
+- **Two pre-existing compile errors resolved** — `platf::from_utf8` was called in
+  `vibepollo_vmic.cpp` without including the header that declares it (`misc.h`);
+  added the missing include. `SeqOrder` comparator struct was defined inside an
+  anonymous struct member of `session_t`, making it inaccessible from lambdas at
+  namespace scope; extracted and renamed to `mic_seq_order_t`, moved to
+  `namespace stream` before `session_t`. Both errors blocked all builds since
+  commit `3e29c293`.
+- **WiX installer ComponentRef mismatch** — `patch_custom_actions.wxs` referenced
+  `<ComponentRef Id="ApolloSvc"/>` but the component in `custom_actions.wxs` is
+  `Id="VibepollSvc"`. Corrected to `VibepollSvc`; this would have caused installer
+  builds to fail with an unresolved component reference.
+- **Web UI broken i18n keys** — `troubleshooting.html` used `restart_apollo*` and
+  `quit_apollo*` locale keys that were never defined in any locale file, causing
+  raw key strings to render in the UI. Remapped to existing `restart_sunshine*`
+  keys for the restart section; added new `stop_sunshine*` keys in `en.json` for
+  the quit/stop section.
+- **Default username artifact** — welcome.html pre-filled the new-user form with
+  `newUsername: 'apollo'`; changed to `'vibepollo'`.
+
+### Changed
+- **Complete apollo→vibepollo asset rename** — all icon, image, CSS, and SVG files
+  renamed from `apollo*` to `vibepollo*` (24 files) including root icons, tray
+  icons, web UI images (`logo-apollo-45.png`, `apollo.ico`, `apollo-locked.*`,
+  `apollo-playing.*`, `apollo-pausing.*`), and `assets/css/apollo.css`.
+- **cmake and installer references updated** — all cmake packaging files
+  (`linux.cmake`, `windows.cmake`, `windows_wix.cmake`, `targets/windows.cmake`),
+  `vibepollo.iss`, and `compile_definitions/windows.cmake` updated to reference
+  `vibepollo.*` icon assets.
+- **System tray icon macros updated** — `TRAY_ICON`, `TRAY_ICON_PLAYING`,
+  `TRAY_ICON_PAUSING`, `TRAY_ICON_LOCKED` macros and macOS logo paths in
+  `system_tray.cpp` updated from `apollo*` to `vibepollo*`.
+- **Tray menu "Open Apollo" → "Open Vibepollo"** — all three "Open Apollo"
+  occurrences in `system_tray.cpp` corrected.
+- **confighttp.cpp image routes updated** — `getApolloLogoImage` →
+  `getVibepolloLogoImage`; route regex updated; legacy aliases added for
+  `logo-apollo-45.png` and `logo-sunshine-45.png` backward compatibility.
+- **Web UI logo references** — `App.vue`, `Login.vue`, `login.html`, and
+  `welcome.html` updated from `logo-apollo-45.png` to `logo-vibepollo-45.png`.
+
 ## [1.15.4] — 2026-04-28
 
 ### Changed
