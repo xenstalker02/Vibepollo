@@ -34,9 +34,9 @@ file(GLOB NVPREFS_FILES CONFIGURE_DEPENDS
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/third-party/ViGEmClient/include")
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/third-party/sudovda")
 
-# apollo icon
+# vibepollo icon
 if(NOT DEFINED PROJECT_ICON_PATH)
-    set(PROJECT_ICON_PATH "${CMAKE_SOURCE_DIR}/apollo.ico")
+    set(PROJECT_ICON_PATH "${CMAKE_SOURCE_DIR}/vibepollo.ico")
 endif()
 
 list(APPEND SUNSHINE_DEFINITIONS PROJECT_APP_USER_MODEL_ID="${WINDOWS_APP_USER_MODEL_ID}")

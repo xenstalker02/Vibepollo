@@ -119,7 +119,7 @@ if(NOT EXISTS "${CMAKE_BINARY_DIR}/assets/shaders")
     execute_process(COMMAND cmd.exe /c mklink /J "${shaders_in_build_dest_native}" "${shaders_in_build_src_native}")
 endif()
 
-set(CPACK_PACKAGE_ICON "${CMAKE_SOURCE_DIR}\\\\apollo.ico")
+set(CPACK_PACKAGE_ICON "${CMAKE_SOURCE_DIR}\\\\vibepollo.ico")
 
 # The name of the directory that will be created in C:/Program Files/
 # Match the legacy NSIS layout by installing under Apollo

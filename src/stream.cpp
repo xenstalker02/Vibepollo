@@ -406,6 +406,15 @@ namespace stream {
     control_server_t control_server;
   };
 
+  // Comparator for the mic jitter buffer: circular (modulo-65536) comparison
+  // so that the wraparound from seq 65535 → 0 doesn't cause begin() to return
+  // the newest packet. (int16_t)(a - b) < 0 is the RFC 1982 serial comparator.
+  struct mic_seq_order_t {
+    bool operator()(std::uint16_t a, std::uint16_t b) const {
+      return static_cast<std::int16_t>(a - b) < 0;
+    }
+  };
+
   struct session_t {
     config_t config;
     int stream_fps = 0;
@@ -510,16 +519,7 @@ namespace stream {
       // so the thread exits early rather than retrying after session objects are gone.
       std::shared_ptr<std::atomic<bool>> reapply_cancel;
 
-      // Jitter buffer for reordering and FEC/PLC.
-      // SeqOrder uses circular (modulo-65536) comparison so that the wraparound
-      // from seq 65535 → 0 doesn't cause begin() to return the newest packet.
-      // (int16_t)(a - b) < 0 is the standard RFC 1982 serial number comparator.
-      struct SeqOrder {
-        bool operator()(std::uint16_t a, std::uint16_t b) const {
-          return static_cast<std::int16_t>(a - b) < 0;
-        }
-      };
-      std::map<std::uint16_t, mic_queued_packet_t, SeqOrder> pending_packets;
+      std::map<std::uint16_t, mic_queued_packet_t, mic_seq_order_t> pending_packets;
       std::uint16_t expected_seq = 0;
       bool has_playout_cursor = false;
 
@@ -1393,7 +1393,7 @@ namespace stream {
           if (next_it != mic.pending_packets.end()) {
             frames = opus_decode_float(mic.decoder.get(), next_it->second.payload.data(),
               (opus_int32) next_it->second.payload.size(), pcm.data(), frame_size, 1);
-          } else if (!mic.pending_packets.empty() && SeqOrder()(mic.expected_seq, mic.pending_packets.begin()->first)) {
+          } else if (!mic.pending_packets.empty() && mic_seq_order_t()(mic.expected_seq, mic.pending_packets.begin()->first)) {
             frames = opus_decode_float(mic.decoder.get(), nullptr, 0, pcm.data(), frame_size, 0);
             mic.plc_events++;
           } else {

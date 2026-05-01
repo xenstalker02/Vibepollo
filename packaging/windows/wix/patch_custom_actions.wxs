@@ -22,7 +22,7 @@
     </Property>
     <Feature Id="VibepolloExtras" Title="Vibepollo Components" Level="1" Absent="disallow">
       <ComponentRef Id="CtlStopApolloLegacy"/>
-      <ComponentRef Id="ApolloSvc"/>
+      <ComponentRef Id="VibepollSvc"/>
       <ComponentRef Id="RemoveLegacyApolloUninstallKey"/>
       <ComponentRef Id="Fw_Exceptions"/>
       <ComponentRef Id="StartMenuShortcut"/>

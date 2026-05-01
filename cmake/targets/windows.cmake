@@ -66,7 +66,7 @@ add_custom_command(
             "${CMAKE_SOURCE_DIR}/packaging/windows/bootstrapper/VibeshineInstaller.cs"
             "${CMAKE_SOURCE_DIR}/packaging/windows/bootstrapper/app.manifest"
             "${CMAKE_SOURCE_DIR}/LICENSE"
-            "${CMAKE_SOURCE_DIR}/apollo.ico"
+            "${CMAKE_SOURCE_DIR}/vibepollo.ico"
     COMMENT "Building lightweight Vibepollo uninstaller UI"
 )
 add_custom_target(build_uninstall_ui ALL DEPENDS "${SUNSHINE_UNINSTALL_UI_EXE}")

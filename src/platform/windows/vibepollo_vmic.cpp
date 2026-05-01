@@ -4,6 +4,7 @@
  */
 
 #include "vibepollo_vmic.h"
+#include "misc.h"
 #include "src/config.h"
 #include "src/logging.h"
 #include "src/platform/common.h"
