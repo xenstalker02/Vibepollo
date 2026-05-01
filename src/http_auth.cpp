@@ -1380,12 +1380,21 @@ namespace confighttp {
       if (auto cookie_it = headers.find("Cookie"); cookie_it != headers.end()) {
         const std::string &cookies = cookie_it->second;
         const std::string prefix = std::string(name) + "=";
-        auto pos = cookies.find(prefix);
-        if (pos != std::string::npos) {
-          pos += prefix.size();
-          auto end = cookies.find(';', pos);
-          auto raw = cookies.substr(pos, end == std::string::npos ? std::string::npos : end - pos);
-          return http::cookie_unescape(raw);
+        std::size_t search_from = 0;
+        while (search_from < cookies.size()) {
+          auto pos = cookies.find(prefix, search_from);
+          if (pos == std::string::npos) break;
+          // Require the match to be at the start of a cookie pair: position 0 or
+          // immediately after "; " (or ";") so we don't match a suffix of another name.
+          if (pos == 0 || cookies[pos - 1] == ' ' || cookies[pos - 1] == ';') {
+            pos += prefix.size();
+            // Trim any leading whitespace that might precede the value
+            while (pos < cookies.size() && cookies[pos] == ' ') ++pos;
+            auto end = cookies.find(';', pos);
+            auto raw = cookies.substr(pos, end == std::string::npos ? std::string::npos : end - pos);
+            return http::cookie_unescape(raw);
+          }
+          search_from = pos + prefix.size();
         }
       }
       return {};
