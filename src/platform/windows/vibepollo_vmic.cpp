@@ -1,9 +1,9 @@
 /**
- * @file src/platform/windows/apollo_vmic.cpp
- * @brief apollo_vmic_t implementation.
+ * @file src/platform/windows/vibepollo_vmic.cpp
+ * @brief vibepollo_vmic_t implementation.
  */
 
-#include "apollo_vmic.h"
+#include "vibepollo_vmic.h"
 #include "src/config.h"
 #include "src/logging.h"
 #include "src/platform/common.h"
@@ -12,7 +12,7 @@ using namespace std::literals;
 
 namespace platf::audio {
 
-  int apollo_vmic_t::init() {
+  int vibepollo_vmic_t::init() {
     auto backend = std::make_unique<mic_write_wasapi_t>();
 
     // If mic_sink is configured, use it as the primary search pattern so
@@ -41,12 +41,12 @@ namespace platf::audio {
     return 0;
   }
 
-  int apollo_vmic_t::write_pcm(const float *samples, std::uint32_t frame_count) {
+  int vibepollo_vmic_t::write_pcm(const float *samples, std::uint32_t frame_count) {
     if (!speaker_backend) return -1;
     return speaker_backend->write_pcm(samples, frame_count);
   }
 
-  void apollo_vmic_t::log_missing_driver_once() {
+  void vibepollo_vmic_t::log_missing_driver_once() {
     if (!missing_driver_logged) {
       missing_driver_logged = true;
       BOOST_LOG(warning) << "[mic] Steam Streaming Microphone render endpoint not found — "

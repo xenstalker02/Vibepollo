@@ -1,22 +1,22 @@
 @echo off
 setlocal enabledelayedexpansion
 
-set "SERVICE_CONFIG_DIR=%LOCALAPPDATA%\SudoMaker\Apollo"
+set "SERVICE_CONFIG_DIR=%LOCALAPPDATA%\Vibepollo"
 set "SERVICE_CONFIG_FILE=%SERVICE_CONFIG_DIR%\service_start_type.txt"
 
 rem Save the current service start type to a file if the service exists
-sc qc ApolloService >nul 2>&1
+sc qc VibepollService >nul 2>&1
 if %ERRORLEVEL%==0 (
     if not exist "%SERVICE_CONFIG_DIR%\" mkdir "%SERVICE_CONFIG_DIR%\"
 
     rem Get the start type
-    for /f "tokens=3" %%i in ('sc qc ApolloService ^| findstr /C:"START_TYPE"') do (
+    for /f "tokens=3" %%i in ('sc qc VibepollService ^| findstr /C:"START_TYPE"') do (
         set "CURRENT_START_TYPE=%%i"
     )
 
     rem Set the content to write
     if "!CURRENT_START_TYPE!"=="2" (
-        sc qc ApolloService | findstr /C:"(DELAYED)" >nul
+        sc qc VibepollService | findstr /C:"(DELAYED)" >nul
         if !ERRORLEVEL!==0 (
             set "CONTENT=2-delayed"
         ) else (
@@ -32,11 +32,12 @@ if %ERRORLEVEL%==0 (
     echo !CONTENT!> "%SERVICE_CONFIG_FILE%"
 )
 
-rem Stop and delete the legacy SunshineSvc service (best-effort)
+rem Stop and delete legacy service names (best-effort migration)
 call :stop_and_delete_service sunshinesvc 15
+call :stop_and_delete_service ApolloService 30
 
-rem Stop and delete the new ApolloService service
-call :stop_and_delete_service ApolloService 60
+rem Stop and delete the VibepollService
+call :stop_and_delete_service VibepollService 60
 
 goto :eof
 

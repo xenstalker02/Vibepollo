@@ -22,7 +22,7 @@
 #include "src/config.h"
 #include "src/logging.h"
 #include "src/platform/common.h"
-#include "apollo_vmic.h"
+#include "vibepollo_vmic.h"
 
 // Must be the last included file
 // clang-format off
@@ -867,9 +867,9 @@ namespace platf::audio {
 
     int init_mic_redirect_device() override {
       if (mic_redirect_device) return 0;
-      auto device = std::make_unique<apollo_vmic_t>();
+      auto device = std::make_unique<vibepollo_vmic_t>();
       if (device->init() != 0) {
-        BOOST_LOG(warning) << "[mic] apollo_vmic_t::init() failed — Steam Streaming Microphone unavailable"sv;
+        BOOST_LOG(warning) << "[mic] vibepollo_vmic_t::init() failed — Steam Streaming Microphone unavailable"sv;
         return -1;
       }
       BOOST_LOG(info) << "[mic] Steam Streaming Microphone backend initialized"sv;
@@ -908,9 +908,17 @@ namespace platf::audio {
         BOOST_LOG(warning) << "[mic] switch_capture_to: device not found: " << device_name;
         return;
       }
-      for (int x = 0; x < (int) ERole_enum_count; ++x)
-        policy->SetDefaultEndpoint(target_id.c_str(), (ERole) x);
-      BOOST_LOG(info) << "[mic] default capture switched to: " << device_name;
+      bool any_failed = false;
+      for (int x = 0; x < (int) ERole_enum_count; ++x) {
+        if (FAILED(policy->SetDefaultEndpoint(target_id.c_str(), (ERole) x))) {
+          BOOST_LOG(warning) << "[mic] SetDefaultEndpoint failed for role " << x << " on: " << device_name;
+          any_failed = true;
+        }
+      }
+      if (!any_failed)
+        BOOST_LOG(info) << "[mic] default capture switched to: " << device_name;
+      else
+        BOOST_LOG(warning) << "[mic] default capture switch partially failed for: " << device_name;
     }
 
     void restore_capture_from(const platf::capture_snapshot_t &snap) override {

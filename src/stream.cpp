@@ -1393,7 +1393,7 @@ namespace stream {
           if (next_it != mic.pending_packets.end()) {
             frames = opus_decode_float(mic.decoder.get(), next_it->second.payload.data(),
               (opus_int32) next_it->second.payload.size(), pcm.data(), frame_size, 1);
-          } else if (!mic.pending_packets.empty() && mic.pending_packets.begin()->first > mic.expected_seq) {
+          } else if (!mic.pending_packets.empty() && SeqOrder()(mic.expected_seq, mic.pending_packets.begin()->first)) {
             frames = opus_decode_float(mic.decoder.get(), nullptr, 0, pcm.data(), frame_size, 0);
             mic.plc_events++;
           } else {
