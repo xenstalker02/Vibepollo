@@ -1,9 +1,9 @@
 ; Vibepollo Inno Setup Installer
-; Version: 1.15.5
-; Builds to: installer\output\Vibepollo-1.15.5-Setup.exe
+; Version: 1.15.6
+; Builds to: installer\output\Vibepollo-1.15.6-Setup.exe
 
 #define MyAppName      "Vibepollo"
-#define MyAppVersion   "1.15.5"
+#define MyAppVersion   "1.15.6"
 #define MyAppPublisher "xenstalker02"
 #define MyAppURL       "https://github.com/xenstalker02/Vibepollo"
 #define MyAppExeName   "sunshine.exe"
@@ -94,8 +94,8 @@ Source: "..\src_assets\windows\drivers\sudovda\uninstall.bat";DestDir: "{app}\dr
 ; Playnite plugin
 Source: "..\plugins\playnite\SunshinePlaynite\*"; DestDir: "{app}\plugins\SunshinePlaynite"; Flags: ignoreversion recursesubdirs createallsubdirs
 
-; Installer helpers
-Source: "setup-task.ps1";    DestDir: "{app}"; Flags: ignoreversion
+; Task registration helper — deployed to {tmp} only (auto-cleaned after install, never stale in Program Files)
+Source: "setup-task.ps1";    DestDir: "{tmp}"; Flags: ignoreversion deleteafterinstall
 
 ; Default config (only install if no existing config)
 Source: "sunshine_default.conf"; DestDir: "{app}\config"; DestName: "sunshine.conf"; Flags: onlyifdoesntexist uninsneveruninstall
@@ -120,7 +120,7 @@ Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""Vibepollo T
 Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""Vibepollo UDP"" protocol=UDP dir=in localport=47998-48010 action=allow"; Flags: runhidden; StatusMsg: "Configuring firewall (UDP)..."
 
 ; Register Task Scheduler autostart (30s delay, HIGHEST privilege)
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NonInteractive -File ""{app}\setup-task.ps1"" -AppPath ""{app}"""; Flags: runhidden; StatusMsg: "Registering autostart task..."
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NonInteractive -File ""{tmp}\setup-task.ps1"" -AppPath ""{app}"""; Flags: runhidden; StatusMsg: "Registering autostart task..."
 
 ; First-run: start via Task Scheduler (avoids elevation error from direct launch)
 Filename: "powershell.exe"; Parameters: "-NonInteractive -Command ""Start-ScheduledTask -TaskName Vibepollo"""; Flags: runhidden nowait postinstall skipifsilent; Description: "Launch {#MyAppName}"
