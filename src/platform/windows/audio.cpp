@@ -223,12 +223,20 @@ namespace platf::audio {
   class co_init_t: public deinit_t {
   public:
     co_init_t() {
-      CoInitializeEx(nullptr, COINIT_MULTITHREADED | COINIT_SPEED_OVER_MEMORY);
+      coinit_hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED | COINIT_SPEED_OVER_MEMORY);
+      if (FAILED(coinit_hr)) {
+        BOOST_LOG(warning) << "CoInitializeEx failed: 0x"sv << util::hex(coinit_hr).to_string_view();
+      }
     }
 
     ~co_init_t() override {
-      CoUninitialize();
+      if (SUCCEEDED(coinit_hr)) {
+        CoUninitialize();
+      }
     }
+
+  private:
+    HRESULT coinit_hr = E_FAIL;
   };
 
   class prop_var_t {

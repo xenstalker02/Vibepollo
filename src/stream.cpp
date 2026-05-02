@@ -801,6 +801,7 @@ namespace stream {
           {
             net::packet_t packet {event.packet};
 
+            if (packet->dataLength < sizeof(std::uint16_t)) break;
             auto type = *(std::uint16_t *) packet->data;
             std::string_view payload {(char *) packet->data + sizeof(type), packet->dataLength - sizeof(type)};
 
@@ -1216,7 +1217,9 @@ namespace stream {
     server->map(packetTypes[IDX_INPUT_DATA], [&](session_t *session, const std::string_view &payload) {
       BOOST_LOG(debug) << "type [IDX_INPUT_DATA]"sv;
 
+      if (payload.size() < sizeof(int32_t)) return;
       auto tagged_cipher_length = util::endian::big(*(int32_t *) payload.data());
+      if (tagged_cipher_length < 0 || static_cast<size_t>(tagged_cipher_length) > payload.size() - sizeof(int32_t)) return;
       std::string_view tagged_cipher {payload.data() + sizeof(tagged_cipher_length), (size_t) tagged_cipher_length};
 
       std::vector<uint8_t> plaintext;

@@ -375,7 +375,12 @@ namespace platf::audio {
   }
 
   void mic_write_wasapi_t::render_loop() {
-    CoInitializeEx(nullptr, COINIT_MULTITHREADED | COINIT_SPEED_OVER_MEMORY);
+    auto coinit_hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED | COINIT_SPEED_OVER_MEMORY);
+    if (FAILED(coinit_hr) && coinit_hr != RPC_E_CHANGED_MODE) {
+      BOOST_LOG(error) << "[mic] render_loop: CoInitializeEx failed 0x"sv
+                       << util::hex(coinit_hr).to_string_view();
+      return;
+    }
     platf::adjust_thread_priority(platf::thread_priority_e::high);
 
     static constexpr std::size_t kPrebufFrames = 960 * 2;  // 2 Opus packets — matches mic_buffer_packets default
@@ -444,7 +449,7 @@ namespace platf::audio {
       audio_render->ReleaseBuffer(to_write, 0);
     }
 
-    CoUninitialize();
+    if (SUCCEEDED(coinit_hr)) CoUninitialize();
   }
 
   mic_write_wasapi_t::~mic_write_wasapi_t() {
