@@ -67,8 +67,7 @@ Source: "C:\msys64\ucrt64\bin\zlib1.dll";     DestDir: "{app}";             Flag
 ; Sourced from the build machine's System32; shipped so clean machines don't need a DirectX SDK install
 Source: "C:\Windows\System32\D3DCOMPILER_47.dll"; DestDir: "{app}";         Flags: ignoreversion
 
-; Tools
-Source: "..\build\tools\sunshinesvc.exe";              DestDir: "{app}\tools"; Flags: ignoreversion
+; Tools (sunshinesvc.exe removed — ApolloService deprecated, binary no longer shipped)
 Source: "..\build\tools\sunshine_display_helper.exe";  DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "..\build\tools\sunshine_wgc_capture.exe";     DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "..\build\tools\playnite-launcher.exe";        DestDir: "{app}\tools"; Flags: ignoreversion
