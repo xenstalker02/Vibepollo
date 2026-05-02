@@ -176,12 +176,14 @@ begin
   if RegQueryStringValue(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{A3F1B2C4-7D8E-4F9A-B1C2-D3E4F5A6B7C8}_is1',
     'DisplayVersion', InstalledVer) then
   begin
-    // Allow reinstall / upgrade — just inform user
+    // Allow reinstall / upgrade — only prompt in interactive mode
+    // Silent/auto-update installs must never block on a dialog
     if InstalledVer = '{#MyAppVersion}' then
     begin
-      if MsgBox('Vibepollo ' + InstalledVer + ' is already installed. Reinstall?',
-        mbConfirmation, MB_YESNO) = IDNO then
-        Result := False;
+      if (not WizardSilent()) then
+        if MsgBox('Vibepollo ' + InstalledVer + ' is already installed. Reinstall?',
+          mbConfirmation, MB_YESNO) = IDNO then
+          Result := False;
     end;
   end;
 end;
