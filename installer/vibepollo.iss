@@ -107,6 +107,14 @@ Name: "{group}\Uninstall {#MyAppName}";    Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}";        Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\sunshine.exe"; Tasks: desktopicon
 
 [Run]
+; Stop legacy ApolloService (running as SYSTEM — must kill before file copy completes)
+; These run under the installer's elevated context; -ErrorAction is irrelevant for sc/taskkill
+; Stop the service controller first so it can't restart sunshine.exe mid-install
+Filename: "sc.exe";      Parameters: "stop ApolloService";              Flags: runhidden; StatusMsg: "Stopping legacy service..."
+Filename: "sc.exe";      Parameters: "config ApolloService start= disabled"; Flags: runhidden; StatusMsg: "Disabling legacy service..."
+Filename: "taskkill.exe"; Parameters: "/f /im sunshinesvc.exe";         Flags: runhidden; StatusMsg: "Stopping service wrapper..."
+Filename: "taskkill.exe"; Parameters: "/f /im sunshine.exe";            Flags: runhidden; StatusMsg: "Stopping Vibepollo..."
+
 ; Add firewall rules
 Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""Vibepollo TCP"" protocol=TCP dir=in localport=47984,47989,47990 action=allow"; Flags: runhidden; StatusMsg: "Configuring firewall (TCP)..."
 Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""Vibepollo UDP"" protocol=UDP dir=in localport=47998-48010 action=allow"; Flags: runhidden; StatusMsg: "Configuring firewall (UDP)..."
@@ -114,16 +122,21 @@ Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""Vibepollo U
 ; Register Task Scheduler autostart (30s delay, HIGHEST privilege)
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NonInteractive -File ""{app}\setup-task.ps1"" -AppPath ""{app}"""; Flags: runhidden; StatusMsg: "Registering autostart task..."
 
-; First-run: launch Vibepollo then open web UI
-Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent; Description: "Launch {#MyAppName}"; Parameters: "--cwd-required"
+; First-run: start via Task Scheduler (avoids elevation error from direct launch)
+Filename: "powershell.exe"; Parameters: "-NonInteractive -Command ""Start-ScheduledTask -TaskName Vibepollo"""; Flags: runhidden nowait postinstall skipifsilent; Description: "Launch {#MyAppName}"
 Filename: "https://localhost:47990"; Flags: shellexec nowait postinstall skipifsilent; Description: "Open {#MyAppName} Web UI"
 
 [UninstallRun]
 ; Kill sunshine.exe if running
 Filename: "powershell.exe"; Parameters: "-Command ""Stop-Process -Name sunshine -Force -ErrorAction SilentlyContinue"""; Flags: runhidden; RunOnceId: "KillSunshine"
+Filename: "powershell.exe"; Parameters: "-Command ""Stop-Process -Name sunshinesvc -Force -ErrorAction SilentlyContinue"""; Flags: runhidden; RunOnceId: "KillSvc"
 
 ; Remove Task Scheduler task
 Filename: "powershell.exe"; Parameters: "-Command ""Unregister-ScheduledTask -TaskName Vibepollo -Confirm:$false -ErrorAction SilentlyContinue"""; Flags: runhidden; RunOnceId: "RemoveTask"
+
+; Remove legacy ApolloService if still present
+Filename: "sc.exe"; Parameters: "stop ApolloService";   Flags: runhidden; RunOnceId: "StopApolloSvc"
+Filename: "sc.exe"; Parameters: "delete ApolloService"; Flags: runhidden; RunOnceId: "DeleteApolloSvc"
 
 ; Remove firewall rules
 Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""Vibepollo TCP"""; Flags: runhidden; RunOnceId: "DelFirewallTCP"

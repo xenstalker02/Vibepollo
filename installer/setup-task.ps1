@@ -16,9 +16,11 @@ $trigger.Delay = 'PT30S'
 
 $settings = New-ScheduledTaskSettingsSet `
     -ExecutionTimeLimit (New-TimeSpan -Hours 0) `
-    -MultipleInstances IgnoreNew `
-    -DisallowStartIfOnBatteries $false `
-    -StopIfGoingOnBatteries $false
+    -MultipleInstances IgnoreNew
+
+# Allow running on battery (set via XML since PS cmdlet lacks the flag)
+$settings.DisallowStartIfOnBatteries = $false
+$settings.StopIfGoingOnBatteries     = $false
 
 $principal = New-ScheduledTaskPrincipal `
     -UserId $env:USERNAME `
