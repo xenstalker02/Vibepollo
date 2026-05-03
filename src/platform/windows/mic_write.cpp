@@ -423,6 +423,9 @@ namespace platf::audio {
           break;
         }
         BOOST_LOG(info) << "[mic] WASAPI re-init succeeded — resuming render"sv;
+        // Clear stale audio queued before the re-init to prevent replaying it
+        // into the freshly-opened WASAPI session.
+        { std::lock_guard<std::mutex> lk(queue_mutex); pending_frames.clear(); }
         continue;
       }
 

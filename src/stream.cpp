@@ -1362,6 +1362,22 @@ namespace stream {
       // Steam mic path handles underruns natively via jitter buffer
       mic.last_recv_time = recv_time;
 
+      // Guard: reject packets too far outside the playout window.
+      // mic_seq_order_t uses RFC 1982 serial arithmetic (int16_t)(a-b) < 0, which is
+      // NOT a valid std::map comparator for keys exactly 32768 apart (antisymmetry
+      // fails, corrupting the tree). Clamping insertions to ±2*mic_max_queued_packets
+      // around expected_seq keeps all keys within a region where the comparator is
+      // consistent. Packets outside this window are from a reconnect or misbehaving
+      // client and can be safely dropped.
+      if (mic.has_playout_cursor) {
+        auto delta = static_cast<std::int16_t>(incoming_seq - mic.expected_seq);
+        if (delta < 0 || delta > static_cast<std::int16_t>(session_t::mic_max_queued_packets * 2)) {
+          BOOST_LOG(debug) << "[mic] dropping out-of-window packet seq="sv << incoming_seq
+                           << " expected="sv << mic.expected_seq << " delta="sv << (int)delta;
+          return;
+        }
+      }
+
       // Insert into jitter buffer
       mic.pending_packets.emplace(incoming_seq, session_t::mic_queued_packet_t {
         std::vector<std::uint8_t> {
