@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.15.9] — 2026-05-03
+
+### Fixed
+- **Vibepollo restarts after auto-update** — removed `skipifsilent` from the
+  `schtasks /run` step in the installer. Silent installs (auto-updates via the
+  bootstrapper) now start Vibepollo when done. Previously the Task Scheduler
+  launch was skipped in silent mode, leaving Vibepollo stopped after every
+  auto-update. The "Open Web UI" step retains `skipifsilent` so the browser
+  does not pop open on auto-updates.
+
 ## [1.15.8] — 2026-05-03
 
 ### Fixed

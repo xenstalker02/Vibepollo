@@ -1,9 +1,9 @@
 ; Vibepollo Inno Setup Installer
-; Version: 1.15.8
-; Builds to: installer\output\Vibepollo-1.15.8-Setup.exe
+; Version: 1.15.9
+; Builds to: installer\output\Vibepollo-1.15.9-Setup.exe
 
 #define MyAppName      "Vibepollo"
-#define MyAppVersion   "1.15.8"
+#define MyAppVersion   "1.15.9"
 #define MyAppPublisher "xenstalker02"
 #define MyAppURL       "https://github.com/xenstalker02/Vibepollo"
 #define MyAppExeName   "sunshine.exe"
@@ -127,11 +127,12 @@ Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""Vibepollo U
 ; Register Task Scheduler autostart (30s delay, HIGHEST privilege)
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NonInteractive -File ""{tmp}\setup-task.ps1"" -AppPath ""{app}"""; Flags: runhidden; StatusMsg: "Registering autostart task..."
 
-; First-run: launch via Task Scheduler task (already registered above).
+; Launch via Task Scheduler task after install (interactive and silent/auto-update alike).
 ; schtasks /run uses the task's HIGHEST RunLevel — no extra UAC prompt.
-; shellexec drops elevation, triggering UAC again because sunshine.exe is requireAdministrator.
-; The Task Scheduler task also handles at-logon autostart on future boots.
-Filename: "schtasks.exe"; Parameters: "/run /tn ""Vibepollo"""; Flags: runhidden nowait postinstall skipifsilent; Description: "Launch {#MyAppName}"
+; NOTE: skipifsilent intentionally removed from the schtasks step so auto-update silent
+; installs also restart Vibepollo. skipifsilent remains on the browser step so the web UI
+; does not pop open on every auto-update.
+Filename: "schtasks.exe"; Parameters: "/run /tn ""Vibepollo"""; Flags: runhidden nowait postinstall; Description: "Launch {#MyAppName}"
 Filename: "https://localhost:47990"; Flags: shellexec nowait postinstall skipifsilent; Description: "Open {#MyAppName} Web UI"
 
 [UninstallRun]
