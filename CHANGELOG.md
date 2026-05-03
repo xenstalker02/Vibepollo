@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.15.8] — 2026-05-03
+
+### Fixed
+- **apps.json preserved on upgrade** — installer now pre-seeds `config/apps.json`
+  with the default app list using `onlyifdoesntexist` semantics (same pattern as
+  `sunshine.conf`). On fresh install the defaults are written; on upgrade the
+  existing user app list is preserved. Previously, a fresh install path in
+  `apply_config()` could overwrite user apps if the config file was absent.
+
 ## [1.15.7] — 2026-05-03
 
 ### Fixed

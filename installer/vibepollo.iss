@@ -1,9 +1,9 @@
 ; Vibepollo Inno Setup Installer
-; Version: 1.15.7
-; Builds to: installer\output\Vibepollo-1.15.7-Setup.exe
+; Version: 1.15.8
+; Builds to: installer\output\Vibepollo-1.15.8-Setup.exe
 
 #define MyAppName      "Vibepollo"
-#define MyAppVersion   "1.15.7"
+#define MyAppVersion   "1.15.8"
 #define MyAppPublisher "xenstalker02"
 #define MyAppURL       "https://github.com/xenstalker02/Vibepollo"
 #define MyAppExeName   "sunshine.exe"
@@ -101,6 +101,9 @@ Source: "setup-task.ps1";    DestDir: "{tmp}"; Flags: ignoreversion deleteafteri
 
 ; Default config (only install if no existing config)
 Source: "sunshine_default.conf"; DestDir: "{app}\config"; DestName: "sunshine.conf"; Flags: onlyifdoesntexist uninsneveruninstall
+
+; Default apps list (only install if no existing apps.json — preserves user's configured apps on upgrade)
+Source: "..\src_assets\windows\assets\apps.json"; DestDir: "{app}\config"; DestName: "apps.json"; Flags: onlyifdoesntexist uninsneveruninstall
 
 [Icons]
 Name: "{group}\{#MyAppName}";              Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\sunshine.exe"
