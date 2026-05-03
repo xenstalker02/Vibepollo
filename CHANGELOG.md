@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.15.10] — 2026-05-03
+
+### Fixed
+- **Vibepollo now actually restarts after auto-update** — 1.15.9 removed `skipifsilent`
+  from the schtasks [Run] entry but left `postinstall`, which means the entry only ran
+  when the user clicked Finish on the wizard page — a page that never appears in `/SILENT`
+  mode (used by auto-updates). Removed `postinstall` so the entry runs at the end of the
+  install phase for all modes (interactive and silent alike). The browser-open step retains
+  both `postinstall` and `skipifsilent`.
+
 ## [1.15.9] — 2026-05-03
 
 ### Fixed

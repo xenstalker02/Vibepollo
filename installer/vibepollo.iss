@@ -3,7 +3,7 @@
 ; Builds to: installer\output\Vibepollo-1.15.9-Setup.exe
 
 #define MyAppName      "Vibepollo"
-#define MyAppVersion   "1.15.9"
+#define MyAppVersion   "1.15.10"
 #define MyAppPublisher "xenstalker02"
 #define MyAppURL       "https://github.com/xenstalker02/Vibepollo"
 #define MyAppExeName   "sunshine.exe"
@@ -129,10 +129,11 @@ Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NonInteractive
 
 ; Launch via Task Scheduler task after install (interactive and silent/auto-update alike).
 ; schtasks /run uses the task's HIGHEST RunLevel — no extra UAC prompt.
-; NOTE: skipifsilent intentionally removed from the schtasks step so auto-update silent
-; installs also restart Vibepollo. skipifsilent remains on the browser step so the web UI
-; does not pop open on every auto-update.
-Filename: "schtasks.exe"; Parameters: "/run /tn ""Vibepollo"""; Flags: runhidden nowait postinstall; Description: "Launch {#MyAppName}"
+; NOTE: postinstall intentionally absent from the schtasks step. postinstall entries only run
+; when the user clicks Finish on the wizard page — which never appears in /SILENT mode (used by
+; auto-updates). Without postinstall, the entry runs at end of install phase for ALL modes.
+; The browser-open step keeps postinstall + skipifsilent so it only fires on interactive installs.
+Filename: "schtasks.exe"; Parameters: "/run /tn ""Vibepollo"""; Flags: runhidden nowait
 Filename: "https://localhost:47990"; Flags: shellexec nowait postinstall skipifsilent; Description: "Open {#MyAppName} Web UI"
 
 [UninstallRun]

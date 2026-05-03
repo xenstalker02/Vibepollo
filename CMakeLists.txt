@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.20)
 # `cmake_path(CONVERT ... TO_NATIVE_PATH_LIST ...)` requires 3.20
 # todo - set this conditionally
 
-project(Vibepollo VERSION 1.15.9
+project(Vibepollo VERSION 1.15.10
         DESCRIPTION "Self-hosted game stream host for Moonlight"
         HOMEPAGE_URL "https://github.com/xenstalker02/Vibepollo")
 
