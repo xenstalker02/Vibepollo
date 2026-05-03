@@ -60,7 +60,7 @@ else()
             return()
         endif()
 
-        set(_tag_patterns "[0-9]*.[0-9]*.[0-9]*" "v[0-9]*.[0-9]*.[0-9]*")
+        set(_tag_patterns "v[0-9]*.[0-9]*.[0-9]*" "[0-9]*.[0-9]*.[0-9]*")
         foreach(_tag_pattern IN LISTS _tag_patterns)
             execute_process(
                 COMMAND ${GIT_EXECUTABLE} tag --merged HEAD --sort=-version:refname --list "${_tag_pattern}"
