@@ -185,7 +185,6 @@ namespace update {
     }
 
     BOOST_LOG(info) << "Auto-update: applying pending update "sv << version << " from "sv << installer_path;
-    fs::remove(marker);
 
     // Launch installer silently. /S is the NSIS silent flag; most Sunshine-family
     // installers also accept /SILENT. We pass both for compatibility.
@@ -198,6 +197,7 @@ namespace update {
     if (CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
       CloseHandle(pi.hProcess);
       CloseHandle(pi.hThread);
+      fs::remove(marker);  // Only delete marker after confirmed launch — prevents lost marker if CreateProcessW fails
       BOOST_LOG(info) << "Auto-update: installer launched, exiting"sv;
       return true;
     }

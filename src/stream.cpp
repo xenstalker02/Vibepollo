@@ -1369,11 +1369,15 @@ namespace stream {
       // around expected_seq keeps all keys within a region where the comparator is
       // consistent. Packets outside this window are from a reconnect or misbehaving
       // client and can be safely dropped.
-      if (mic.has_playout_cursor) {
-        auto delta = static_cast<std::int16_t>(incoming_seq - mic.expected_seq);
+      // Guard applies both after cursor is established and during prebuffering once
+      // we have a reference key — preventing the comparator edge from being reached
+      // with keys exactly 32768 apart at any stage of the pipeline.
+      if (mic.has_playout_cursor || !mic.pending_packets.empty()) {
+        std::uint16_t ref_seq = mic.has_playout_cursor ? mic.expected_seq : mic.pending_packets.begin()->first;
+        auto delta = static_cast<std::int16_t>(incoming_seq - ref_seq);
         if (delta < 0 || delta > static_cast<std::int16_t>(session_t::mic_max_queued_packets * 2)) {
           BOOST_LOG(debug) << "[mic] dropping out-of-window packet seq="sv << incoming_seq
-                           << " expected="sv << mic.expected_seq << " delta="sv << (int)delta;
+                           << " ref="sv << ref_seq << " delta="sv << (int)delta;
           return;
         }
       }
