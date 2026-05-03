@@ -430,15 +430,6 @@ int main(int argc, char *argv[]) {
     system_tray::run_tray();
   }
 
-#ifdef _WIN32
-  // First-run: open web UI in browser so users can complete initial setup
-  // (set credentials, configure apps, etc.) without manually navigating there.
-  if (!std::filesystem::exists(config::sunshine.credentials_file)) {
-    BOOST_LOG(info) << "First run detected — opening web UI in browser";
-    ShellExecuteW(nullptr, L"open", L"https://localhost:47990", nullptr, nullptr, SW_SHOWNORMAL);
-  }
-#endif
-
   // Schedule periodic update checks if configured
   if (config::sunshine.update_check_interval_seconds > 0) {
     // Trigger an immediate update check on startup so users don't wait

@@ -39,6 +39,7 @@
 // Boost overrides NTDDI_VERSION, so we re-override it here
 #undef NTDDI_VERSION
 #define NTDDI_VERSION NTDDI_WIN10
+#include <shellapi.h>
 #include <Shlwapi.h>
 
 // local includes
@@ -1206,20 +1207,20 @@ namespace platf {
   /**
    * @brief Open a url in the default web browser.
    * @param url The url to open.
+   *
+   * Uses ShellExecuteW rather than spawning explorer.exe as a subprocess.
+   * When sunshine runs elevated (Task Scheduler RunLevel Highest), CreateProcessW
+   * inherits the elevated token; explorer.exe launched elevated silently fails to
+   * pass the URL to the non-elevated browser shell. ShellExecuteW routes through
+   * the shell's file-association system and handles elevation boundaries correctly.
    */
   void open_url(const std::string &url) {
-    bp::environment _env = bp::this_process::env();
-    auto working_dir = boost::filesystem::path();
-    std::error_code ec;
-
-    const std::string explorer_cmd = "explorer.exe \"" + url + "\"";
-
-    auto child = run_command(false, false, explorer_cmd, working_dir, _env, nullptr, ec, nullptr);
-    if (ec) {
-      BOOST_LOG(warning) << "Couldn't open url ["sv << url << "]: System: "sv << ec.message();
+    auto wurl = from_utf8(url);
+    auto ret = reinterpret_cast<intptr_t>(ShellExecuteW(nullptr, L"open", wurl.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
+    if (ret <= 32) {
+      BOOST_LOG(warning) << "Couldn't open url ["sv << url << "]: ShellExecuteW returned "sv << ret;
     } else {
       BOOST_LOG(info) << "Opened url ["sv << url << "]"sv;
-      child.detach();
     }
   }
 

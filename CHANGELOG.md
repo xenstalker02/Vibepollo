@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.15.7] — 2026-05-03
+
+### Fixed
+- **Tray "Open Vibepollo" now opens browser** — `open_url()` in `misc.cpp` was
+  using `CreateProcessW("explorer.exe URL")` which inherits the elevated process
+  token from Task Scheduler (RunLevel Highest). Browsers silently refuse elevated
+  launches. Replaced with `ShellExecuteW` which routes through the shell's
+  file-association system and correctly crosses the elevation boundary.
+- **Web UI no longer auto-opens on every restart** — removed a first-run check in
+  `main.cpp` that fired `ShellExecuteW` whenever `sunshine_state.json` was absent.
+  Since that file stores only web UI credentials (not device pairing or settings),
+  it was frequently absent, causing the browser to open on every tray restart.
+  The tray "Open Vibepollo" button is the correct entry point.
+- **apollo.ico → vibepollo.ico in bootstrapper** — `build_bootstrapper.ps1` was
+  referencing the old `apollo.ico` path, breaking the uninstaller build step.
+
 ## [1.15.6] — 2026-05-02
 
 ### Fixed (2026-05-02 — Codex QC round 2)
