@@ -11,7 +11,7 @@ a GitHub email notification when this triggers.
 
 All mic passthrough functionality lives in:
 - `src/platform/windows/mic_write.cpp` + `mic_write.h` — our files, Nonary doesn't have these
-- `src/platform/windows/apollo_vmic.cpp` + `apollo_vmic.h` — our files, Nonary doesn't have these
+- `src/platform/windows/vibepollo_vmic.cpp` + `vibepollo_vmic.h` — our files, Nonary doesn't have these
 - `src/platform/windows/audio.cpp` — our WASAPI mic render, capture snapshot/restore
 - `src/stream.cpp` — our 0x3003 IDX_MIC_AUDIO_DATA handler and mic session lifecycle
 - `src/config.h` + `src/config.cpp` — our mic_sink, mic_capture_device, mic_buffer_ms, mic_buffer_packets
@@ -34,8 +34,8 @@ If conflicts occur in protected files, always keep our version:
 git checkout HEAD -- src/platform/windows/audio.cpp
 git checkout HEAD -- src/platform/windows/mic_write.cpp
 git checkout HEAD -- src/platform/windows/mic_write.h
-git checkout HEAD -- src/platform/windows/apollo_vmic.cpp
-git checkout HEAD -- src/platform/windows/apollo_vmic.h
+git checkout HEAD -- src/platform/windows/vibepollo_vmic.cpp
+git checkout HEAD -- src/platform/windows/vibepollo_vmic.h
 git checkout HEAD -- src/stream.cpp
 git checkout HEAD -- src/config.h
 git checkout HEAD -- src/config.cpp

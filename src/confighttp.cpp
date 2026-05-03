@@ -3506,7 +3506,7 @@ namespace confighttp {
 #endif
 
   /**
-   * @brief Restart Apollo.
+   * @brief Restart Vibepollo.
    * @param response The HTTP response object.
    * @param request The HTTP request object.
    *
@@ -3526,7 +3526,7 @@ namespace confighttp {
   }
 
   /**
-   * @brief Quit Apollo.
+   * @brief Quit Vibepollo.
    * @param response The HTTP response object.
    * @param request The HTTP request object.
    *
