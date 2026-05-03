@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.15.6] — 2026-05-02
+
+### Fixed (2026-05-02 — Codex QC round 2)
+- **mic_seq_order_t bounds guard** — `stream.cpp` now checks `delta` before
+  inserting into `pending_packets`. Packets with `delta ≥ 32768` (outside the
+  playout window) are dropped with a debug log rather than passed to
+  `mic_seq_order_t`, preventing undefined behaviour from the comparator's
+  strict-weak-ordering assumption when sequence numbers are exactly 32768 apart.
+- **Stale WASAPI audio cleared on re-init** — `mic_write.cpp` now calls
+  `pending_frames.clear()` under the queue mutex immediately after a successful
+  WASAPI re-initialisation. Previously, audio queued before the device-lost event
+  would replay into the fresh session, causing a burst of stale audio at reconnect.
+- **Apollo → Vibepollo in fatal log** — `main.cpp` fatal message corrected from
+  "Apollo" to "Vibepollo".
+
+### Fixed (2026-05-02 — Installer)
+- **assets/apps.json shipped** — installer now packages
+  `src_assets/windows/assets/apps.json` to `{app}\assets\apps.json`. Previously
+  absent; `apply_config()` threw `std::filesystem::filesystem_error` on first run
+  because it tried to copy the file from a relative path that didn't exist, causing
+  `config::parse` to return early with no log file created.
+- **setup-task.ps1 sandboxed** — helper script is now extracted to a temp directory
+  during installation and auto-deleted afterward. Never written to Program Files.
+- **WASAPI startup block removed** — removed an `if (initialized) return;` guard
+  that prevented WASAPI from reinitialising after a device-lost event. Was a latent
+  `std::terminate()` risk if the audio device was reconnected mid-session.
+
 ## [1.15.5] — 2026-04-30
 
 ### Fixed
