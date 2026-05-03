@@ -41,8 +41,6 @@
   #include "platform/windows/display_helper_integration.h"
   #include "platform/windows/virtual_display.h"
   #include <shellapi.h>
-  #include <mmdeviceapi.h>
-  #include <functiondiscoverykeys_devpkey.h>
 #endif
 
 #define PROBE_DISPLAY_UUID "38F72B96-B00C-4F21-8B6C-E1BFF1602B0E"
@@ -224,54 +222,10 @@ int main(int argc, char *argv[]) {
     BOOST_LOG(info) << "[mic] mic_sink not configured — mic passthrough will be disabled";
   }
 
-#ifdef _WIN32
-  // Validate mic_capture_device against available WASAPI capture devices at startup.
-  if (!config::audio.mic_capture_device.empty()) {
-    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    IMMDeviceEnumerator *pEnum = nullptr;
-    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void **) &pEnum);
-    if (SUCCEEDED(hr) && pEnum) {
-      IMMDeviceCollection *pCollection = nullptr;
-      hr = pEnum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &pCollection);
-      if (SUCCEEDED(hr) && pCollection) {
-        UINT count = 0;
-        pCollection->GetCount(&count);
-        bool found = false;
-        std::string device_list;
-        for (UINT i = 0; i < count; ++i) {
-          IMMDevice *pDev = nullptr;
-          if (SUCCEEDED(pCollection->Item(i, &pDev)) && pDev) {
-            IPropertyStore *pProps = nullptr;
-            if (SUCCEEDED(pDev->OpenPropertyStore(STGM_READ, &pProps)) && pProps) {
-              PROPVARIANT varName;
-              PropVariantInit(&varName);
-              if (SUCCEEDED(pProps->GetValue(PKEY_Device_FriendlyName, &varName)) && varName.pwszVal) {
-                int len = WideCharToMultiByte(CP_UTF8, 0, varName.pwszVal, -1, nullptr, 0, nullptr, nullptr);
-                std::string name(len - 1, '\0');
-                WideCharToMultiByte(CP_UTF8, 0, varName.pwszVal, -1, name.data(), len, nullptr, nullptr);
-                if (!device_list.empty()) device_list += ", ";
-                device_list += "\"" + name + "\"";
-                if (name.find(config::audio.mic_capture_device) != std::string::npos) found = true;
-              }
-              PropVariantClear(&varName);
-              pProps->Release();
-            }
-            pDev->Release();
-          }
-        }
-        if (!found) {
-          BOOST_LOG(warning) << "[mic] WARNING: mic_capture_device '" << config::audio.mic_capture_device
-                             << "' not found. Available devices: [" << device_list << "]";
-        } else {
-          BOOST_LOG(info) << "[mic] mic_capture_device '" << config::audio.mic_capture_device << "' found among capture devices";
-        }
-        pCollection->Release();
-      }
-      pEnum->Release();
-    }
-    CoUninitialize();
-  }
-#endif
+  // WASAPI startup validation removed — it caused CoInitializeEx/CoCreateInstance crashes
+  // (OLEAUT32.dll access violation / ucrtbase.dll stack overrun) when launched via Task
+  // Scheduler at logon because the Windows Audio service is not yet ready at that point.
+  // Actual mic passthrough error handling lives in mic_write.cpp and handles this independently.
 
   // Log rotation: keep the 10 most recent log files, delete the rest.
   {

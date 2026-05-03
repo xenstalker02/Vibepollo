@@ -1434,12 +1434,13 @@ namespace platf {
   }
 
   void restart() {
-    // If we're running standalone, we have to respawn ourselves via CreateProcess().
-    // If we're running from the service, we should just exit and let it respawn us.
-    if (GetConsoleWindow() != nullptr) {
-      // Avoid racing with the new process by waiting until we're exiting to start it.
-      atexit(restart_on_exit);
-    }
+    // Always register the atexit relaunch handler regardless of console state.
+    // The original GetConsoleWindow() guard was only meaningful when ApolloService
+    // was present (the service would respawn us on exit). ApolloService is gone;
+    // Vibepollo now runs via Task Scheduler which does NOT auto-respawn on exit.
+    // Without this fix, tray "Restart" exits the process and nothing relaunches it.
+    // CreateProcessW reuses the current elevated token — correct for Task Scheduler mode.
+    atexit(restart_on_exit);
 
     // We use an async exit call here because we can't block the HTTP thread or we'll hang shutdown.
     lifetime::exit_sunshine(0, true);

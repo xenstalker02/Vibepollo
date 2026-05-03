@@ -57,8 +57,8 @@ Name: "{app}\drivers\sudovda"
 Name: "{app}\plugins\SunshinePlaynite"
 
 [Files]
-; Main executable
-Source: "..\build\sunshine.exe";               DestDir: "{app}";             Flags: ignoreversion
+; Main executable — kill any running instance before copy so the file is never locked
+Source: "..\build\sunshine.exe";               DestDir: "{app}";             Flags: ignoreversion; BeforeInstall: StopVibepollo
 
 ; Required runtime DLLs
 ; zlib1.dll: loaded dynamically by OpenSSL/zlib at runtime — must sit next to sunshine.exe
@@ -76,6 +76,9 @@ Source: "..\build\tools\audio-info.exe";               DestDir: "{app}\tools"; F
 
 ; Web UI assets
 Source: "..\build\assets\web\*"; DestDir: "{app}\assets\web"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+; apps.json — copied by config::parse into config/ on first run (SUNSHINE_ASSETS_DIR="assets", relative to exe dir)
+Source: "..\src_assets\windows\assets\apps.json"; DestDir: "{app}\assets"; Flags: ignoreversion
 
 ; Shaders
 Source: "..\src_assets\windows\assets\shaders\*"; DestDir: "{app}\assets\shaders"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -121,8 +124,11 @@ Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""Vibepollo U
 ; Register Task Scheduler autostart (30s delay, HIGHEST privilege)
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NonInteractive -File ""{tmp}\setup-task.ps1"" -AppPath ""{app}"""; Flags: runhidden; StatusMsg: "Registering autostart task..."
 
-; First-run: start via Task Scheduler (avoids elevation error from direct launch)
-Filename: "powershell.exe"; Parameters: "-NonInteractive -Command ""Start-ScheduledTask -TaskName Vibepollo"""; Flags: runhidden nowait postinstall skipifsilent; Description: "Launch {#MyAppName}"
+; First-run: launch via Task Scheduler task (already registered above).
+; schtasks /run uses the task's HIGHEST RunLevel — no extra UAC prompt.
+; shellexec drops elevation, triggering UAC again because sunshine.exe is requireAdministrator.
+; The Task Scheduler task also handles at-logon autostart on future boots.
+Filename: "schtasks.exe"; Parameters: "/run /tn ""Vibepollo"""; Flags: runhidden nowait postinstall skipifsilent; Description: "Launch {#MyAppName}"
 Filename: "https://localhost:47990"; Flags: shellexec nowait postinstall skipifsilent; Description: "Open {#MyAppName} Web UI"
 
 [UninstallRun]
@@ -142,6 +148,19 @@ Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""Vibepoll
 Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""Vibepollo UDP"""; Flags: runhidden; RunOnceId: "DelFirewallUDP"
 
 [Code]
+// Kill any running sunshine.exe before the file copy attempt.
+// CloseApplications=force uses the Restart Manager API which can fail to close
+// Task Scheduler-launched elevated processes. This explicit kill runs at the exact
+// moment before the binary is overwritten, guaranteeing the file is never locked.
+procedure StopVibepollo();
+var
+  ResultCode: Integer;
+begin
+  Exec('taskkill.exe', '/f /im sunshine.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  // Brief pause so the OS releases the file handle before the copy starts.
+  Sleep(1500);
+end;
+
 // Runtime prerequisite check.
 //
 // NOTE: Vibepollo is built with MSYS2 UCRT64, NOT the MSVC toolchain.

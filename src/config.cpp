@@ -1995,6 +1995,10 @@ namespace config {
       BOOST_LOG(fatal) << "Failed to apply config: "sv << err.what();
     } catch (const boost::filesystem::filesystem_error &err) {
       BOOST_LOG(fatal) << "Failed to apply config: "sv << err.what();
+    } catch (const std::exception &err) {
+      BOOST_LOG(fatal) << "Unexpected error in config::parse: "sv << err.what();
+    } catch (...) {
+      BOOST_LOG(fatal) << "Unknown exception in config::parse"sv;
     }
 
 #ifdef _WIN32
