@@ -8,17 +8,20 @@ Outputs:
 Images are rendered at 2x (328x628 / 110x110) so they scale DOWN rather than
 UP on HiDPI displays. Inno Setup scales them proportionally to fill the 164x314
 and 55x55 sidebar/header areas — downscaling produces clean results at all DPI
-levels. 1x-only images looked blurry on 125%/150% Windows display scaling.
+levels.
 
 These images are VERSION-AGNOSTIC — no version string is embedded.
 They only need to change if the branding changes.
 
 Aesthetic: matches Vibepollo/Vibelight banner art —
-  deep navy-indigo gradient, dot-grid texture, orange glow top-right,
-  teal glow bottom-left, Bahnschrift bold title, tagline.
+  deep saturated purple-indigo gradient, film-grain noise, orange glow top-right,
+  teal glow bottom-left, Inter Bold title, badge-pill feature tags.
 """
 
 import io
+import os
+import urllib.request
+import tempfile
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
@@ -35,16 +38,68 @@ OUT_DIR  = REPO / "installer/images"
 # Rendered at 2× so Inno Setup scales DOWN (crisp) rather than UP (blurry).
 SCALE = 2
 
-# ── Palette ───────────────────────────────────────────────────────────────────
-BG_TOP  = (6,   8,   28)    # Very dark navy
-BG_BOT  = (14,  17,  58)    # Deep indigo
-ORANGE  = (255, 145, 40)    # Corner glow — top-right
-TEAL    = (30,  205, 185)   # Corner glow — bottom-left
-INDIGO  = (99,  102, 241)   # Accent bars
+# ── Palette — saturated purple-indigo matching banner art ─────────────────────
+BG_TOP  = (8,    5,   35)    # Deep saturated navy-purple
+BG_BOT  = (24,  14,   90)    # Rich indigo
+ORANGE  = (255, 130,  30)    # Corner glow — top-right
+TEAL    = (20,  210, 190)    # Corner glow — bottom-left
+INDIGO  = (99,  102, 241)    # Accent bars + badge borders
 WHITE   = (255, 255, 255)
-TITLE   = (240, 243, 255)   # Near-white with slight blue tint
-TAGLINE = (105, 118, 168)   # Muted blue-grey
-SEP     = (60,  70,  130)   # Separator line
+TITLE   = (240, 243, 255)    # Near-white with slight blue tint
+
+# Badge pill colors
+BADGE_FILL   = (12,  18,  75, 160)   # Semi-transparent dark indigo (RGBA)
+BADGE_BORDER = (80,  90, 220, 220)   # Blue-indigo border
+BADGE_TEXT   = (190, 200, 255, 255)  # Light blue-white text
+
+
+# ── Font loading ──────────────────────────────────────────────────────────────
+
+def _get_inter_bold() -> str | None:
+    """Download Inter Bold to temp dir. Returns path or None on failure."""
+    url = "https://cdn.jsdelivr.net/gh/rsms/inter@v4.0/docs/font-files/Inter-Bold.ttf"
+    tmp = Path(tempfile.gettempdir()) / "Inter-Bold.ttf"
+    if tmp.exists():
+        return str(tmp)
+    try:
+        urllib.request.urlretrieve(url, tmp)
+        return str(tmp)
+    except Exception:
+        return None
+
+
+def _font_candidates(size: int) -> ImageFont.FreeTypeFont | None:
+    """Try Inter Bold → Calibri Bold → Segoe UI Bold → fallback."""
+    candidates = [
+        _get_inter_bold(),
+        "C:/Windows/Fonts/calibrib.ttf",   # Calibri Bold — non-condensed, rounded
+        "C:/Windows/Fonts/segoeuib.ttf",   # Segoe UI Bold
+        "C:/Windows/Fonts/segoeui.ttf",
+    ]
+    for path in candidates:
+        if path and Path(path).exists():
+            try:
+                return ImageFont.truetype(path, size)
+            except Exception:
+                continue
+    return ImageFont.load_default()
+
+
+def _badge_font(size: int) -> ImageFont.FreeTypeFont | None:
+    """Smaller weight for badge text."""
+    candidates = [
+        _get_inter_bold(),
+        "C:/Windows/Fonts/calibrib.ttf",
+        "C:/Windows/Fonts/segoeuib.ttf",
+        "C:/Windows/Fonts/segoeui.ttf",
+    ]
+    for path in candidates:
+        if path and Path(path).exists():
+            try:
+                return ImageFont.truetype(path, size)
+            except Exception:
+                continue
+    return ImageFont.load_default()
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -66,14 +121,14 @@ def gradient_bg(W: int, H: int, top: tuple, bot: tuple) -> Image.Image:
     return img
 
 
-def dot_grid(img: Image.Image, spacing: int, alpha: int = 14) -> Image.Image:
-    """Subtle dot-grid texture overlay."""
-    layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    draw  = ImageDraw.Draw(layer)
+def add_noise(img: Image.Image, strength: int = 13) -> Image.Image:
+    """Subtle film-grain noise layer matching banner art texture."""
     W, H  = img.size
-    for gx in range(spacing // 2, W, spacing):
-        for gy in range(spacing // 2, H, spacing):
-            draw.ellipse([gx - 1, gy - 1, gx + 1, gy + 1], fill=(*WHITE, alpha))
+    grain = Image.frombytes("L", (W, H), os.urandom(W * H))
+    # Scale grain intensity down (urandom is 0-255; we want subtle)
+    grain = grain.point(lambda p: int(p * strength / 255))
+    layer = Image.merge("RGBA", [grain, grain, grain,
+                                  Image.new("L", (W, H), strength)])
     return Image.alpha_composite(img, layer)
 
 
@@ -105,25 +160,59 @@ def render_logo_alpha(svg_path: Path, target_size: int) -> Image.Image:
     return logo
 
 
-def load_font(path: str, size: int) -> ImageFont.ImageFont:
-    try:
-        return ImageFont.truetype(path, size)
-    except Exception:
-        return ImageFont.load_default()
-
-
-def text_w(draw: ImageDraw.Draw, text: str, font) -> int:
+def text_size(draw: ImageDraw.Draw, text: str, font) -> tuple[int, int]:
     bbox = draw.textbbox((0, 0), text, font=font)
-    return bbox[2] - bbox[0]
+    return bbox[2] - bbox[0], bbox[3] - bbox[1]
 
 
 def draw_centered(draw: ImageDraw.Draw, y: int, text: str, font,
                   fill: tuple, W: int) -> int:
-    """Draw text centered horizontally. Returns bottom y of rendered text."""
-    bbox = draw.textbbox((0, 0), text, font=font)
-    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    """Draw text centered horizontally. Returns bottom y."""
+    tw, th = text_size(draw, text, font)
     draw.text(((W - tw) // 2, y), text, fill=fill, font=font)
     return y + th
+
+
+def draw_badge(img: Image.Image, cx: int, cy: int,
+               text: str, font) -> int:
+    """
+    Draw a pill-shaped badge centered at (cx, cy).
+    Semi-transparent dark fill + indigo border + light blue text.
+    Returns badge height (for stacking).
+    """
+    tmp_draw = ImageDraw.Draw(img)
+    tw, th   = text_size(tmp_draw, text, font)
+
+    pad_x = px(12)
+    pad_y = px(5)
+    bw    = tw + pad_x * 2
+    bh    = th + pad_y * 2
+    radius = bh // 2          # full capsule
+
+    x0 = cx - bw // 2
+    y0 = cy - bh // 2
+    x1 = cx + bw // 2
+    y1 = cy + bh // 2
+
+    # Draw onto a separate RGBA layer so fill alpha composites correctly
+    layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    ld    = ImageDraw.Draw(layer)
+
+    # Fill
+    ld.rounded_rectangle([x0, y0, x1, y1], radius=radius,
+                          fill=BADGE_FILL)
+    # Border
+    ld.rounded_rectangle([x0, y0, x1, y1], radius=radius,
+                          outline=BADGE_BORDER, width=max(1, px(1)))
+
+    result = Image.alpha_composite(img, layer)
+    # Text on top
+    rd = ImageDraw.Draw(result)
+    rd.text((cx - tw // 2, y0 + pad_y), text, fill=BADGE_TEXT, font=font)
+
+    # Copy result pixels back into img (in-place-ish via return)
+    img.paste(result, (0, 0))
+    return bh
 
 
 # ── sidebar: 164×314 logical → 328×628 rendered ───────────────────────────────
@@ -131,46 +220,48 @@ def draw_centered(draw: ImageDraw.Draw, y: int, text: str, font,
 def make_sidebar():
     W, H = px(164), px(314)
 
-    # Gradient + texture
+    # 1. Gradient
     img = gradient_bg(W, H, BG_TOP, BG_BOT)
-    img = dot_grid(img, spacing=px(14), alpha=12)
 
-    # Corner glows — pushed off-canvas so they read as edge lighting
-    img = add_glow(img, W + px(10), -px(10), px(85), ORANGE, alpha=95)
-    img = add_glow(img, -px(10),  H + px(10), px(72), TEAL,   alpha=75)
+    # 2. Film-grain noise
+    img = add_noise(img, strength=14)
+
+    # 3. Corner glows
+    img = add_glow(img, W + px(12), -px(12), px(90),  ORANGE, alpha=100)
+    img = add_glow(img, -px(12),  H + px(12), px(75), TEAL,   alpha=80)
 
     draw = ImageDraw.Draw(img)
 
-    # Accent bars top + bottom
-    draw.rectangle([0, 0, W, px(4)],        fill=(*INDIGO, 255))
-    draw.rectangle([0, H - px(3), W, H],    fill=(*INDIGO, 150))
+    # 4. Accent bars top + bottom
+    draw.rectangle([0, 0, W, px(4)],       fill=(*INDIGO, 255))
+    draw.rectangle([0, H - px(3), W, H],   fill=(*INDIGO, 150))
 
-    # Logo
-    logo_size = px(124)
+    # 5. Logo
+    logo_size = px(120)
     logo = render_logo_alpha(SVG_PATH, logo_size)
     lx   = (W - logo_size) // 2
-    ly   = px(46)
+    ly   = px(44)
     img.paste(logo, (lx, ly), logo)
 
     draw = ImageDraw.Draw(img)  # re-wrap after paste
 
-    # Title — Bahnschrift (geometric condensed, matches banner art weight)
-    title_font = load_font("C:/Windows/Fonts/bahnschrift.ttf", px(18))
+    # 6. Title — Inter Bold (non-condensed), falls back to Calibri Bold
+    title_font = _font_candidates(px(18))
     ty = ly + logo_size + px(14)
-    ty = draw_centered(draw, ty, "Vibepollo", title_font, TITLE, W) + px(9)
+    ty = draw_centered(draw, ty, "Vibepollo", title_font, TITLE, W)
+    ty += px(14)
 
-    # Separator
-    sep_w = int(W * 0.38)
-    sep_x = (W - sep_w) // 2
-    draw.line([(sep_x, ty), (sep_x + sep_w, ty)], fill=SEP, width=px(1))
-    ty += px(8)
+    # 7. Badge pills — "Windows Game Streaming" / "Mic Passthrough"
+    badge_font = _badge_font(px(9))
 
-    # Tagline — two lines, regular Segoe UI
-    tag1 = load_font("C:/Windows/Fonts/segoeui.ttf", px(10))
-    tag2 = load_font("C:/Windows/Fonts/segoeuil.ttf", px(9))
-    ty   = draw_centered(draw, ty, "Windows Game Streaming", tag1, TAGLINE, W) + px(2)
-    draw_centered(draw, ty, "with Mic Passthrough",  tag2, TAGLINE, W)
+    bh1 = draw_badge(img, W // 2, ty + px(8),
+                     "Windows Game Streaming", badge_font)
+    ty += bh1 + px(8)
 
+    draw_badge(img, W // 2, ty + px(8),
+               "Mic Passthrough", badge_font)
+
+    # 8. Convert and save
     rgb = img.convert("RGB")
     out = OUT_DIR / "wizard-sidebar.bmp"
     rgb.save(str(out), "BMP")
@@ -183,7 +274,8 @@ def make_header():
     W, H = px(55), px(55)
 
     img = gradient_bg(W, H, BG_TOP, BG_BOT)
-    img = add_glow(img, W + px(6), -px(6), px(42), ORANGE, alpha=95)
+    img = add_noise(img, strength=12)
+    img = add_glow(img, W + px(6), -px(6), px(42), ORANGE, alpha=100)
 
     logo_size = px(42)
     logo = render_logo_alpha(SVG_PATH, logo_size)
