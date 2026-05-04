@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.15.11] — 2026-05-04
+
+### Fixed
+- **Tray NIM_DELETE orphan cleanup** — added `Shell_NotifyIcon(NIM_DELETE)` before
+  `NIM_ADD` on tray re-init and on process exit. Eliminates ghost tray icons that
+  required task-kill to clear after an elevated restart.
+
+### Changed
+- **Wizard images redesigned** — installer sidebar and header BMPs now match the
+  Vibepollo/Vibelight banner art aesthetic: navy-indigo gradient background, orange
+  glow accent top-right, teal glow bottom-left, transparent logo paste.
+
 ## [1.15.10] — 2026-05-03
 
 ### Fixed
