@@ -175,8 +175,8 @@ def make_sidebar():
     # 8. Tagline — two lines
     tag_font  = load_font("", 10)
     tag_font2 = load_font("sl", 9)
-    ty = text_centered(draw, ty, "Mic Passthrough", tag_font,  TAGLINE, W) + 3
-    text_centered(draw, ty, "for Steam Deck",   tag_font2, TAGLINE, W)
+    ty = text_centered(draw, ty, "Windows Game Streaming", tag_font,  TAGLINE, W) + 3
+    text_centered(draw, ty, "with Mic Passthrough",  tag_font2, TAGLINE, W)
 
     # 9. Export
     rgb = img.convert("RGB")
