@@ -58,7 +58,7 @@ for voice chat, Discord, games, and anything else.
 
 ### Easy Install (Recommended)
 
-1. Download `Vibepollo-1.15.4-Setup.exe` from
+1. Download `Vibepollo-1.15.11-Setup.exe` from
    [Releases](https://github.com/xenstalker02/Vibepollo/releases)
 2. Run the installer — it handles everything automatically:
    - Installs to `C:\Program Files\Vibepollo\`
