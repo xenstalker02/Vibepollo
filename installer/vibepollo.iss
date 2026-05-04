@@ -82,6 +82,11 @@ Source: "..\build\assets\web\*"; DestDir: "{app}\assets\web"; Flags: ignoreversi
 ; apps.json — copied by config::parse into config/ on first run (SUNSHINE_ASSETS_DIR="assets", relative to exe dir)
 Source: "..\src_assets\windows\assets\apps.json"; DestDir: "{app}\assets"; Flags: ignoreversion
 
+; Default app cover art — desktop.png, steam.png, virtual_desktop.png, box.png, etc.
+; Served by sunshine via SUNSHINE_ASSETS_DIR for the /appasset endpoint.
+; Missing from install = grey boxes in Moonlight/Vibelight app list.
+Source: "..\src_assets\common\assets\*.png"; DestDir: "{app}\assets"; Flags: ignoreversion
+
 ; Shaders
 Source: "..\src_assets\windows\assets\shaders\*"; DestDir: "{app}\assets\shaders"; Flags: ignoreversion recursesubdirs createallsubdirs
 
