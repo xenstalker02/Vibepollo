@@ -1,9 +1,9 @@
 ; Vibepollo Inno Setup Installer
-; Version: 1.15.11
-; Builds to: installer\output\Vibepollo-1.15.11-Setup.exe
+; Version: 1.15.13
+; Builds to: installer\output\Vibepollo-1.15.13-Setup.exe
 
 #define MyAppName      "Vibepollo"
-#define MyAppVersion   "1.15.11"
+#define MyAppVersion   "1.15.13"
 #define MyAppPublisher "xenstalker02"
 #define MyAppURL       "https://github.com/xenstalker02/Vibepollo"
 #define MyAppExeName   "sunshine.exe"
