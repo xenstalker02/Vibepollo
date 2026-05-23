@@ -142,7 +142,8 @@ namespace update {
         mf << dest.string() << "\n" << release.version << "\n";
       } catch (...) {
         BOOST_LOG(error) << "Auto-update: failed to write marker file "sv << marker.string();
-        fs::remove(dest);
+        std::error_code ec;
+        fs::remove(dest, ec);  // noexcept overload — detached thread must not throw
         return;
       }
 
