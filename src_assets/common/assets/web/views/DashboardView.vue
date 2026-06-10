@@ -633,8 +633,12 @@ async function runVersionChecks() {
 
     // Remote release checks (GitHub)
     try {
+      // Query OUR fork's releases (matches the binary's update checker).
+      // Upstream hardcoded Nonary here — that banner offered Nonary installers,
+      // which would overwrite this fork. Fork updates come from the weekly
+      // upstream-sync pipeline, surfaced via xenstalker02/Vibepollo releases.
       githubRelease.value = await fetch(
-        'https://api.github.com/repos/Nonary/Vibepollo/releases/latest',
+        'https://api.github.com/repos/xenstalker02/Vibepollo/releases/latest',
       ).then((r) => r.json());
     } catch (e) {
       // eslint-disable-next-line no-console
@@ -642,9 +646,9 @@ async function runVersionChecks() {
     }
     // Fetch list of releases to locate prereleases and determine installed stability
     try {
-      const releases = await fetch('https://api.github.com/repos/Nonary/Vibepollo/releases').then(
-        (r) => r.json(),
-      );
+      const releases = await fetch(
+        'https://api.github.com/repos/xenstalker02/Vibepollo/releases',
+      ).then((r) => r.json());
       if (Array.isArray(releases)) {
         // Pick the latest prerelease by semver (not just the first one)
         const prereleases = releases.filter((r: any) => r && r.prerelease && !r.draft);
