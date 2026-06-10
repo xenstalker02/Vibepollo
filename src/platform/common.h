@@ -584,6 +584,15 @@ namespace platf {
      */
     virtual void reset_default_device() {}
 
+    /**
+     * @brief Render-side restore guard (mirror of the capture-side guard).
+     * If the default render device is one of our virtual sinks (Steam Streaming
+     * Speakers / Steam Streaming Microphone), restore the saved prior default
+     * from the state file, falling back to resetting away from the virtual sink.
+     * @param wait_for_device Whether the fallback reset may wait for a device to appear.
+     */
+    virtual void restore_default_render_if_virtual(bool /*wait_for_device*/) {}
+
     virtual ~audio_control_t() = default;
   };
 
