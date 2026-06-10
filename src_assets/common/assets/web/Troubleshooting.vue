@@ -97,22 +97,20 @@
         </div>
       </section>
       <section v-if="platform === 'windows'" class="troubleshoot-card">
-        <div class="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h2 class="text-base font-semibold text-dark dark:text-light">
-              {{ $t('troubleshooting.mic_passthrough') }}
-            </h2>
-            <p class="text-xs opacity-70 leading-snug mt-1">
-              {{ micStatusLine }}
-            </p>
-            <p v-if="micLastSessionLine" class="text-xs opacity-70 leading-snug">
-              {{ micLastSessionLine }}
-            </p>
-          </div>
-          <n-button type="primary" strong @click="filterMicLogs">
-            {{ $t('troubleshooting.mic_passthrough_filter_logs') }}
-          </n-button>
+        <div>
+          <h2 class="text-base font-semibold text-dark dark:text-light">
+            {{ $t('troubleshooting.mic_passthrough') }}
+          </h2>
+          <p class="text-xs opacity-70 leading-snug mt-1">
+            {{ micStatusLine }}
+          </p>
+          <p v-if="micLastSessionLine" class="text-xs opacity-70 leading-snug">
+            {{ micLastSessionLine }}
+          </p>
         </div>
+        <n-button type="primary" strong class="mt-3" @click="filterMicLogs">
+          {{ $t('troubleshooting.mic_passthrough_filter_logs') }}
+        </n-button>
       </section>
     </div>
 
