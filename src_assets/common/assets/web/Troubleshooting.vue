@@ -97,16 +97,21 @@
         </div>
       </section>
       <section v-if="platform === 'windows'" class="troubleshoot-card">
-        <div>
-          <h2 class="text-base font-semibold text-dark dark:text-light">
-            {{ $t('troubleshooting.mic_passthrough') || 'Mic Passthrough' }}
-          </h2>
-          <p class="text-xs opacity-70 leading-snug mt-1">
-            {{
-              $t('troubleshooting.mic_passthrough_desc') ||
-              'Mic passthrough is active when a client with mic enabled connects. Decoded audio is written to Steam Streaming Microphone. Discord (set to Default) picks it up automatically.'
-            }}
-          </p>
+        <div class="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h2 class="text-base font-semibold text-dark dark:text-light">
+              {{ $t('troubleshooting.mic_passthrough') }}
+            </h2>
+            <p class="text-xs opacity-70 leading-snug mt-1">
+              {{ micStatusLine }}
+            </p>
+            <p v-if="micLastSessionLine" class="text-xs opacity-70 leading-snug">
+              {{ micLastSessionLine }}
+            </p>
+          </div>
+          <n-button type="primary" strong @click="filterMicLogs">
+            {{ $t('troubleshooting.mic_passthrough_filter_logs') }}
+          </n-button>
         </div>
       </section>
     </div>
@@ -332,6 +337,31 @@ const crashDump = ref<CrashDumpStatus | null>(null);
 const crashDumpAvailable = computed(() => isCrashDumpEligible(crashDump.value));
 const exportCrashPending = ref(false);
 
+type MicStatus = {
+  configured: boolean;
+  endpoint_present: boolean;
+  session_active: boolean;
+  mic_active: boolean;
+  last_session?: { packets_received: number; frames_written: number };
+};
+const micStatus = ref<MicStatus | null>(null);
+const micStatusLine = computed(() => {
+  const s = micStatus.value;
+  if (!s) return t('troubleshooting.mic_passthrough_status_loading');
+  if (!s.configured) return t('troubleshooting.mic_passthrough_status_not_configured');
+  if (!s.endpoint_present) return t('troubleshooting.mic_passthrough_status_unavailable');
+  if (s.mic_active) return t('troubleshooting.mic_passthrough_status_active');
+  return t('troubleshooting.mic_passthrough_status_waiting');
+});
+const micLastSessionLine = computed(() => {
+  const last = micStatus.value?.last_session;
+  if (!last) return '';
+  return t('troubleshooting.mic_passthrough_last_session', {
+    packets: last.packets_received,
+    frames: last.frames_written,
+  });
+});
+
 const closeAppPressed = ref(false);
 const closeAppStatus = ref(null as null | boolean);
 const restartPressed = ref(false);
@@ -395,6 +425,7 @@ const displayedLineCount = ref(0);
 const isAtBottom = ref(true);
 
 let logInterval: number | null = null;
+let micStatusInterval: number | null = null;
 let loginDisposer: (() => void) | null = null;
 let searchDebounce: number | null = null;
 
@@ -853,6 +884,23 @@ function exportLogs() {
   } catch (_) {}
 }
 
+async function refreshMicStatus() {
+  if (platform.value !== 'windows') {
+    micStatus.value = null;
+    return;
+  }
+  try {
+    const r = await http.get('/api/mic-status', { validateStatus: () => true });
+    micStatus.value = r.status === 200 && r.data ? (r.data as MicStatus) : null;
+  } catch {
+    micStatus.value = null;
+  }
+}
+
+function filterMicLogs() {
+  logFilter.value = '[mic]';
+}
+
 async function refreshCrashDumpStatus() {
   try {
     if (platform.value === 'windows') {
@@ -969,22 +1017,28 @@ onMounted(async () => {
   loginDisposer = authStore.onLogin(() => {
     void refreshLogs();
     void refreshCrashDumpStatus();
+    void refreshMicStatus();
   });
 
   await authStore.waitForAuthentication();
 
   await refreshCrashDumpStatus();
+  await refreshMicStatus();
 
   nextTick(() => {
     if (getLogContainer()) scrollToBottom();
   });
 
   logInterval = window.setInterval(refreshLogs, 5000);
+  if (platform.value === 'windows') {
+    micStatusInterval = window.setInterval(() => void refreshMicStatus(), 5000);
+  }
   refreshLogs();
 });
 
 onBeforeUnmount(() => {
   if (logInterval) window.clearInterval(logInterval);
+  if (micStatusInterval) window.clearInterval(micStatusInterval);
   if (loginDisposer) loginDisposer();
   if (searchDebounce !== null && typeof window !== 'undefined') {
     window.clearTimeout(searchDebounce);

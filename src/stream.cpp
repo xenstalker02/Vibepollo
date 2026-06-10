@@ -110,6 +110,16 @@ namespace stream {
   // Set to true on first 0x3003 mic packet receipt for timeout diagnostics.
   static std::atomic<bool> mic_first_packet_received {false};
 
+  // Stats from the most recently ended session, for the web UI mic status card.
+  static std::atomic<bool> g_mic_has_last_session {false};
+  static std::atomic<std::uint64_t> g_mic_last_packets_received {0};
+  static std::atomic<std::uint64_t> g_mic_last_frames_written {0};
+
+  // Count of live sessions currently holding the default-capture switch.
+  // mic_first_packet_received alone is unsafe as a "capture in use" signal:
+  // a second session's start resets it while the first still holds the switch.
+  static std::atomic<int> g_mic_capture_switched_sessions {0};
+
   enum class socket_e : int {
     video,  ///< Video
     audio  ///< Audio
@@ -598,6 +608,7 @@ namespace stream {
       session.mic.audio_ctrl->switch_capture_to(config::audio.mic_capture_device);
       session.mic.capture_snap = snap;
       session.mic.capture_switched = true;
+      g_mic_capture_switched_sessions.fetch_add(1, std::memory_order_relaxed);
 
       // Capture retry thread: re-applies the default capture device switch at
       // increasing intervals because SteamOS/PipeWire may reset it asynchronously.
@@ -685,6 +696,18 @@ namespace stream {
   void end_broadcast(broadcast_ctx_t &ctx);
 
   static auto broadcast = safe::make_shared<broadcast_ctx_t>(start_broadcast, end_broadcast);
+
+  mic_status_t get_mic_status() {
+    const bool session_active = session::running_sessions.load(std::memory_order_relaxed) > 0;
+    return mic_status_t {
+      .session_active = session_active,
+      .mic_active = session_active && mic_first_packet_received.load(std::memory_order_relaxed),
+      .capture_switched = g_mic_capture_switched_sessions.load(std::memory_order_relaxed) > 0,
+      .has_last_session = g_mic_has_last_session.load(std::memory_order_relaxed),
+      .last_packets_received = g_mic_last_packets_received.load(std::memory_order_relaxed),
+      .last_frames_written = g_mic_last_frames_written.load(std::memory_order_relaxed),
+    };
+  }
 
   void request_idr_for_all_sessions() {
     auto ref = broadcast.ref();
@@ -2587,6 +2610,7 @@ namespace stream {
       if (session.mic.capture_switched && session.mic.audio_ctrl) {
         session.mic.audio_ctrl->restore_capture_from(session.mic.capture_snap);
         session.mic.capture_switched = false;
+        g_mic_capture_switched_sessions.fetch_sub(1, std::memory_order_relaxed);
       }
       if (session.mic.audio_ctrl) {
         session.mic.audio_ctrl->release_mic_redirect_device();
@@ -2598,6 +2622,13 @@ namespace stream {
                       << " plc="sv << session.mic.plc_events
                       << " silence="sv << session.mic.silence_frames
                       << " errors="sv << session.mic.decode_errors;
+      // Keep last-session stats for the web UI mic status card (only sessions
+      // that actually received mic data — Aurora-style sessions don't count).
+      if (session.mic.packets_received > 0) {
+        g_mic_last_packets_received.store(session.mic.packets_received, std::memory_order_relaxed);
+        g_mic_last_frames_written.store(session.mic.frames_written, std::memory_order_relaxed);
+        g_mic_has_last_session.store(true, std::memory_order_relaxed);
+      }
 
       if (!session.undo_cmds.empty()) {
         auto exec_thread = std::thread([cmd_list = session.undo_cmds] {
