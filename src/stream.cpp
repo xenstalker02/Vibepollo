@@ -506,6 +506,13 @@ namespace stream {
       std::unique_ptr<OpusDecoder, void (*)(OpusDecoder *)> decoder {nullptr, opus_decoder_destroy};
       int channels = 0;
 
+      // Armed at session start when mic passthrough is configured + encrypted.
+      // Full init (vmic backend, capture switch, reapply thread) is deferred to
+      // the first mic packet so clients that never send mic data (e.g. Aurora /
+      // moonlight-tv) never touch host audio state. One-shot: cleared on first
+      // attempt regardless of outcome.
+      bool lazy_init_pending = false;
+
       // Snapshot of default capture roles saved before switching; restored on session end.
       platf::capture_snapshot_t capture_snap;
       bool capture_switched = false;
@@ -541,6 +548,81 @@ namespace stream {
     } virtual_display;
 #endif
   };
+
+  /**
+   * @brief Full mic-passthrough init: vmic backend, Opus decoder, default-capture
+   * switch and the capture-reapply thread. Deferred to the first mic packet
+   * (see session_t::mic.lazy_init_pending) so non-mic clients never touch host
+   * audio state. Runs on the control thread; serialized against teardown by the
+   * controlEnd ordering in session::join().
+   */
+  static bool init_mic_passthrough(session_t &session) {
+    auto audio_ctrl = platf::audio_control();
+    if (!audio_ctrl) return false;
+
+    const auto snap = audio_ctrl->snapshot_capture_defaults();
+
+    // Write pre-session default capture name to state file.
+    // Used by startup restore guard to recover if Vibepollo is hard-killed.
+    if (!config::audio.mic_capture_device.empty() && !snap.console_id.empty()) {
+      const auto state_file = platf::appdata() / "mic_capture_prev.txt";
+      const auto pre_session_name = audio_ctrl->get_current_default_capture_name();
+      if (!pre_session_name.empty() && pre_session_name != config::audio.mic_capture_device) {
+        std::ofstream f(state_file, std::ios::trunc);
+        f << pre_session_name;
+        f.close();
+        BOOST_LOG(debug) << "[mic] state file written: pre-session default = " << pre_session_name;
+      }
+    }
+
+    // Initialize Steam Streaming Microphone backend
+    if (audio_ctrl->init_mic_redirect_device() != 0) {
+      BOOST_LOG(warning) << "[mic] Steam Streaming Microphone unavailable — passthrough disabled"sv;
+      return false;
+    }
+    BOOST_LOG(info) << "[mic] using Steam Streaming Microphone backend"sv;
+
+    int err = OPUS_OK;
+    auto *dec = opus_decoder_create(48000, 1, &err);
+    if (err != OPUS_OK || !dec) {
+      BOOST_LOG(error) << "[mic] decoder create failed: "sv << opus_strerror(err);
+      return false;
+    }
+
+    session.mic.decoder.reset(dec);
+    session.mic.channels = 1;
+    // Store as shared_ptr so the capture-reapply thread can co-own it safely.
+    session.mic.audio_ctrl = std::shared_ptr<platf::audio_control_t>(std::move(audio_ctrl));
+
+    if (!config::audio.mic_capture_device.empty()) {
+      session.mic.audio_ctrl->switch_capture_to(config::audio.mic_capture_device);
+      session.mic.capture_snap = snap;
+      session.mic.capture_switched = true;
+
+      // Capture retry thread: re-applies the default capture device switch at
+      // increasing intervals because SteamOS/PipeWire may reset it asynchronously.
+      // Captures audio_ctrl by shared_ptr value and cancel by shared_ptr value —
+      // no reference to session, so session teardown cannot cause use-after-free.
+      auto cancel = std::make_shared<std::atomic<bool>>(false);
+      session.mic.reapply_cancel = cancel;
+      auto ctrl = session.mic.audio_ctrl;  // shared ownership
+      auto device = config::audio.mic_capture_device;
+      std::thread([cancel, ctrl, device]() {
+        const int schedule[] = {2, 5, 10, 20};
+        int prev = 0;
+        for (int t : schedule) {
+          std::this_thread::sleep_for(std::chrono::seconds(t - prev));
+          prev = t;
+          if (cancel->load(std::memory_order_acquire) || device.empty()) break;
+          ctrl->switch_capture_to(device);
+          BOOST_LOG(info) << "[mic] capture re-apply at +"sv << t << "s"sv;
+        }
+      }).detach();
+    }
+
+    BOOST_LOG(info) << "[mic] passthrough active → "sv << config::audio.mic_sink;
+    return true;
+  }
 
   /**
    * First part of cipher must be struct of type control_encrypted_t
@@ -1296,7 +1378,22 @@ namespace stream {
     server->map(packetTypes[IDX_MIC_AUDIO_DATA], [](session_t *session, const std::string_view &payload) {
       BOOST_LOG(verbose) << "type [IDX_MIC_AUDIO_DATA]"sv;
 
-      if (!session->mic.audio_ctrl || !session->mic.decoder) return;
+      if (!session->mic.audio_ctrl || !session->mic.decoder) {
+        // Lazy init on first mic packet (one-shot — failure disables for this session)
+        if (!session->mic.lazy_init_pending) return;
+        session->mic.lazy_init_pending = false;
+        bool init_ok = false;
+        try {
+          init_ok = init_mic_passthrough(*session);
+        } catch (...) {
+          BOOST_LOG(error) << "[mic] init threw exception — mic disabled"sv;
+        }
+        if (!init_ok) {
+          session->mic.decoder.reset();
+          session->mic.audio_ctrl.reset();
+          return;
+        }
+      }
 
       // Require encrypted control stream
       if (!(session->config.encryptionFlagsEnabled & SS_ENC_CONTROL_V2)) {
@@ -2645,83 +2742,12 @@ namespace stream {
       } else if (!mic_encrypted) {
         BOOST_LOG(warning) << "[mic] no encrypted control stream — passthrough disabled"sv;
       } else {
-        // Fix C: flat init lambda — one level of nesting, clear strategy selection
-        auto init_mic = [&]() -> bool {
-          auto audio_ctrl = platf::audio_control();
-          if (!audio_ctrl) return false;
-
-          const auto snap = audio_ctrl->snapshot_capture_defaults();
-
-          // Write pre-session default capture name to state file.
-          // Used by startup restore guard to recover if Vibepollo is hard-killed.
-          if (!config::audio.mic_capture_device.empty() && !snap.console_id.empty()) {
-            const auto state_file = platf::appdata() / "mic_capture_prev.txt";
-            const auto pre_session_name = audio_ctrl->get_current_default_capture_name();
-            if (!pre_session_name.empty() && pre_session_name != config::audio.mic_capture_device) {
-              std::ofstream f(state_file, std::ios::trunc);
-              f << pre_session_name;
-              f.close();
-              BOOST_LOG(debug) << "[mic] state file written: pre-session default = " << pre_session_name;
-            }
-          }
-
-          // Initialize Steam Streaming Microphone backend
-          if (audio_ctrl->init_mic_redirect_device() != 0) {
-            BOOST_LOG(warning) << "[mic] Steam Streaming Microphone unavailable — passthrough disabled"sv;
-            return false;
-          }
-          BOOST_LOG(info) << "[mic] using Steam Streaming Microphone backend"sv;
-
-          int err = OPUS_OK;
-          auto *dec = opus_decoder_create(48000, 1, &err);
-          if (err != OPUS_OK || !dec) {
-            BOOST_LOG(error) << "[mic] decoder create failed: "sv << opus_strerror(err);
-            return false;
-          }
-
-          session.mic.decoder.reset(dec);
-          session.mic.channels = 1;
-          // Store as shared_ptr so the capture-reapply thread can co-own it safely.
-          session.mic.audio_ctrl = std::shared_ptr<platf::audio_control_t>(std::move(audio_ctrl));
-
-          if (!config::audio.mic_capture_device.empty()) {
-            session.mic.audio_ctrl->switch_capture_to(config::audio.mic_capture_device);
-            session.mic.capture_snap = snap;
-            session.mic.capture_switched = true;
-
-            // Capture retry thread: re-applies the default capture device switch at
-            // increasing intervals because SteamOS/PipeWire may reset it asynchronously.
-            // Captures audio_ctrl by shared_ptr value and cancel by shared_ptr value —
-            // no reference to session, so session teardown cannot cause use-after-free.
-            auto cancel = std::make_shared<std::atomic<bool>>(false);
-            session.mic.reapply_cancel = cancel;
-            auto ctrl = session.mic.audio_ctrl;  // shared ownership
-            auto device = config::audio.mic_capture_device;
-            std::thread([cancel, ctrl, device]() {
-              const int schedule[] = {2, 5, 10, 20};
-              int prev = 0;
-              for (int t : schedule) {
-                std::this_thread::sleep_for(std::chrono::seconds(t - prev));
-                prev = t;
-                if (cancel->load(std::memory_order_acquire) || device.empty()) break;
-                ctrl->switch_capture_to(device);
-                BOOST_LOG(info) << "[mic] capture re-apply at +"sv << t << "s"sv;
-              }
-            }).detach();
-          }
-
-          BOOST_LOG(info) << "[mic] passthrough active → "sv << config::audio.mic_sink;
-          return true;
-        };
-
-        try {
-          if (!init_mic()) {
-            session.mic.decoder.reset();
-          }
-        } catch (...) {
-          BOOST_LOG(error) << "[mic] init threw exception — mic disabled"sv;
-          session.mic.decoder.reset();
-        }
+        // Defer full init (vmic backend, capture switch, reapply thread) to the
+        // first mic packet — see init_mic_passthrough(). Non-mic clients (e.g.
+        // Aurora / moonlight-tv) never send one, so host capture state stays
+        // untouched for their sessions.
+        session.mic.lazy_init_pending = true;
+        BOOST_LOG(info) << "[mic] passthrough armed — init deferred to first mic packet"sv;
       }
 
       session.audioThread = std::thread {audioThread, &session};
