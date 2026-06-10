@@ -288,6 +288,31 @@ bool ProcessHandler::start(
       &si_plain,
       &pi_
     );
+    // CREATE_BREAKAWAY_FROM_JOB fails with ERROR_ACCESS_DENIED when our process
+    // sits in a job that does not allow breakaway (e.g. Task Scheduler wraps
+    // task processes in such a job). Retry without the flag — the child then
+    // lives in the same job and is torn down with it, which is acceptable for
+    // keep-alive helpers; a helper that cannot launch at all is not.
+    if (!ret && GetLastError() == ERROR_ACCESS_DENIED && (plain_flags & CREATE_BREAKAWAY_FROM_JOB)) {
+      DWORD no_breakaway_flags = (plain_flags & ~CREATE_BREAKAWAY_FROM_JOB);
+      ret = CreateProcessW(
+        nullptr,
+        (LPWSTR) cmd_line.c_str(),
+        nullptr,
+        nullptr,
+        FALSE,
+        no_breakaway_flags,
+        nullptr,
+        working_dir.empty() ? nullptr : working_dir.c_str(),
+        &si_plain,
+        &pi_
+      );
+      if (ret) {
+        BOOST_LOG(info) << "Process launch succeeded without CREATE_BREAKAWAY_FROM_JOB "
+                           "(caller is in a job that denies breakaway): "
+                        << platf::to_utf8(application_path);
+      }
+    }
   }
 
   if (ret && use_job_ && job_) {
