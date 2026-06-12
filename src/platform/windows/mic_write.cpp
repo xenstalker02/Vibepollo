@@ -6,11 +6,13 @@
 #include "mic_write.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <cwctype>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 #include <Audioclient.h>
@@ -113,64 +115,120 @@ namespace platf::audio {
   }
 
   bool mic_write_wasapi_t::find_target_device(std::wstring &out_device_id) {
-    IMMDeviceCollection *raw_collection = nullptr;
-    auto hr = device_enum->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &raw_collection);
-    if (FAILED(hr) || !raw_collection) {
-      BOOST_LOG(warning) << "[mic] find_target_device: EnumAudioEndpoints failed 0x"sv
-                         << util::hex(hr).to_string_view();
-      return false;
-    }
-    util::safe_ptr<IMMDeviceCollection, release_com<IMMDeviceCollection>> collection(raw_collection);
-
-    UINT count = 0;
-    collection->GetCount(&count);
-
-    for (UINT i = 0; i < count; ++i) {
-      IMMDevice *raw_device = nullptr;
-      if (FAILED(collection->Item(i, &raw_device)) || !raw_device) continue;
-      util::safe_ptr<IMMDevice, release_com<IMMDevice>> device(raw_device);
-
-      IPropertyStore *raw_prop = nullptr;
-      if (FAILED(device->OpenPropertyStore(STGM_READ, &raw_prop)) || !raw_prop) continue;
-      util::safe_ptr<IPropertyStore, release_com<IPropertyStore>> prop(raw_prop);
-
-      PROPVARIANT pv;
-      PropVariantInit(&pv);
-      if (FAILED(prop->GetValue(local_PKEY_Device_FriendlyName, &pv)) ||
-          pv.vt != VT_LPWSTR || !pv.pwszVal) {
-        PropVariantClear(&pv);
-        continue;
+    // Match a Steam mic render endpoint by friendly-name substring within a given
+    // device-state mask. Returns the device id of the first match and records its
+    // friendly name in target_device_name.
+    auto search_mask = [&](DWORD state_mask, std::wstring &id_out) -> bool {
+      IMMDeviceCollection *raw_collection = nullptr;
+      auto hr = device_enum->EnumAudioEndpoints(eRender, state_mask, &raw_collection);
+      if (FAILED(hr) || !raw_collection) {
+        return false;
       }
-      std::wstring name(pv.pwszVal);
-      PropVariantClear(&pv);
+      util::safe_ptr<IMMDeviceCollection, release_com<IMMDeviceCollection>> collection(raw_collection);
 
-      // Case-insensitive substring match against autodetect patterns
-      std::wstring name_lower = name;
-      std::transform(name_lower.begin(), name_lower.end(), name_lower.begin(), ::towlower);
+      UINT count = 0;
+      collection->GetCount(&count);
 
-      bool matched = false;
-      for (const auto &pattern : autodetect_patterns) {
-        std::wstring pat_lower = pattern;
-        std::transform(pat_lower.begin(), pat_lower.end(), pat_lower.begin(), ::towlower);
-        if (name_lower.find(pat_lower) != std::wstring::npos) {
-          matched = true;
-          break;
+      for (UINT i = 0; i < count; ++i) {
+        IMMDevice *raw_device = nullptr;
+        if (FAILED(collection->Item(i, &raw_device)) || !raw_device) continue;
+        util::safe_ptr<IMMDevice, release_com<IMMDevice>> device(raw_device);
+
+        IPropertyStore *raw_prop = nullptr;
+        if (FAILED(device->OpenPropertyStore(STGM_READ, &raw_prop)) || !raw_prop) continue;
+        util::safe_ptr<IPropertyStore, release_com<IPropertyStore>> prop(raw_prop);
+
+        PROPVARIANT pv;
+        PropVariantInit(&pv);
+        if (FAILED(prop->GetValue(local_PKEY_Device_FriendlyName, &pv)) ||
+            pv.vt != VT_LPWSTR || !pv.pwszVal) {
+          PropVariantClear(&pv);
+          continue;
         }
-      }
+        std::wstring name(pv.pwszVal);
+        PropVariantClear(&pv);
 
-      if (matched) {
+        // Case-insensitive substring match against autodetect patterns
+        std::wstring name_lower = name;
+        std::transform(name_lower.begin(), name_lower.end(), name_lower.begin(), ::towlower);
+
+        bool matched = false;
+        for (const auto &pattern : autodetect_patterns) {
+          std::wstring pat_lower = pattern;
+          std::transform(pat_lower.begin(), pat_lower.end(), pat_lower.begin(), ::towlower);
+          if (name_lower.find(pat_lower) != std::wstring::npos) {
+            matched = true;
+            break;
+          }
+        }
+        if (!matched) continue;
+
         WCHAR *raw_id = nullptr;
         if (SUCCEEDED(device->GetId(&raw_id)) && raw_id) {
-          out_device_id = std::wstring(raw_id);
+          id_out = std::wstring(raw_id);
           CoTaskMemFree(raw_id);
           target_device_name = platf::to_utf8(name);
-          BOOST_LOG(info) << "[mic] found Steam mic render endpoint: "sv << target_device_name;
           return true;
         }
       }
+      return false;
+    };
+
+    // 1. Fast path: an ACTIVE endpoint is ready to use.
+    if (search_mask(DEVICE_STATE_ACTIVE, out_device_id)) {
+      BOOST_LOG(info) << "[mic] found Steam mic render endpoint: "sv << target_device_name;
+      return true;
+    }
+
+    // 2. Self-heal: the Steam Streaming Microphone render endpoint (the loopback
+    //    sink we write decoded mic audio into) can be left disabled — e.g. a user
+    //    disabling it in Sound settings, or a Steam Remote Play toggle. WASAPI then
+    //    won't enumerate it as ACTIVE and passthrough silently dies. Look in the
+    //    recoverable inactive states and re-enable via IPolicyConfig. NOTPRESENT is
+    //    excluded: a driver-absent endpoint can't be re-enabled by visibility, and
+    //    matching a stale not-present entry first would falsely abort the heal.
+    std::wstring inactive_id;
+    if (search_mask(DEVICE_STATE_DISABLED | DEVICE_STATE_UNPLUGGED, inactive_id)) {
+      BOOST_LOG(warning) << "[mic] Steam mic render endpoint ["sv << target_device_name
+                         << "] is present but inactive — attempting to re-enable it."sv;
+      if (try_enable_endpoint(inactive_id)) {
+        // Endpoint visibility/state propagation through MMDevice is asynchronous;
+        // poll for the endpoint to surface as ACTIVE rather than assuming a delay.
+        for (int attempt = 0; attempt < 20; ++attempt) {
+          if (search_mask(DEVICE_STATE_ACTIVE, out_device_id)) {
+            BOOST_LOG(info) << "[mic] re-enabled and found Steam mic render endpoint: "sv << target_device_name;
+            return true;
+          }
+          std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+      }
+      BOOST_LOG(warning) << "[mic] could not re-enable the Steam mic render endpoint — enable "
+                            "'Speakers (Steam Streaming Microphone)' in Windows Sound settings, or "
+                            "toggle Steam Remote Play microphone."sv;
+      return false;
     }
 
     return false;
+  }
+
+  bool mic_write_wasapi_t::try_enable_endpoint(const std::wstring &device_id) {
+    IPolicyConfig *raw_policy = nullptr;
+    auto hr = CoCreateInstance(CLSID_CPolicyConfigClient, nullptr, CLSCTX_ALL,
+      IID_IPolicyConfig, (void **)&raw_policy);
+    if (FAILED(hr) || !raw_policy) {
+      BOOST_LOG(warning) << "[mic] try_enable_endpoint: CoCreateInstance(IPolicyConfig) failed 0x"sv
+                         << util::hex(hr).to_string_view();
+      return false;
+    }
+    util::safe_ptr<IPolicyConfig, release_com<IPolicyConfig>> policy(raw_policy);
+
+    hr = policy->SetEndpointVisibility(device_id.c_str(), TRUE);
+    if (FAILED(hr)) {
+      BOOST_LOG(warning) << "[mic] try_enable_endpoint: SetEndpointVisibility(TRUE) failed 0x"sv
+                         << util::hex(hr).to_string_view();
+      return false;
+    }
+    return true;
   }
 
   void mic_write_wasapi_t::ensure_recommended_steam_mic_format(const std::wstring &device_id) {

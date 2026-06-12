@@ -64,6 +64,7 @@ namespace platf::audio {
 
   private:
     bool find_target_device(std::wstring &out_device_id);
+    bool try_enable_endpoint(const std::wstring &device_id);
     void ensure_recommended_steam_mic_format(const std::wstring &device_id);
     bool initialize_device(const std::wstring &device_id);
     void render_loop();
