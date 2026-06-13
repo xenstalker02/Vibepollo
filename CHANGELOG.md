@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.15.14] — 2026-06-12
+
+### Fixed
+- **Post-stream crash / session hang.** The display helper could wedge after a
+  stream ended, and repeated relaunch attempts could trip the session hang
+  watchdog and abort. Added a failure cooldown, adopt-an-existing-helper on
+  launch contention, and a fix for the underlying cause — a process-launch flag
+  (`CREATE_BREAKAWAY_FROM_JOB`) that failed when Vibepollo runs under a Windows
+  scheduled-task job. Teardown is now fast and crash-free.
+- **Mic passthrough reliability.** Mic redirect now initializes on the first mic
+  packet, so clients that don't send mic audio never touch host capture state. It
+  also self-heals: if the *Speakers (Steam Streaming Microphone)* render endpoint
+  has been disabled in Windows, Vibepollo re-enables it automatically instead of
+  silently failing.
+- **Default audio device restored after streams.** If a stream leaves a virtual
+  Steam streaming device as the Windows default playback device, the previous
+  default is restored on session end and at startup.
+
+### Added
+- **Mic Passthrough status card** in the Web UI Troubleshooting tab — live status
+  (configured / awaiting session / active) plus a one-click filter for mic logs.
+
+### Changed
+- Update notifications now check this fork's own releases.
+
 ## [1.15.11] — 2026-05-04
 
 ### Fixed

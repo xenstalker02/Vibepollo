@@ -86,8 +86,8 @@ passthrough is active. This is a hardware constraint, not a software issue.
 **Fix:**
 - Increase `mic_buffer_packets` in sunshine.conf (default 2 = 40ms; try 3 or 4
   for unstable Wi-Fi). Change via Web UI or add `mic_buffer_packets = 4` to conf.
-- Check network: on LAN this should never happen. On AWAY path (Tailscale), packet
-  loss is expected and FEC is enabled to compensate.
+- Check network: on a wired LAN this should never happen. Over a remote or VPN
+  connection, occasional packet loss is expected and FEC is enabled to compensate.
 - Verify PipeWire volume is at 50% (see item 5 above).
 
 ## 7. WASAPI render device lost mid-session
