@@ -86,6 +86,30 @@ namespace proc {
   namespace pt = boost::property_tree;
 
   namespace {
+    // A bare protocol URL (e.g. "steam://open/bigpicture") cannot be launched via
+    // CreateProcess: under an elevated, breakaway-denying job (Task Scheduler) it
+    // fails with ERROR_ACCESS_DENIED, and even when it launches the elevated child
+    // can't hand the URL to the user's non-elevated shell (the trap open_url()
+    // documents). Detect these so prep/detached commands route through
+    // platf::open_url() (ShellExecuteW), which honors the protocol handler and the
+    // elevation boundary.
+    bool is_scheme_url(const std::string &cmd) {
+      auto pos = cmd.find("://");
+      if (pos == std::string::npos || pos == 0) {
+        return false;
+      }
+      if (!std::isalpha(static_cast<unsigned char>(cmd.front()))) {
+        return false;
+      }
+      for (size_t i = 1; i < pos; ++i) {
+        const char c = cmd[i];
+        if (!std::isalnum(static_cast<unsigned char>(c)) && c != '+' && c != '-' && c != '.') {
+          return false;
+        }
+      }
+      return true;
+    }
+
     constexpr const char *LOSSLESS_PROFILE_RECOMMENDED = "recommended";
     constexpr const char *LOSSLESS_PROFILE_CUSTOM = "custom";
     constexpr int LOSSLESS_DEFAULT_FLOW_SCALE = 50;
@@ -1697,6 +1721,11 @@ namespace proc {
                                               find_working_directory(cmd.do_cmd, _env) :
                                               boost::filesystem::path(_app.working_dir);
       BOOST_LOG(info) << "Executing Do Cmd: ["sv << cmd.do_cmd << "] elevated: " << cmd.elevated;
+      if (is_scheme_url(cmd.do_cmd)) {
+        BOOST_LOG(info) << "Do Cmd is a protocol URL; routing through the shell (ShellExecuteW)."sv;
+        platf::open_url(cmd.do_cmd);
+        continue;
+      }
       auto child = platf::run_command(cmd.elevated, true, cmd.do_cmd, working_dir, _env, _pipe.get(), ec, nullptr);
 
       if (ec) {
@@ -1736,6 +1765,11 @@ namespace proc {
       }
 #endif
       BOOST_LOG(info) << "Spawning ["sv << cmd << "] in ["sv << working_dir << ']';
+      if (is_scheme_url(cmd)) {
+        BOOST_LOG(info) << "Detached command is a protocol URL; routing through the shell (ShellExecuteW)."sv;
+        platf::open_url(cmd);
+        continue;
+      }
       auto child = platf::run_command(_app.elevated, true, cmd, working_dir, _env, _pipe.get(), ec, nullptr);
 #ifdef _WIN32
       DWORD detached_pid = 0;
@@ -2245,6 +2279,11 @@ namespace proc {
                                               find_working_directory(cmd.undo_cmd, _env) :
                                               boost::filesystem::path(_app.working_dir);
       BOOST_LOG(info) << "Executing Undo Cmd: ["sv << cmd.undo_cmd << ']';
+      if (is_scheme_url(cmd.undo_cmd)) {
+        BOOST_LOG(info) << "Undo Cmd is a protocol URL; routing through the shell (ShellExecuteW)."sv;
+        platf::open_url(cmd.undo_cmd);
+        continue;
+      }
       auto child = platf::run_command(cmd.elevated, true, cmd.undo_cmd, working_dir, _env, _pipe.get(), ec, nullptr);
 
       if (ec) {
