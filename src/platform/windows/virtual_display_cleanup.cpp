@@ -113,8 +113,16 @@ namespace platf::virtual_display_cleanup {
       had_active_virtual_display &&
       enforce_db_restore &&
       (revert_order == revert_order_t::remove_before_restore || !result.helper_revert_dispatched);
+    // When the helper recently failed to start, its display driver state is likely
+    // wedged: the virtual display won't settle and the synchronous database restore
+    // below can stall for many seconds. Fast-fail those paths so session teardown
+    // stays well under the 10s hang watchdog (the helper recovery monitor and the
+    // next session start reconcile the display configuration instead).
+    const bool helper_unavailable = display_helper_integration::helper_recently_failed();
+
     if (should_wait_for_teardown_before_restore) {
-      constexpr auto kTeardownSettleTimeout = std::chrono::seconds(5);
+      const auto kTeardownSettleTimeout = helper_unavailable ? std::chrono::milliseconds(250)
+                                                             : std::chrono::milliseconds(5000);
       if (wait_for_virtual_display_teardown(kTeardownSettleTimeout)) {
         BOOST_LOG(debug) << "Virtual display cleanup: teardown settled before restore.";
       }
@@ -126,7 +134,12 @@ namespace platf::virtual_display_cleanup {
       }
 
       if (!result.helper_revert_dispatched) {
-        result.database_restore_applied = restore_windows_display_database();
+        if (helper_unavailable) {
+          BOOST_LOG(warning) << "Virtual display cleanup: helper unavailable (failure cooldown); "
+                                "skipping synchronous database restore during teardown.";
+        } else {
+          result.database_restore_applied = restore_windows_display_database();
+        }
       }
     }
 

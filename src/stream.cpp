@@ -2588,14 +2588,17 @@ namespace stream {
         task_pool.cancel(force_kill);
       });
 
-      BOOST_LOG(debug) << "Waiting for video to end..."sv;
+      // Teardown progress logged at info so that if join() hangs (the 10s watchdog
+      // above fires), the last "Teardown:" line before the Fatal pinpoints the
+      // blocking step. Cheap; sessions end infrequently.
+      BOOST_LOG(info) << "Teardown: joining video thread..."sv;
       session.videoThread.join();
-      BOOST_LOG(debug) << "Waiting for audio to end..."sv;
+      BOOST_LOG(info) << "Teardown: joining audio thread..."sv;
       session.audioThread.join();
-      BOOST_LOG(debug) << "Waiting for control to end..."sv;
+      BOOST_LOG(info) << "Teardown: waiting for control thread..."sv;
       session.controlEnd.view();
       // Reset input on session stop to avoid stuck repeated keys
-      BOOST_LOG(debug) << "Resetting Input..."sv;
+      BOOST_LOG(info) << "Teardown: resetting input..."sv;
       input::reset(session.input);
 
       // Cancel the capture-reapply retry thread so it doesn't access audio_ctrl
@@ -2662,7 +2665,9 @@ namespace stream {
 
         const bool webrtc_active = webrtc_stream::has_active_sessions();
         if (!webrtc_active) {
+          BOOST_LOG(info) << "Teardown: pausing app process..."sv;
           proc::proc.pause();
+          BOOST_LOG(info) << "Teardown: app process paused."sv;
         }
         // Poll for up to 2 seconds to let the game process finish exiting before
         // deciding paused vs stopped. Fixes the race where the user quits the game

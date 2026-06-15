@@ -1740,6 +1740,19 @@ namespace display_helper_integration {
     }
     clear_active_session();
   }
+
+  // Side-effect-free check used by teardown paths to fast-fail helper-dependent work
+  // while the helper is in its post-start-failure cooldown (no logging, unlike the
+  // file-local helper_start_failure_cooldown_active()).
+  bool helper_recently_failed() {
+    const auto last_us = g_last_helper_start_failure_us.load(std::memory_order_relaxed);
+    if (last_us <= 0) {
+      return false;
+    }
+    const auto elapsed_us = now_steady_us() - last_us;
+    const auto cooldown_us = std::chrono::duration_cast<std::chrono::microseconds>(kHelperStartFailureCooldown).count();
+    return elapsed_us < cooldown_us;
+  }
 }  // namespace display_helper_integration
 
 #endif

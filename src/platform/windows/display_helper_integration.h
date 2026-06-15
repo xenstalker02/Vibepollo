@@ -90,4 +90,9 @@ namespace display_helper_integration {
   // Stop the helper watchdog when no streams are active.
   void stop_watchdog();
 
+  // True if the helper recently failed to start and is within its failure cooldown.
+  // Side-effect-free (no logging) — for teardown paths that must fast-fail
+  // helper-dependent work instead of spending the hang-watchdog budget on it.
+  bool helper_recently_failed();
+
 }  // namespace display_helper_integration
