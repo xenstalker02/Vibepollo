@@ -612,7 +612,7 @@
     "mic_buffer_ms_desc": "WASAPI render buffer duration in milliseconds (default: 50, range 10–200). Increase if you hear mic audio glitches. Lower values reduce latency.",
     "mic_buffer_packets": "Mic Jitter Buffer Depth",
     "mic_buffer_packets_desc": "Number of Opus packets to prebuffer before mic playback starts (default: 2 = 40ms). Increase to 3-4 on unstable Wi-Fi. Lower = less latency before first word, higher = smoother delivery.",
-    "mic_section_desc": "Streams your microphone from the Deck to your PC via Steam Streaming Microphone. Steam must be running on the PC for the audio endpoint to be present."
+    "mic_section_desc": "Streams a microphone from the streaming client to this PC via Steam Streaming Microphone. Steam must be running on this PC for the audio endpoint to be present."
   },
   "index": {
     "description": "Vibepollo is a self-hosted game stream host for Moonlight.",

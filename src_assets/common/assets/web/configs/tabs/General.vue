@@ -93,7 +93,7 @@ function removeServerCommand(index: number) {
       setting-key="sunshine_name"
       v-model="config.sunshine_name"
       class="mb-6"
-      placeholder="Vibeshine"
+      placeholder="This PC's hostname"
     />
 
     <ConfigFieldRenderer setting-key="min_log_level" v-model="config.min_log_level" class="mb-6" />

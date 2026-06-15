@@ -888,6 +888,8 @@ const ALLOWED_OVERRIDE_KEYS = new Set<string>([
   // Stream audio/video and display automation
   'audio_sink',
   'virtual_sink',
+  'mic_sink',
+  'mic_capture_device',
   'stream_audio',
   'adapter_name',
   'dd_configuration_option',

@@ -106,6 +106,8 @@ const defaultGroups = [
     options: {
       audio_sink: '',
       virtual_sink: '',
+      mic_sink: '',
+      mic_capture_device: '',
       stream_audio: 'enabled',
       keep_sink_default: 'enabled',
       auto_capture_sink: 'enabled',
