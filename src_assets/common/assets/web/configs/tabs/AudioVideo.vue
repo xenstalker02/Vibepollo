@@ -205,12 +205,6 @@ function selectVirtualDisplayLayout(v: unknown) {
           :placeholder="$t('config.virtual_sink_placeholder')"
         />
 
-        <!-- Mic Passthrough -->
-        <div class="mb-3">
-          <h3 class="text-sm font-medium text-dark dark:text-light">{{ $t('config.mic_section_title') }}</h3>
-          <p class="text-[11px] opacity-70 mt-1">{{ $t('config.mic_section_desc') }}</p>
-        </div>
-
         <ConfigFieldRenderer
           setting-key="mic_sink"
           v-model="config.mic_sink"

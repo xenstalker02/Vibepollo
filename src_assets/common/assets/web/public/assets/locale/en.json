@@ -601,7 +601,6 @@
     "ignore_encoder_probe_failure_desc": "Allow streaming to continue even if probing for encoders fails. This may result in streaming failure if no encoder is available.",
     "legacy_ordering": "App ordering for legacy clients",
     "legacy_ordering_desc": "Enable ordering support workaround for legacy clients. Can cause issues with clients or scripts that can't handle UTF8 correctly. Artemis clients support this by default.",
-    "mic_section_title": "Mic Passthrough",
     "mic_sink": "Mic Passthrough Sink",
     "mic_sink_desc": "Steam Streaming Microphone render endpoint. Vibepollo writes decoded Opus audio here. Default: Speakers (Steam Streaming Microphone). Leave at the default value unless the device name differs on your system.",
     "mic_sink_placeholder": "Speakers (Steam Streaming Microphone)",
@@ -611,8 +610,7 @@
     "mic_buffer_ms": "Mic Render Buffer (ms)",
     "mic_buffer_ms_desc": "WASAPI render buffer duration in milliseconds (default: 50, range 10–200). Increase if you hear mic audio glitches. Lower values reduce latency.",
     "mic_buffer_packets": "Mic Jitter Buffer Depth",
-    "mic_buffer_packets_desc": "Number of Opus packets to prebuffer before mic playback starts (default: 2 = 40ms). Increase to 3-4 on unstable Wi-Fi. Lower = less latency before first word, higher = smoother delivery.",
-    "mic_section_desc": "Streams a microphone from the streaming client to this PC via Steam Streaming Microphone. Steam must be running on this PC for the audio endpoint to be present."
+    "mic_buffer_packets_desc": "Number of Opus packets to prebuffer before mic playback starts (default: 2 = 40ms). Increase to 3-4 on unstable Wi-Fi. Lower = less latency before first word, higher = smoother delivery."
   },
   "index": {
     "description": "Vibepollo is a self-hosted game stream host for Moonlight.",
