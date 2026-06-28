@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.15.15] — 2026-06-16
+
+### Added
+- **Per-application mic passthrough overrides.** The mic passthrough sink and
+  capture device can now be overridden per app (App → Add Setting Overrides →
+  Audio/Video), so a specific title can use different mic devices than the global
+  default.
+
+### Fixed
+- **Steam Big Picture / `steam://` shortcuts launch reliably.** Per-app `steam://`
+  commands (e.g. a Big Picture launcher) now open correctly instead of falling
+  through to the desktop. Set the command as a bare URL such as
+  `steam://open/bigpicture`.
+- **Hardened session teardown.** If the display helper became unavailable
+  mid-session, teardown could hang and trip the watchdog. Teardown is now bounded
+  and self-heals.
+
+### Changed
+- **Streamlined the Audio / Video settings.** The Mic Passthrough section lost its
+  redundant header (each field is self-describing), and the device-name field now
+  shows this PC's hostname as the placeholder instead of an internal default.
+
+### Security
+- Updated web UI dependencies (axios, vite) to clear known advisories.
+
 ## [1.15.14] — 2026-06-12
 
 ### Fixed
