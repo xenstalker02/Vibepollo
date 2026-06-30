@@ -48,6 +48,15 @@ jobs:
             mingw-w64-ucrt-x86_64-miniupnpc
             mingw-w64-ucrt-x86_64-cppwinrt
 
+      # MinHook isn't an MSYS2 package; build + install it into the ucrt64 prefix so the
+      # REQUIRED find_library(libMinHook.a) in cmake/dependencies/windows.cmake succeeds.
+      # (Locally it's already installed in the prefix; CI had no step to provide it.)
+      - name: Build and install MinHook
+        run: |
+          git clone --depth 1 https://github.com/TsudaKageyu/minhook.git "${RUNNER_TEMP}/minhook"
+          cmake -S "${RUNNER_TEMP}/minhook" -B "${RUNNER_TEMP}/minhook/build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${MINGW_PREFIX}"
+          cmake --build "${RUNNER_TEMP}/minhook/build" --target install
+
       - name: Configure CMake
         run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 
