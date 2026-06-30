@@ -54,9 +54,15 @@ jobs:
       # (Locally it's already installed in the prefix; CI had no step to provide it.)
       - name: Build and install MinHook
         run: |
+          set -e
           git clone --depth 1 https://github.com/TsudaKageyu/minhook.git "${RUNNER_TEMP}/minhook"
-          cmake -S "${RUNNER_TEMP}/minhook" -B "${RUNNER_TEMP}/minhook/build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${MINGW_PREFIX}"
-          cmake --build "${RUNNER_TEMP}/minhook/build" --target install
+          cmake -S "${RUNNER_TEMP}/minhook" -B "${RUNNER_TEMP}/minhook/build" -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build "${RUNNER_TEMP}/minhook/build"
+          lib=$(find "${RUNNER_TEMP}/minhook/build" \( -name 'libMinHook.a' -o -name 'libminhook.a' \) | head -1)
+          echo "built MinHook static lib: $lib"
+          cp "$lib" "${MINGW_PREFIX}/lib/libMinHook.a"
+          cp "${RUNNER_TEMP}/minhook/include/MinHook.h" "${MINGW_PREFIX}/include/MinHook.h"
+          ls -l "${MINGW_PREFIX}/lib/libMinHook.a" "${MINGW_PREFIX}/include/MinHook.h"
 
       - name: Configure CMake
         run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
