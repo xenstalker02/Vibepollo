@@ -509,8 +509,12 @@ int main(int argc, char *argv[]) {
   }
 
 #ifdef _WIN32
-  // Check if virtual display should be auto-enabled due to no physical monitors
-  if (VDISPLAY::should_auto_enable_virtual_display()) {
+  // Capture once, with the monitors in their normal state, whether this host is headless
+  // and therefore needs the virtual display driver held open for the whole process
+  // lifetime. A host with a physical display only needs it transiently during streams and
+  // releases it on session end, so it can enter S3 sleep when idle.
+  proc::vdisplay_persistent = VDISPLAY::should_auto_enable_virtual_display();
+  if (proc::vdisplay_persistent) {
     BOOST_LOG(info) << "No physical monitors detected at initialization. Initializing virtual display driver.";
     proc::initVDisplayDriver();
   }

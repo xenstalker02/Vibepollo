@@ -823,6 +823,12 @@ namespace proc {
 #ifdef _WIN32
   VDISPLAY::DRIVER_STATUS vDisplayDriverStatus = VDISPLAY::DRIVER_STATUS::UNKNOWN;
 
+  // Captured once at startup (monitors in their normal state): true only on a headless
+  // host that needs the virtual display driver held open for its whole lifetime. On a
+  // host with a physical display the driver is transient — opened on demand per stream
+  // and released on session end — so the system can enter S3 sleep when idle.
+  bool vdisplay_persistent = false;
+
   void onVDisplayWatchdogFailed() {
     vDisplayDriverStatus = VDISPLAY::DRIVER_STATUS::WATCHDOG_FAILED;
     VDISPLAY::closeVDisplayDevice();
@@ -2331,6 +2337,17 @@ namespace proc {
       }
       std::memset(&_virtual_display_guid, 0, sizeof(_virtual_display_guid));
       _virtual_display_active = false;
+
+      // Release the SudoVDA driver (device handle + ping/watchdog thread) now that the
+      // stream's virtual display is gone, so the indirect-display adapter goes idle and
+      // the host can enter S3 sleep between streams. It is reopened on demand at the next
+      // stream (prepare_display). Headless hosts keep it open (vdisplay_persistent, set
+      // once at startup).
+      if (!vdisplay_persistent && vDisplayDriverStatus == VDISPLAY::DRIVER_STATUS::OK) {
+        VDISPLAY::closeVDisplayDevice();
+        vDisplayDriverStatus = VDISPLAY::DRIVER_STATUS::UNKNOWN;
+        BOOST_LOG(info) << "Released SudoVDA driver after session end; host can sleep when idle.";
+      }
     }
 #endif
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.15.18] — 2026-06-30
+
+### Fixed
+- **Host now sleeps between streams too, not just at idle (completes the 1.15.17 fix).**
+  After a stream ends, Vibepollo releases the SudoVDA virtual-display driver (closes the
+  device handle and stops its ping/watchdog thread) when the host has a physical display,
+  so the indirect-display adapter goes idle and the system can enter S3 sleep whenever no
+  client is actively streaming. The driver is reopened on demand at the next stream, so
+  virtual-display streaming (monitors off + virtual display on) is unchanged. Headless
+  hosts keep the driver open as before.
+
 ## [1.15.17] — 2026-06-29
 
 ### Fixed

@@ -48,6 +48,7 @@ namespace proc {
 
 #ifdef _WIN32
   extern VDISPLAY::DRIVER_STATUS vDisplayDriverStatus;
+  extern bool vdisplay_persistent;
   void initVDisplayDriver();
 #endif
 
