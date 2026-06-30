@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.15.17] — 2026-06-29
+
+### Fixed
+- **Host could not enter S3 sleep while idle (real fix).** On a host with physical
+  monitors, the apps-refresh path pre-opened the SudoVDA virtual-display driver at
+  startup and held it open for the whole process lifetime (device handle + ping/
+  watchdog thread), keeping the indirect-display adapter active — which blocks system
+  sleep while letting the monitors power off. The pre-open is now gated on
+  `should_auto_enable_virtual_display()` (no physical display), mirroring the existing
+  startup gate; with monitors present the driver is opened on demand at stream start,
+  so the host sleeps when idle and virtual-display streaming is unchanged. (The 1.15.16
+  `ES_DISPLAY_REQUIRED` change was a related-but-wrong target and did not fix this.)
+
 ## [1.15.16] — 2026-06-29
 
 ### Fixed

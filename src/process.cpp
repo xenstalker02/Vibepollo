@@ -3340,15 +3340,23 @@ namespace proc {
     }
 
 #ifdef _WIN32
-    size_t fail_count = 0;
-    while (fail_count < 5 && vDisplayDriverStatus != VDISPLAY::DRIVER_STATUS::OK) {
-      initVDisplayDriver();
-      if (vDisplayDriverStatus == VDISPLAY::DRIVER_STATUS::OK) {
-        break;
-      }
+    // Only pre-open the SudoVDA virtual-display driver here when there is no physical
+    // display to use (headless host). Opening it holds the adapter active for the whole
+    // process lifetime (open device handle + ping/watchdog thread), which keeps the host
+    // out of S3 sleep while idle even though the monitors power off. With a physical
+    // display present the driver is opened on demand at stream start (prepare_display),
+    // so the host can sleep when idle. Mirrors the same gate in main.cpp.
+    if (VDISPLAY::should_auto_enable_virtual_display()) {
+      size_t fail_count = 0;
+      while (fail_count < 5 && vDisplayDriverStatus != VDISPLAY::DRIVER_STATUS::OK) {
+        initVDisplayDriver();
+        if (vDisplayDriverStatus == VDISPLAY::DRIVER_STATUS::OK) {
+          break;
+        }
 
-      fail_count += 1;
-      std::this_thread::sleep_for(1s);
+        fail_count += 1;
+        std::this_thread::sleep_for(1s);
+      }
     }
 #endif
 
