@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.15.16] — 2026-06-29
+
+### Fixed
+- **Host could not enter sleep while idle.** When no stream was active, an internal
+  display/encoder probe could assert a one-shot display-wake hint that silently reset
+  the system idle-sleep timer (it never appeared in `powercfg /requests`), preventing
+  the PC from ever sleeping. The wake hint is now asserted only while a stream is
+  active, so the host sleeps normally when idle. Mid-stream keep-awake is unchanged.
+
 ## [1.15.15] — 2026-06-16
 
 ### Added

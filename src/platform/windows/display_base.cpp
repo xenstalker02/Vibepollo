@@ -37,6 +37,7 @@ typedef enum _D3DKMT_GPU_PREFERENCE_QUERY_STATE : DWORD {
 #include "src/display_device.h"
 #include "src/logging.h"
 #include "src/platform/common.h"
+#include "src/rtsp.h"
 #include "src/video.h"
 
 namespace platf {
@@ -641,9 +642,16 @@ namespace platf::dxgi {
         break;
       }
 
-      // If we made it here without finding an output, try to power on the display and retry.
+      // If we made it here without finding an output, retry once. Assert the display-wake
+      // hint ONLY while a client stream is active: a one-shot ES_DISPLAY_REQUIRED here
+      // silently resets the host's idle-sleep timer every time an idle encoder probe runs
+      // init() with no display present — it never shows in `powercfg /requests`, so it
+      // would prevent the PC from ever sleeping while idle. During a real stream the wake
+      // is still legitimate (the display must be on to capture).
       if (tries == 0) {
-        SetThreadExecutionState(ES_DISPLAY_REQUIRED);
+        if (rtsp_stream::session_count() > 0) {
+          SetThreadExecutionState(ES_DISPLAY_REQUIRED);
+        }
         Sleep(500);
       }
     }
