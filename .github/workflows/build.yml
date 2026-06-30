@@ -47,6 +47,7 @@ jobs:
             mingw-w64-ucrt-x86_64-nlohmann-json
             mingw-w64-ucrt-x86_64-miniupnpc
             mingw-w64-ucrt-x86_64-cppwinrt
+            git
 
       # MinHook isn't an MSYS2 package; build + install it into the ucrt64 prefix so the
       # REQUIRED find_library(libMinHook.a) in cmake/dependencies/windows.cmake succeeds.
