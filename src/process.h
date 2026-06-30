@@ -50,6 +50,7 @@ namespace proc {
   extern VDISPLAY::DRIVER_STATUS vDisplayDriverStatus;
   extern bool vdisplay_persistent;
   void initVDisplayDriver();
+  void release_idle_vdisplay();
 #endif
 
   typedef config::prep_cmd_t cmd_t;

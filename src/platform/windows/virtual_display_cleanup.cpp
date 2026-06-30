@@ -16,6 +16,12 @@
   #include <string>
   #include <thread>
 
+// Forward-declared to avoid pulling in process.h (heavy/circular include). Defined in
+// src/process.cpp — releases the SudoVDA driver when no stream is active + host not headless.
+namespace proc {
+  void release_idle_vdisplay();
+}
+
 namespace platf::virtual_display_cleanup {
   namespace {
     bool has_active_virtual_display() {
@@ -149,6 +155,11 @@ namespace platf::virtual_display_cleanup {
                     << ", helper_revert_dispatched=" << (result.helper_revert_dispatched ? "true" : "false")
                     << ", database_restore_applied=" << (result.database_restore_applied ? "true" : "false")
                     << ")";
+
+    // Displays are now removed and the physical display restored. Release the SudoVDA
+    // driver if this host isn't headless and no client stream is active, so the host can
+    // sleep — covers the disconnect / paused-then-reverted paths that skip proc::terminate().
+    proc::release_idle_vdisplay();
     return result;
   }
 }  // namespace platf::virtual_display_cleanup

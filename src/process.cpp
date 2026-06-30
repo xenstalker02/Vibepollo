@@ -847,6 +847,24 @@ namespace proc {
       }
     }
   }
+
+  void release_idle_vdisplay() {
+    // Release the SudoVDA driver (device handle + ping/watchdog thread) when it is no
+    // longer needed — the host has a physical display (not headless) and no client stream
+    // is active — so the indirect-display adapter goes idle and the host can enter S3
+    // sleep. Reopened on demand at the next stream. Called from session teardown AND the
+    // virtual-display cleanup path, so it covers terminate, disconnect, and paused-then-
+    // reverted sessions. No-op on headless hosts or while any stream is still active.
+    if (vdisplay_persistent || vDisplayDriverStatus != VDISPLAY::DRIVER_STATUS::OK) {
+      return;
+    }
+    if (rtsp_stream::session_count() > 0 || webrtc_stream::has_active_sessions()) {
+      return;
+    }
+    VDISPLAY::closeVDisplayDevice();
+    vDisplayDriverStatus = VDISPLAY::DRIVER_STATUS::UNKNOWN;
+    BOOST_LOG(info) << "Released SudoVDA driver (no active stream); host can sleep when idle.";
+  }
 #endif
 
   // Custom move operations to allow global proc replacement if ever needed
@@ -2343,11 +2361,9 @@ namespace proc {
       // the host can enter S3 sleep between streams. It is reopened on demand at the next
       // stream (prepare_display). Headless hosts keep it open (vdisplay_persistent, set
       // once at startup).
-      if (!vdisplay_persistent && vDisplayDriverStatus == VDISPLAY::DRIVER_STATUS::OK) {
-        VDISPLAY::closeVDisplayDevice();
-        vDisplayDriverStatus = VDISPLAY::DRIVER_STATUS::UNKNOWN;
-        BOOST_LOG(info) << "Released SudoVDA driver after session end; host can sleep when idle.";
-      }
+      // Release the SudoVDA driver if not headless and no stream is active (also handled
+      // in the virtual-display cleanup path for the disconnect/pause case).
+      release_idle_vdisplay();
     }
 #endif
 

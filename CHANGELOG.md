@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.15.19] — 2026-06-30
+
+### Fixed
+- **Host now sleeps after a client *disconnects*, not just on full quit (completes 1.15.18).**
+  A normal last-client disconnect pauses the app rather than terminating it, so the
+  1.15.18 release (which only ran on `terminate`) could leave the SudoVDA driver held open
+  after a disconnect. The release is now centralized in `release_idle_vdisplay()` (gated on
+  "not headless AND no active stream session") and also invoked from the virtual-display
+  cleanup path, so the driver is released on terminate, disconnect, and paused-then-reverted
+  sessions alike — and never while another client is still streaming (multi-client safe).
+  (Found by a Codex review of the 1.15.18 change.)
+
 ## [1.15.18] — 2026-06-30
 
 ### Fixed
