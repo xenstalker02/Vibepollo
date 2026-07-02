@@ -2697,7 +2697,11 @@ namespace stream {
 #endif
         const int paused_timeout_secs = std::max(0, config::video.dd.paused_virtual_display_timeout_secs);
 
-        const bool skip_teardown_due_to_pause = is_paused && !revert_display_config;
+        // Placebo apps (Desktop, Playnite-managed) have no real process to keep alive —
+        // never defer their teardown as "paused", or the virtual display (and SudoVDA
+        // driver) stays held after disconnect and blocks host sleep when the paused
+        // timeout is disabled. Matches the WebRTC session path.
+        const bool skip_teardown_due_to_pause = is_paused && !revert_display_config && !proc::proc.is_placebo_app();
 
 #ifdef _WIN32
         if (!skip_teardown_due_to_pause) {

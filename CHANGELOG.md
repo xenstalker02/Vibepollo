@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.15.20] — 2026-07-02
+
+### Fixed
+- **Desktop (placebo-app) disconnects no longer defer virtual-display teardown as "paused".**
+  On the RTSP session path, placebo apps (Desktop, Playnite-managed) always report as
+  running, so a last-client disconnect with `dd_config_revert_on_disconnect` disabled
+  treated them as paused and deferred cleanup to the paused-timeout timer — and with
+  `dd_paused_virtual_display_timeout_secs = 0` the virtual display (and SudoVDA driver)
+  was held indefinitely, blocking host S3 sleep. Placebo apps are now excluded from the
+  pause deferral, matching the WebRTC session path; teardown and driver release run
+  immediately on disconnect.
+
 ## [1.15.19] — 2026-06-30
 
 ### Fixed
