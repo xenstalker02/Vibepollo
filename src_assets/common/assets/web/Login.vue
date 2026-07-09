@@ -95,7 +95,11 @@ function sanitizeRedirect(raw) {
     if (raw.length > 512) return '/';
     // Strip any /login recursion to avoid loop
     if (raw.startsWith('/login')) return '/';
-    return raw;
+    // Resolve against our origin and confirm it stays same-origin — catches
+    // normalization tricks (e.g. backslashes) the string checks above miss
+    const resolved = new URL(raw, window.location.origin);
+    if (resolved.origin !== window.location.origin) return '/';
+    return resolved.pathname + resolved.search + resolved.hash;
   } catch {
     return '/';
   }
