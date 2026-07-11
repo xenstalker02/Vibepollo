@@ -1,5 +1,9 @@
 # Getting Started
 
+> **Note:** This is inherited upstream Sunshine reference documentation and describes
+> Sunshine's binaries and platforms. Vibepollo is a Windows-only fork — for installing and
+> running it, use the [README](../README.md) and [INSTALL](../INSTALL.md) instead.
+
 The recommended method for running Sunshine is to use the [binaries](#binaries) included in the
 [latest release][latest-release], unless otherwise specified.
 
