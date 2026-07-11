@@ -28,10 +28,12 @@
 namespace fs = std::filesystem;
 
 // lib includes
+#include <boost/algorithm/string.hpp>
 #include <nlohmann/json.hpp>
 
 // local includes
 #include "config.h"
+#include "crypto.h"
 #include "httpcommon.h"
 #include "logging.h"
 #include "nvhttp.h"  // for save_state persistence hooks
@@ -112,12 +114,14 @@ namespace update {
       // Find the Windows installer asset (.exe, not .pdb)
       std::string asset_url;
       std::string asset_name;
+      std::string asset_sha256;
       for (const auto &a : release.assets) {
         if (a.name.size() > 4 &&
             a.name.substr(a.name.size() - 4) == ".exe" &&
             a.name.find(".pdb") == std::string::npos) {
           asset_url = a.download_url;
           asset_name = a.name;
+          asset_sha256 = a.sha256;
           break;
         }
       }
@@ -139,7 +143,7 @@ namespace update {
       auto marker = pending_update_marker_path();
       try {
         std::ofstream mf(marker);
-        mf << dest.string() << "\n" << release.version << "\n";
+        mf << dest.string() << "\n" << release.version << "\n" << asset_sha256 << "\n";
       } catch (...) {
         BOOST_LOG(error) << "Auto-update: failed to write marker file "sv << marker.string();
         std::error_code ec;
@@ -168,11 +172,12 @@ namespace update {
       return false;
     }
 
-    std::string installer_path, version;
+    std::string installer_path, version, expected_sha256;
     try {
       std::ifstream mf(marker);
       std::getline(mf, installer_path);
       std::getline(mf, version);
+      std::getline(mf, expected_sha256);
     } catch (...) {
       BOOST_LOG(warning) << "Auto-update: failed to read marker file"sv;
       fs::remove(marker);
@@ -183,6 +188,34 @@ namespace update {
       BOOST_LOG(info) << "Auto-update: marker found but installer missing, cleaning up"sv;
       fs::remove(marker);
       return false;
+    }
+
+    // Verify the staged installer against the SHA-256 recorded from the GitHub
+    // release asset before executing it elevated. This runs at the host's
+    // elevated startup, so a same-user (medium-integrity) process could overwrite
+    // the staged installer between download and this launch (a local TOCTOU).
+    // Fail closed if the hash is missing or does not match.
+    {
+      std::error_code ec;
+      if (expected_sha256.empty()) {
+        BOOST_LOG(warning) << "Auto-update: no SHA-256 recorded for pending installer, refusing to apply"sv;
+        fs::remove(installer_path, ec);
+        fs::remove(marker, ec);
+        return false;
+      }
+      std::ifstream in(installer_path, std::ios::binary);
+      std::stringstream ss;
+      ss << in.rdbuf();
+      const std::string installer_bytes = ss.str();
+      const auto actual_sha256 = util::hex(crypto::hash(installer_bytes)).to_string();
+      if (!boost::iequals(actual_sha256, expected_sha256)) {
+        BOOST_LOG(error) << "Auto-update: installer SHA-256 mismatch, refusing to apply (expected "sv
+                         << expected_sha256 << ", got "sv << actual_sha256 << ")"sv;
+        fs::remove(installer_path, ec);
+        fs::remove(marker, ec);
+        return false;
+      }
+      BOOST_LOG(info) << "Auto-update: installer SHA-256 verified"sv;
     }
 
     BOOST_LOG(info) << "Auto-update: applying pending update "sv << version << " from "sv << installer_path;

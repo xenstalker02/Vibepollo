@@ -402,8 +402,13 @@ namespace confighttp {
     if (!request->header.empty()) {
       BOOST_LOG(verbose) << "Headers:"sv;
       for (auto &[name, val] : request->header) {
-        BOOST_LOG(verbose) << name << " -- "
-                           << (name == "Authorization" ? "CREDENTIALS REDACTED" : val);
+        // Redact any credential-bearing header, case-insensitively. The Cookie
+        // header carries the live session/refresh tokens; an exact-case
+        // "Authorization" check alone leaked both these and lower-cased variants.
+        const bool sensitive = boost::iequals(name, "authorization") ||
+                               boost::iequals(name, "cookie") ||
+                               boost::iequals(name, "proxy-authorization");
+        BOOST_LOG(verbose) << name << " -- " << (sensitive ? "CREDENTIALS REDACTED" : val);
       }
     }
 
