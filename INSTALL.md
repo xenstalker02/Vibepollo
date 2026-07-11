@@ -9,7 +9,7 @@
 
 ## Download and Run
 
-1. Download `Vibepollo-1.15.4-Setup.exe` from [GitHub Releases](https://github.com/xenstalker02/Vibepollo/releases)
+1. Download the latest `Vibepollo-*-Setup.exe` from [GitHub Releases](https://github.com/xenstalker02/Vibepollo/releases/latest)
 2. Run the installer — it handles everything automatically
 3. Open the web UI at `https://localhost:47990` to complete initial setup
 

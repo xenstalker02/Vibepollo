@@ -154,3 +154,25 @@ or its uniqueid changed, the client must re-pair. Do not modify the uniqueid.
 - Correct values:
   - `mic_sink = Speakers (Steam Streaming Microphone)`
   - `mic_capture_device = Microphone (Steam Streaming Microphone)`
+
+## 13. Disable (or re-enable) auto-start on Windows login
+
+**Symptom:** Vibepollo starts automatically every time you log in to Windows, and
+there's no off switch in the web UI, the Startup folder, or Windows Startup settings.
+
+**Why:** Auto-start is a **Task Scheduler** task named `Vibepollo` that the installer
+creates (triggered at logon, with a 30-second delay) — not a Startup-folder shortcut or a
+registry Run entry, which is why it doesn't appear in those places.
+
+**Disable it** (either method):
+- **GUI:** open Task Scheduler (`taskschd.msc`) → Task Scheduler Library → right-click
+  **Vibepollo** → **Disable**.
+- **Command** (elevated PowerShell): `Disable-ScheduledTask -TaskName "Vibepollo"`
+  (or `schtasks /change /tn "Vibepollo" /disable`).
+
+**Re-enable it** later: `Enable-ScheduledTask -TaskName "Vibepollo"`
+(or `schtasks /change /tn "Vibepollo" /enable`, or the Task Scheduler GUI).
+
+Disabling the task only stops the *automatic* launch — it doesn't uninstall or change
+Vibepollo. Launch it yourself when you want it (Start Menu shortcut, or run `sunshine.exe`
+from the install folder).

@@ -2,10 +2,10 @@
 
 Vibepollo is a fork of [Nonary/vibepollo](https://github.com/Nonary/vibepollo).
 
-## Automated Sync
-A GitHub Actions workflow (`upstream-check.yml`) runs every Monday at 9am UTC
-and opens a GitHub issue if Nonary has pushed new commits. You will receive
-a GitHub email notification when this triggers.
+## Sync policy
+Vibepollo is maintained as a stable, divergent fork on its own version line — it does
+not track upstream's version progression. Upstream changes are reviewed and cherry-picked
+deliberately when a specific fix is wanted, not automatically or on a schedule.
 
 ## Our additions (protected files — always keep our version on merge)
 
@@ -52,6 +52,5 @@ Then build, privacy scan, commit, push.
 - `src/config.h` / `src/config.cpp` — new config options
 
 ## Current state
-- Upstream base: Nonary 1.15.1-stable.1 (484bacaf, merged 2026-04-28)
-- 11 new commits available upstream through 30d9ba7e (not yet merged)
-- Our fork: xenstalker02/Vibepollo — see CHANGELOG.md for our additions
+Divergent fork on the 1.15.x line; upstream (Nonary) is followed only for targeted,
+hand-picked fixes. See CHANGELOG.md for what the fork adds.
