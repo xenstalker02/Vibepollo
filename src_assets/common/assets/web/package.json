@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "6.5.2",
-    "@lizardbyte/shared-web": "2025.626.181239",
+    "@lizardbyte/shared-web": "2026.314.32913",
     "axios": "^1.16.0",
     "naive-ui": "^2.39.0",
     "pinia": "^2.1.8",
