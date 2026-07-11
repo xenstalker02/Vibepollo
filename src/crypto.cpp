@@ -7,6 +7,8 @@
 #include <openssl/rsa.h>
 
 // local includes
+#include <stdexcept>
+
 #include "crypto.h"
 
 namespace crypto {
@@ -396,7 +398,12 @@ namespace crypto {
     std::string r;
     r.resize(bytes);
 
-    RAND_bytes((uint8_t *) r.data(), r.size());
+    if (RAND_bytes((uint8_t *) r.data(), r.size()) != 1) {
+      // Fail closed: never return the zero-initialized buffer as "random" — it
+      // would make session/refresh/API tokens, salts, and pairing secrets
+      // predictable. RAND_bytes only fails if the CSPRNG cannot be seeded.
+      throw std::runtime_error("crypto::rand: RAND_bytes failed (CSPRNG unavailable)");
+    }
 
     return r;
   }

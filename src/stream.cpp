@@ -1577,11 +1577,27 @@ namespace stream {
 
       auto header = (control_encrypted_p) (payload.data() - 2);
 
+      // The length (payload[0..1]) and seq (payload[2..5]) fields live in the
+      // received buffer; reject anything too short to contain them before reading.
+      if (payload.size() < 6) {
+        BOOST_LOG(warning) << "Control: Runt encrypted packet (header)"sv;
+        return;
+      }
+
       auto length = util::endian::little(header->length);
       auto seq = util::endian::little(header->seq);
 
       if (length < (16 + 4 + 4)) {
         BOOST_LOG(warning) << "Control: Runt packet"sv;
+        return;
+      }
+
+      // Reject a declared length that runs past the bytes actually received.
+      // tagged_cipher spans length-4 from header->payload() (== payload + 6), so
+      // an oversized length would drive an ~64KB heap OOB read in the AES-GCM
+      // decrypt below.
+      if (static_cast<size_t>(length) + 2 > payload.size()) {
+        BOOST_LOG(warning) << "Control: Encrypted packet length exceeds payload"sv;
         return;
       }
 
