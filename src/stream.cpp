@@ -1575,14 +1575,15 @@ namespace stream {
     server->map(packetTypes[IDX_ENCRYPTED], [server](session_t *session, const std::string_view &payload) {
       BOOST_LOG(verbose) << "type [IDX_ENCRYPTED]"sv;
 
-      auto header = (control_encrypted_p) (payload.data() - 2);
-
       // The length (payload[0..1]) and seq (payload[2..5]) fields live in the
-      // received buffer; reject anything too short to contain them before reading.
+      // received buffer; reject anything too short to contain them before we
+      // form or dereference the header pointer.
       if (payload.size() < 6) {
         BOOST_LOG(warning) << "Control: Runt encrypted packet (header)"sv;
         return;
       }
+
+      auto header = (control_encrypted_p) (payload.data() - 2);
 
       auto length = util::endian::little(header->length);
       auto seq = util::endian::little(header->seq);
