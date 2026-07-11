@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.15.21] — 2026-07-11
+
+### Security
+- **Auto-update now verifies the downloaded installer before running it.** The updater
+  records the release asset's SHA-256 and checks the downloaded file against it
+  immediately before launching the installer (which runs elevated), failing closed on a
+  missing or mismatched hash. This closes a local time-of-check/time-of-use gap where
+  another process running as the same user could have swapped the staged installer
+  between download and launch.
+- **Request logging no longer prints credential-bearing headers.** Verbose HTTP logging
+  redacted only an exact-case `Authorization` header; it now redacts `Cookie`,
+  `Authorization`, and `Proxy-Authorization` case-insensitively, so a log shared for
+  support no longer leaks the session cookie.
+- **Hardened control-stream packet parsing.** The encrypted control-packet handler now
+  rejects a declared length that exceeds the received data (and packets too short to hold
+  the header), preventing an out-of-bounds read on malformed input from a connected client.
+- **Fail closed on RNG failure.** Random-token generation now aborts if the system CSPRNG
+  is unavailable instead of proceeding with a predictable value.
+
+### Changed
+- Removed the unused upstream-check workflow; dependency freshness is now handled by
+  Dependabot. Docs updated (install links point to the latest release).
+
 ## [1.15.20] — 2026-07-02
 
 ### Fixed
