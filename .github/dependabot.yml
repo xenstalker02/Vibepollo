@@ -3,16 +3,13 @@
 # See: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 version: 2
 updates:
-  # CI actions — patch drift on the workflow actions (low volume, safe to merge).
+  # CI actions only — patch drift on the workflow actions (low volume, safe).
+  # npm version-updates were intentionally dropped: this is a maintenance-mode
+  # fork with a finished web UI, so framework bumps add breakage risk for no
+  # functional gain. Security-driven npm fixes still arrive automatically via
+  # Dependabot security updates (which need no config).
   - package-ecosystem: "github-actions"
     directory: "/"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
-
-  # Web UI dependencies (Vue/vite bundle shipped in the installer).
-  - package-ecosystem: "npm"
-    directory: "/src_assets/common/assets/web"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
