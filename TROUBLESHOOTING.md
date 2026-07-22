@@ -176,3 +176,16 @@ registry Run entry, which is why it doesn't appear in those places.
 Disabling the task only stops the *automatic* launch — it doesn't uninstall or change
 Vibepollo. Launch it yourself when you want it (Start Menu shortcut, or run `sunshine.exe`
 from the install folder).
+
+**Older installs — a Windows *service* instead of a task:** if there's no `Vibepollo`
+task in Task Scheduler and you instead see **Apollo Service** (`ApolloService`) set to
+*Automatic* in `services.msc`, your install predates the Task Scheduler migration and
+auto-starts via that legacy service. Disable it:
+- **GUI:** `services.msc` → **Apollo Service** → right-click → **Properties** → set
+  *Startup type* to **Disabled** → **Stop**.
+- **Command** (elevated): `sc.exe config ApolloService start= disabled` then
+  `sc.exe stop ApolloService` (the space after `start=` is required).
+
+Better yet, reinstall the [latest Vibepollo](https://github.com/xenstalker02/Vibepollo/releases/latest):
+its installer removes the legacy `ApolloService` entirely and switches auto-start to the
+Task Scheduler task above (which you can then disable as needed).
