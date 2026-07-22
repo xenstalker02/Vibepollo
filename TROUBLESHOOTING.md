@@ -180,12 +180,16 @@ from the install folder).
 **Older installs — a Windows *service* instead of a task:** if there's no `Vibepollo`
 task in Task Scheduler and you instead see **Apollo Service** (`ApolloService`) set to
 *Automatic* in `services.msc`, your install predates the Task Scheduler migration and
-auto-starts via that legacy service. Disable it:
+auto-starts via that legacy service. Set its **Startup type** to **Manual** — *not*
+Disabled: Manual stops it launching at login (what you want) while still letting you open
+Vibepollo on demand. On these older installs the app starts *through* the service, so
+**Disabled** would also stop the app from opening when you click its shortcut.
 - **GUI:** `services.msc` → **Apollo Service** → right-click → **Properties** → set
-  *Startup type* to **Disabled** → **Stop**.
-- **Command** (elevated): `sc.exe config ApolloService start= disabled` then
-  `sc.exe stop ApolloService` (the space after `start=` is required).
+  *Startup type* to **Manual** → **Stop**.
+- **Command** (elevated): `sc.exe config ApolloService start= demand` then
+  `sc.exe stop ApolloService` (the space after `start=` is required; `demand` = Manual).
 
 Better yet, reinstall the [latest Vibepollo](https://github.com/xenstalker02/Vibepollo/releases/latest):
 its installer removes the legacy `ApolloService` entirely and switches auto-start to the
-Task Scheduler task above (which you can then disable as needed).
+Task Scheduler task above — which *can* be fully disabled without affecting on-demand
+launch, because the current app runs directly (not through a service).
