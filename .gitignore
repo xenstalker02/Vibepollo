@@ -48,6 +48,8 @@ docs/doxyconfig*
 # npm
 node_modules/
 package-lock.json
+# Keep the web UI lockfile tracked for reproducible builds
+!/src_assets/common/assets/web/package-lock.json
 
 # Translations
 *.mo
