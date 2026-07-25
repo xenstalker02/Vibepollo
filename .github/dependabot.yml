@@ -13,3 +13,26 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+
+  # npm: version updates stay OFF (open-pull-requests-limit: 0 disables them).
+  # This block exists solely so the ignore rule below also applies to Dependabot
+  # SECURITY pull requests, which are enabled at the repo level and would otherwise
+  # ignore this file entirely.
+  #
+  # Why: a Dependabot bump once took vite 5 -> 8 and left the web UI unbuildable for
+  # weeks (vite 7+ swaps rollup for rolldown, splits out esbuild, and drops the HTML
+  # transform this plugin set relies on). A *security* PR then proposed the same jump
+  # again (#25) to fix advisories that were actually patched in 6.4.3. Pin the blast
+  # radius: never auto-propose vite >= 7.
+  #
+  # Note: this suppresses the PR, not the alert — a vite advisory still shows in the
+  # Security tab, so nothing goes unnoticed. If a future fix genuinely requires 7+,
+  # handle it deliberately (plugin set must move too) and drop this rule.
+  - package-ecosystem: "npm"
+    directory: "/src_assets/common/assets/web"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 0
+    ignore:
+      - dependency-name: "vite"
+        versions: [">=7.0.0"]
