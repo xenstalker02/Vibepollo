@@ -60,8 +60,30 @@ foreach(_sudovda_file IN LISTS SUDOVDA_DRIVER_FILES)
     if (_sudovda_file_size EQUAL 0)
         message(FATAL_ERROR "Required SudoVDA driver artifact is empty (0 bytes): ${_sudovda_file}")
     endif()
+
+    # Binary artifacts must be real PE images. A 12-byte "placeholder" text file passed the
+    # 0-byte check above and shipped in every installer for months: sunshine.exe runs
+    # drivers/sudovda/install.ps1 on demand (virtual_display.cpp), so a stub silently broke
+    # virtual-display driver installation for fresh installs. Fail the build instead.
+    get_filename_component(_sudovda_file_ext "${_sudovda_file}" LAST_EXT)
+    if (_sudovda_file_ext STREQUAL ".dll" OR _sudovda_file_ext STREQUAL ".exe")
+        file(READ "${_sudovda_file}" _sudovda_file_magic LIMIT 2 HEX)
+        if (NOT _sudovda_file_magic STREQUAL "4d5a")
+            message(FATAL_ERROR
+                    "SudoVDA driver artifact is not a PE binary (no MZ header): ${_sudovda_file}\n"
+                    "  This is almost always a placeholder/stub. Supply the real signed artifact "
+                    "before packaging — see src_assets/windows/drivers/sudovda/PROVENANCE.md")
+        endif()
+        if (_sudovda_file_size LESS 4096)
+            message(FATAL_ERROR
+                    "SudoVDA driver artifact is implausibly small "
+                    "(${_sudovda_file_size} bytes): ${_sudovda_file}")
+        endif()
+    endif()
 endforeach()
 unset(_sudovda_file_size)
+unset(_sudovda_file_ext)
+unset(_sudovda_file_magic)
 
 install(FILES ${SUDOVDA_DRIVER_FILES}
         DESTINATION "drivers/sudovda"
