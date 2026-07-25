@@ -47,6 +47,8 @@ extern "C" {
 #include "utility.h"
 #include "webrtc_stream.h"
 #ifdef _WIN32
+  #include <objbase.h>  // CoInitializeEx for the mic path's COM objects
+
   #include "platform/windows/frame_limiter.h"
   #include "platform/windows/ipc/misc_utils.h"
   #include "platform/windows/misc.h"
@@ -619,6 +621,14 @@ namespace stream {
       auto ctrl = session.mic.audio_ctrl;  // shared ownership
       auto device = config::audio.mic_capture_device;
       std::thread([cancel, ctrl, device]() {
+#ifdef _WIN32
+        // switch_capture_to() drives COM objects, so this detached worker needs its own
+        // apartment for the same reason controlBroadcastThread does.
+        const HRESULT com_hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED | COINIT_SPEED_OVER_MEMORY);
+        if (FAILED(com_hr)) {
+          BOOST_LOG(warning) << "[mic] capture re-apply thread CoInitializeEx failed: "sv << com_hr;
+        }
+#endif
         const int schedule[] = {2, 5, 10, 20};
         int prev = 0;
         for (int t : schedule) {
@@ -628,6 +638,11 @@ namespace stream {
           ctrl->switch_capture_to(device);
           BOOST_LOG(info) << "[mic] capture re-apply at +"sv << t << "s"sv;
         }
+#ifdef _WIN32
+        if (SUCCEEDED(com_hr)) {
+          CoUninitialize();
+        }
+#endif
       }).detach();
     }
 
@@ -1242,6 +1257,31 @@ namespace stream {
   }
 
   void controlBroadcastThread(control_server_t *server) {
+#ifdef _WIN32
+    // Mic passthrough creates COM objects (IPolicyConfig / MMDevice) on THIS thread via
+    // platf::audio_control() during first-packet lazy init. Without an explicit apartment
+    // that only succeeds when some other thread has already initialized the MTA (the
+    // implicit MTA) — timing-dependent, and CoCreateInstance can otherwise fail with
+    // CO_E_NOTINITIALIZED and silently disable mic passthrough. Join the MTA explicitly
+    // for this thread's lifetime.
+    struct com_apartment_t {
+      HRESULT hr;
+
+      com_apartment_t():
+          hr {CoInitializeEx(nullptr, COINIT_MULTITHREADED | COINIT_SPEED_OVER_MEMORY)} {
+        if (FAILED(hr)) {
+          BOOST_LOG(warning) << "[mic] control thread CoInitializeEx failed: "sv << hr;
+        }
+      }
+
+      ~com_apartment_t() {
+        if (SUCCEEDED(hr)) {
+          CoUninitialize();
+        }
+      }
+    } com_apartment;
+#endif
+
     server->map(packetTypes[IDX_PERIODIC_PING], [](session_t *session, const std::string_view &payload) {
       BOOST_LOG(verbose) << "type [IDX_PERIODIC_PING]"sv;
     });
@@ -1400,6 +1440,16 @@ namespace stream {
 
     server->map(packetTypes[IDX_MIC_AUDIO_DATA], [](session_t *session, const std::string_view &payload) {
       BOOST_LOG(verbose) << "type [IDX_MIC_AUDIO_DATA]"sv;
+
+      // Mic passthrough injects audio into host applications and switches the host's
+      // default capture endpoint, so it belongs behind the input boundary. Without this
+      // check a view-only client (default permissions are view|list, no input) could
+      // trigger lazy init and take over the host microphone. Gated on the existing input
+      // group rather than a new dedicated bit so already-paired clients keep working.
+      if (!(session->permission & crypto::PERM::_all_inputs)) {
+        BOOST_LOG(debug) << "Permission Mic Input denied for [" << session->device_name << "]";
+        return;
+      }
 
       if (!session->mic.audio_ctrl || !session->mic.decoder) {
         // Lazy init on first mic packet (one-shot — failure disables for this session)
