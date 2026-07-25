@@ -3,7 +3,7 @@
 ; Builds to: installer\output\Vibepollo-1.15.20-Setup.exe
 
 #define MyAppName      "Vibepollo"
-#define MyAppVersion   "1.15.22"
+#define MyAppVersion   "1.15.23"
 #define MyAppPublisher "xenstalker02"
 #define MyAppURL       "https://github.com/xenstalker02/Vibepollo"
 #define MyAppExeName   "sunshine.exe"

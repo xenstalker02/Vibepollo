@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.15.23] — 2026-07-25
+
+### Fixed
+- **Virtual display driver can be installed again.** The bundled driver files
+  (`nefconc.exe` and `SudoVDA.dll`) were placeholder stubs rather than the real binaries,
+  so on a machine that did not already have the driver installed, Vibepollo could not set
+  up the virtual display — it needs those files at the moment the feature is first used.
+  Both are now the genuine, signed artifacts. Existing hosts that already had the driver
+  installed were unaffected.
+
+### Changed
+- Packaging now refuses to build if a bundled driver binary is a placeholder instead of a
+  real executable, so this cannot ship unnoticed again. Where each driver artifact comes
+  from — including its version, size, checksum and expected signer — is documented in
+  `src_assets/windows/drivers/sudovda/PROVENANCE.md`.
+
 ## [1.15.22] — 2026-07-25
 
 ### Security
