@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.15.22] — 2026-07-25
+
+### Security
+- **Microphone passthrough now requires input permission.** A paired client restricted to
+  viewing could previously send microphone packets, which would initialize the microphone
+  backend and switch the host's default capture device. Clients without input permission
+  are now rejected before any of that happens; clients that already have input permission
+  (the normal case) are unaffected.
+
+### Fixed
+- **Microphone initialization is no longer timing-dependent.** The threads that set up
+  microphone routing now join a COM apartment explicitly instead of relying on another
+  thread having done so first, which could otherwise leave passthrough silently disabled.
+- **US English (`en_US`) locale loads again.** The file was invalid JSON (a missing comma),
+  so selecting it silently fell back to default English.
+- **Correct version metadata for out-of-source builds.** Version, branch, commit and date
+  are now read from the project directory rather than whatever directory `cmake` happened
+  to be invoked from — building from an unrelated folder could stamp the wrong version.
+- **`mic_buffer_packets` now advertises its real range (2–16).** A configured value of `1`
+  could never take effect because the audio renderer holds a fixed two-packet prebuffer.
+
+### Changed
+- The web UI build is reproducible again (build dependency pinned, lockfile committed), and
+  no longer ships unused dependencies, dead pages, or unreferenced image assets.
+- Corrected the 1.15.21 note about installer verification: hashing the downloaded installer
+  greatly narrows the window in which it could be swapped, but does not fully close it.
+
 ## [1.15.21] — 2026-07-11
 
 ### Security
