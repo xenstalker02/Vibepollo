@@ -1703,7 +1703,10 @@ namespace config {
     string_f(vars, "mic_sink", audio.mic_sink);
     string_f(vars, "mic_capture_device", audio.mic_capture_device);
     int_between_f(vars, "mic_buffer_ms", audio.mic_buffer_ms, {10, 200});
-    int_between_f(vars, "mic_buffer_packets", audio.mic_buffer_packets, {1, 16});
+    // Minimum is 2, not 1: the WASAPI render stage holds a fixed two-packet (1920-frame)
+    // prebuffer before playout starts, so a configured value of 1 could never reduce
+    // startup buffering below 40 ms. Advertise the range that actually takes effect.
+    int_between_f(vars, "mic_buffer_packets", audio.mic_buffer_packets, {2, 16});
     bool_f(vars, "stream_audio", audio.stream);
     bool_f(vars, "keep_sink_default", audio.keep_default);
     bool_f(vars, "auto_capture_sink", audio.auto_capture);
