@@ -1,6 +1,6 @@
 ; Vibepollo Inno Setup Installer
-; Version: 1.15.20
-; Builds to: installer\output\Vibepollo-1.15.20-Setup.exe
+; Bump MyAppVersion below in lockstep with CMakeLists.txt; the output filename derives
+; from it (installer\output\Vibepollo-<MyAppVersion>-Setup.exe).
 
 #define MyAppName      "Vibepollo"
 #define MyAppVersion   "1.15.23"
@@ -8,6 +8,29 @@
 #define MyAppURL       "https://github.com/xenstalker02/Vibepollo"
 #define MyAppExeName   "sunshine.exe"
 #define MyAppDataDir   "{localappdata}\Sunshine"
+
+; --- Bundled driver artifacts: refuse to build on placeholder stubs ---------------
+; sunshine.exe runs drivers\sudovda\install.ps1 on demand (virtual_display.cpp) and that
+; script requires both binaries below. Placeholder stubs shipped unnoticed for months
+; because nothing validated them on this path: the CMake guard in
+; cmake/packaging/windows.cmake only runs for CPack builds, and Inno Setup is what we
+; actually release with. Fail the compile instead of packaging a broken driver.
+; Provenance, hashes and expected signers: src_assets\windows\drivers\sudovda\PROVENANCE.md
+#define SudoVdaDir       "..\src_assets\windows\drivers\sudovda"
+#define MinDriverBytes   4096
+
+#if !FileExists(SudoVdaDir + "\SudoVDA.dll")
+  #error Driver artifact missing: SudoVDA.dll -- it is untracked by design; see src_assets\windows\drivers\sudovda\PROVENANCE.md
+#endif
+#if FileSize(SudoVdaDir + "\SudoVDA.dll") < MinDriverBytes
+  #error Driver artifact SudoVDA.dll is a placeholder stub, not the real driver -- see src_assets\windows\drivers\sudovda\PROVENANCE.md
+#endif
+#if !FileExists(SudoVdaDir + "\nefconc.exe")
+  #error Driver artifact missing: nefconc.exe -- see src_assets\windows\drivers\sudovda\PROVENANCE.md
+#endif
+#if FileSize(SudoVdaDir + "\nefconc.exe") < MinDriverBytes
+  #error Driver artifact nefconc.exe is a placeholder stub, not the real binary -- see src_assets\windows\drivers\sudovda\PROVENANCE.md
+#endif
 
 [Setup]
 AppId={{A3F1B2C4-7D8E-4F9A-B1C2-D3E4F5A6B7C8}
