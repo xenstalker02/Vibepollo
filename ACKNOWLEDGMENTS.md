@@ -7,6 +7,11 @@ Vibepollo is built on the work of many open source contributors.
 - **[ClassicOldSong/Apollo](https://github.com/ClassicOldSong/Apollo)** -- Apollo upstream
 - **[LizardByte/Sunshine](https://github.com/LizardByte/Sunshine)** -- Sunshine upstream
 
+## Bundled Third-Party Tools
+- **[nefarius/nefcon](https://github.com/nefarius/nefcon)** (MIT) -- `nefconc.exe`, redistributed
+  unmodified from the official signed release to install the SudoVDA virtual-display driver.
+  Version and hashes recorded in `src_assets/windows/drivers/sudovda/PROVENANCE.md`.
+
 ## Parallel Implementation Reference
 - **[logabell/Apollo](https://github.com/logabell/Apollo)** -- independent server-side mic implementation.
   We adopted: multi-field device matching, mic fallback priority chain.
