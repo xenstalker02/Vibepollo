@@ -64,6 +64,7 @@ else()
         foreach(_tag_pattern IN LISTS _tag_patterns)
             execute_process(
                 COMMAND ${GIT_EXECUTABLE} tag --merged HEAD --sort=-version:refname --list "${_tag_pattern}"
+                WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
                 OUTPUT_VARIABLE _git_tag_candidates_raw
                 RESULT_VARIABLE _git_tag_candidates_error
                 OUTPUT_STRIP_TRAILING_WHITESPACE)
@@ -98,6 +99,7 @@ else()
         # Current branch name
         execute_process(
             COMMAND ${GIT_EXECUTABLE} rev-parse --abbrev-ref HEAD
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             OUTPUT_VARIABLE GIT_DESCRIBE_BRANCH
             RESULT_VARIABLE GIT_BRANCH_ERROR
             OUTPUT_STRIP_TRAILING_WHITESPACE)
@@ -106,12 +108,14 @@ else()
         # Short commit for logging
         execute_process(
             COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             OUTPUT_VARIABLE GIT_SHORT
             RESULT_VARIABLE GIT_SHORT_ERROR
             OUTPUT_STRIP_TRAILING_WHITESPACE)
         # Dirty state
         execute_process(
             COMMAND ${GIT_EXECUTABLE} diff --quiet --exit-code
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             RESULT_VARIABLE GIT_IS_DIRTY
             OUTPUT_STRIP_TRAILING_WHITESPACE)
 
@@ -123,6 +127,7 @@ else()
         else()
             execute_process(
                 COMMAND ${GIT_EXECUTABLE} describe --tags --abbrev=0
+                WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
                 OUTPUT_VARIABLE GIT_NEAREST_TAG_RAW
                 RESULT_VARIABLE GIT_TAG_ERROR
                 OUTPUT_STRIP_TRAILING_WHITESPACE)
@@ -185,6 +190,7 @@ if((NOT DEFINED GITHUB_COMMIT) OR (GITHUB_COMMIT STREQUAL ""))
     if(GIT_EXECUTABLE)
         execute_process(
             COMMAND ${GIT_EXECUTABLE} rev-parse HEAD
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             OUTPUT_VARIABLE GIT_FULL_COMMIT
             RESULT_VARIABLE GIT_FULL_COMMIT_ERROR_CODE
             OUTPUT_STRIP_TRAILING_WHITESPACE
@@ -282,6 +288,7 @@ if(PROJECT_RELEASE_DATE_ISO STREQUAL "")
     if(GIT_EXECUTABLE)
         execute_process(
             COMMAND ${GIT_EXECUTABLE} log -1 --format=%cI
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             OUTPUT_VARIABLE GIT_COMMIT_DATE_ISO
             RESULT_VARIABLE GIT_COMMIT_DATE_ISO_ERROR_CODE
             OUTPUT_STRIP_TRAILING_WHITESPACE

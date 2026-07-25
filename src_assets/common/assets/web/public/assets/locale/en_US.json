@@ -1175,7 +1175,7 @@
     "sessions_expires": "Expires: {time}",
     "sessions_time_unknown": "Unknown",
     "sessions_unknown_device": "Unknown device",
-    "sessions_unknown_address": "Unknown address"
+    "sessions_unknown_address": "Unknown address",
     "noticeCopy": "RTSS offers the most stable frame pacing. Vibepollo will use it automatically when available; NVIDIA's limiter is not recommended because it cannot guarantee perfect frame pacing."
   }
 }

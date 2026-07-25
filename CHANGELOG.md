@@ -6,9 +6,12 @@
 - **Auto-update now verifies the downloaded installer before running it.** The updater
   records the release asset's SHA-256 and checks the downloaded file against it
   immediately before launching the installer (which runs elevated), failing closed on a
-  missing or mismatched hash. This closes a local time-of-check/time-of-use gap where
-  another process running as the same user could have swapped the staged installer
-  between download and launch.
+  missing or mismatched hash. This greatly narrows a local time-of-check/time-of-use gap
+  where another process running as the same user could have swapped the staged installer
+  between download and launch — the window shrinks from the whole download-to-restart
+  interval to the moment between verification and process creation. It is not fully
+  closed: the file is reopened by name at launch rather than executed from a held,
+  verified handle.
 - **Request logging no longer prints credential-bearing headers.** Verbose HTTP logging
   redacted only an exact-case `Authorization` header; it now redacts `Cookie`,
   `Authorization`, and `Proxy-Authorization` case-insensitively, so a log shared for
