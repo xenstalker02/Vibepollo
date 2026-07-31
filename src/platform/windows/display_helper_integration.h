@@ -105,4 +105,11 @@ namespace display_helper_integration {
   // async cooldown restore. Always acquired before helper/pipe mutexes.
   std::mutex &display_mutation_mutex();
 
+  // Called at the top of stream-start display preparation. Together with
+  // ms_since_stream_display_start() it marks the whole prep pipeline
+  // (snapshot -> virtual display -> app launch -> APPLY), which spans call
+  // frames and cannot be covered by a single lock scope.
+  void note_stream_display_start();
+  int64_t ms_since_stream_display_start();
+
 }  // namespace display_helper_integration

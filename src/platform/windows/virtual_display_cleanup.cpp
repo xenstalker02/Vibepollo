@@ -185,7 +185,8 @@ namespace platf::virtual_display_cleanup {
                 return rtsp_stream::session_count() > 0 ||
                        webrtc_stream::has_active_sessions() ||
                        display_helper_integration::apply_in_progress() ||
-                       display_helper_integration::ms_since_last_apply() < 5000;
+                       display_helper_integration::ms_since_last_apply() < 5000 ||
+                       display_helper_integration::ms_since_stream_display_start() < 30000;
               };
               bool clear = !stream_activity();
               if (clear) {

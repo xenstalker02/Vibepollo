@@ -262,6 +262,10 @@ namespace nvhttp {
       bool is_input_only,
       std::optional<std::string> &pending_output_override
     ) {
+      // Mark the whole stream-start display pipeline for the async cooldown
+      // restore — the span from here through APPLY crosses call frames and
+      // includes seconds of app launch that no single lock scope can cover.
+      display_helper_integration::note_stream_display_start();
       auto disable_virtual_display_request = [&]() {
         launch_session->virtual_display = false;
         launch_session->virtual_display_failed = false;

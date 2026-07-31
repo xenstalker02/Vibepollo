@@ -598,6 +598,12 @@ namespace {
   // this mutex is always taken BEFORE helper_mutex/pipe_mutex, never after.
   static std::mutex g_display_mutation_mutex;
 
+  // Steady timestamp of the most recent stream-start display preparation. The
+  // prep pipeline (snapshot -> virtual display creation -> app launch -> APPLY)
+  // spans call frames and can idle for seconds between mutex-protected steps;
+  // this recency note keeps the async cooldown restore out of the whole span.
+  static std::atomic<std::int64_t> g_last_stream_start_note_us {0};
+
   struct ApplyInFlightGuard {
     std::lock_guard<std::mutex> mutation_lock {g_display_mutation_mutex};
 
@@ -1902,6 +1908,18 @@ namespace display_helper_integration {
 
   std::mutex &display_mutation_mutex() {
     return g_display_mutation_mutex;
+  }
+
+  void note_stream_display_start() {
+    g_last_stream_start_note_us.store(now_steady_us(), std::memory_order_relaxed);
+  }
+
+  int64_t ms_since_stream_display_start() {
+    const auto last_us = g_last_stream_start_note_us.load(std::memory_order_relaxed);
+    if (last_us == 0) {
+      return std::numeric_limits<int64_t>::max();
+    }
+    return (now_steady_us() - last_us) / 1000;
   }
 
 }  // namespace display_helper_integration
