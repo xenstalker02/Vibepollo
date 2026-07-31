@@ -9,6 +9,7 @@
 #include "src/rtsp.h"
 
 #include <display_device/types.h>
+#include <mutex>
 #include <optional>
 #include <vector>
 
@@ -99,5 +100,9 @@ namespace display_helper_integration {
   // dispatch start — before the RTSP session registers — so it is the earliest
   // "a stream is starting" signal for code that must not modeset underneath one.
   bool apply_in_progress();
+
+  // Serializes stream-start display work (APPLY, SNAPSHOT_CURRENT) against the
+  // async cooldown restore. Always acquired before helper/pipe mutexes.
+  std::mutex &display_mutation_mutex();
 
 }  // namespace display_helper_integration

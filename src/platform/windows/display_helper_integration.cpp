@@ -593,7 +593,14 @@ namespace {
   // apply that started after its liveness checks.
   static std::atomic<int> g_applies_in_flight {0};
 
+  // Mutual exclusion between stream-start display work (APPLY dispatch,
+  // SNAPSHOT_CURRENT capture) and the async cooldown restore. Lock order:
+  // this mutex is always taken BEFORE helper_mutex/pipe_mutex, never after.
+  static std::mutex g_display_mutation_mutex;
+
   struct ApplyInFlightGuard {
+    std::lock_guard<std::mutex> mutation_lock {g_display_mutation_mutex};
+
     ApplyInFlightGuard() {
       g_applies_in_flight.fetch_add(1, std::memory_order_acq_rel);
     }
@@ -1471,6 +1478,9 @@ namespace display_helper_integration {
   }
 
   bool snapshot_current_display_state() {
+    // The captured baseline must not be a half-restored state: exclude the
+    // async cooldown restore for the duration of the capture.
+    std::lock_guard<std::mutex> mutation_lock(g_display_mutation_mutex);
     if (!ensure_helper_started()) {
       BOOST_LOG(info) << "Display helper unavailable; cannot snapshot current display state.";
       return false;
@@ -1888,6 +1898,10 @@ namespace display_helper_integration {
 
   bool apply_in_progress() {
     return g_applies_in_flight.load(std::memory_order_acquire) > 0;
+  }
+
+  std::mutex &display_mutation_mutex() {
+    return g_display_mutation_mutex;
   }
 
 }  // namespace display_helper_integration

@@ -4865,19 +4865,22 @@ namespace {
   }
 
   void handle_misc(ServiceState &state, platf::dxgi::AsyncNamedPipe &async_pipe, MsgType type, std::span<const uint8_t> payload) {
-    if (auto exclusions = parse_snapshot_exclude_payload(payload)) {
-      state.controller.set_snapshot_exclusions(*exclusions);
-    }
     // Snapshot-mutating ops must not race the startup preload's validate/copy
-    // pass over the same files. Bounded wait, then REJECT rather than proceed:
-    // these are rare, manual-cadence ops, and a refused export is recoverable
-    // while a preload validate deleting a half-written snapshot is not.
+    // pass over the same files. The gate runs BEFORE the exclusions parse so a
+    // rejected op mutates nothing, and an accepted op's exclusions cannot be
+    // overwritten by the preload's persisted values afterwards. Bounded wait,
+    // then REJECT rather than proceed: these are rare, manual-cadence ops, and
+    // a refused export is recoverable while a preload validate deleting a
+    // half-written snapshot is not.
     if (type == MsgType::ExportGolden || type == MsgType::Reset || type == MsgType::SnapshotCurrent) {
       if (!state.snapshot_preload_ready_within(std::chrono::milliseconds(4000))) {
         BOOST_LOG(warning) << "Snapshot operation (type=" << static_cast<int>(type)
                            << ") rejected: startup preload still running. Retry shortly.";
         return;
       }
+    }
+    if (auto exclusions = parse_snapshot_exclude_payload(payload)) {
+      state.controller.set_snapshot_exclusions(*exclusions);
     }
     if (type == MsgType::ExportGolden) {
       const bool saved = state.save_snapshot_with_retry(state.golden_path, "export-golden");

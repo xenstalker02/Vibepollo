@@ -190,13 +190,20 @@ namespace platf::virtual_display_cleanup {
               bool clear = !stream_activity();
               if (clear) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(250));
+                // Final check and restore run under the display-mutation mutex,
+                // so an APPLY or SNAPSHOT_CURRENT that wins the lock first makes
+                // this check see it, and one that arrives later blocks until the
+                // restore has finished — true mutual exclusion, not just a
+                // shrunken race window.
+                std::lock_guard<std::mutex> mutation_lock(display_helper_integration::display_mutation_mutex());
                 clear = !stream_activity();
+                if (clear) {
+                  const bool restored = restore_windows_display_database();
+                  BOOST_LOG(info) << "Virtual display cleanup: asynchronous database restore "
+                                  << (restored ? "succeeded." : "failed.");
+                }
               }
-              if (clear) {
-                const bool restored = restore_windows_display_database();
-                BOOST_LOG(info) << "Virtual display cleanup: asynchronous database restore "
-                                << (restored ? "succeeded." : "failed.");
-              } else {
+              if (!clear) {
                 BOOST_LOG(info) << "Virtual display cleanup: asynchronous database restore skipped (stream active).";
               }
               g_async_restore_inflight.store(false, std::memory_order_release);
