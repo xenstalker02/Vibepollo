@@ -1151,14 +1151,20 @@ namespace {
         }
 
         if (!platf::display_helper_client::send_ping()) {
-          // Avoid logging ping failures to reduce log spam; proceed to reconnect
-          platf::display_helper_client::reset_connection();
-          helper_ready = ensure_helper_started();
-          if (!helper_ready) {
-            continue;
+          // Pings now wait for the worker's echo, so a helper that is merely
+          // busy (>3s in a legitimate APPLY) can fail a single ping. Require a
+          // second consecutive miss before tearing the connection down, so a
+          // busy-but-healthy helper never triggers a reconnect-driven restore.
+          if (!platf::display_helper_client::send_ping()) {
+            // Avoid logging ping failures to reduce log spam; proceed to reconnect
+            platf::display_helper_client::reset_connection();
+            helper_ready = ensure_helper_started();
+            if (!helper_ready) {
+              continue;
+            }
+            // Do not re-apply automatically on reconnect; just confirm IPC is reachable.
+            helper_ready = platf::display_helper_client::send_ping();
           }
-          // Do not re-apply automatically on reconnect; just confirm IPC is reachable.
-          helper_ready = platf::display_helper_client::send_ping();
         }
       } catch (const std::exception &e) {
         BOOST_LOG(error) << "Display helper watchdog failed: " << e.what();

@@ -26,6 +26,7 @@ namespace platf::display_helper_client {
     constexpr int kSendTimeoutMs = 5000;
     constexpr int kShutdownIpcTimeoutMs = 500;
     constexpr int kApplyResultTimeoutMs = 5000;
+    constexpr int kPingAckTimeoutMs = 3000;
 
     bool shutdown_requested() {
       if (!mail::man) {
@@ -45,6 +46,10 @@ namespace platf::display_helper_client {
 
     int effective_send_timeout() {
       return shutdown_requested() ? kShutdownIpcTimeoutMs : kSendTimeoutMs;
+    }
+
+    int effective_ping_ack_timeout() {
+      return shutdown_requested() ? kShutdownIpcTimeoutMs : kPingAckTimeoutMs;
     }
 
   }  // namespace
@@ -113,6 +118,51 @@ namespace platf::display_helper_client {
 
       BOOST_LOG(error) << "Display helper IPC: timed out waiting for APPLY result acknowledgement";
       return std::nullopt;
+    }
+
+    // Discard any frames already buffered on the pipe (e.g. Ping echoes nobody
+    // read) so a subsequent echo wait can only be satisfied by a fresh response.
+    void drain_stale_frames_locked(platf::dxgi::INamedPipe &pipe) {
+      std::array<uint8_t, 2048> buffer {};
+      size_t bytes_read = 0;
+      while (pipe.receive(buffer, bytes_read, 0) == platf::dxgi::PipeResult::Success && bytes_read > 0) {
+        bytes_read = 0;
+      }
+    }
+
+    // The helper echoes Ping from its single, strictly-ordered command worker,
+    // so receiving the echo proves the worker is alive and has processed every
+    // frame sent before the ping. A wedged worker never echoes even though the
+    // pipe write itself succeeds.
+    bool wait_for_ping_echo_locked(platf::dxgi::INamedPipe &pipe, int timeout_ms) {
+      using namespace std::chrono;
+
+      const auto deadline = steady_clock::now() + milliseconds(timeout_ms);
+      std::array<uint8_t, 2048> buffer {};
+
+      while (steady_clock::now() < deadline) {
+        const auto now = steady_clock::now();
+        auto remaining = duration_cast<milliseconds>(deadline - now);
+        if (remaining.count() < 0) {
+          remaining = milliseconds(0);
+        }
+        int wait_ms = static_cast<int>(std::max<long long>(remaining.count(), 100LL));
+        size_t bytes_read = 0;
+        auto result = pipe.receive(buffer, bytes_read, wait_ms);
+
+        if (result == platf::dxgi::PipeResult::Timeout) {
+          continue;
+        }
+        if (result != platf::dxgi::PipeResult::Success || bytes_read == 0) {
+          return false;
+        }
+        if (buffer[0] == static_cast<uint8_t>(MsgType::Ping)) {
+          return true;
+        }
+        BOOST_LOG(debug) << "Display helper IPC: ignoring unexpected message type=" << static_cast<int>(buffer[0])
+                         << " while awaiting ping echo";
+      }
+      return false;
     }
   }  // namespace
 
@@ -259,9 +309,26 @@ namespace platf::display_helper_client {
     }
     std::vector<uint8_t> payload(json_payload.begin(), json_payload.end());
     auto &pipe = pipe_singleton();
-    if (pipe && send_message(*pipe, MsgType::Revert, payload)) {
+    if (!pipe) {
+      return false;
+    }
+    drain_stale_frames_locked(*pipe);
+    if (!send_message(*pipe, MsgType::Revert, payload)) {
+      return false;
+    }
+    // The command worker processes frames in order, so a Ping echo arriving
+    // after the REVERT frame proves the revert handler has completed.
+    if (!send_message(*pipe, MsgType::Ping, {})) {
+      BOOST_LOG(warning) << "Display helper IPC: REVERT written but follow-up ping could not be sent";
+      return false;
+    }
+    const int ack_timeout_ms = shutdown_requested() ? kShutdownIpcTimeoutMs : kApplyResultTimeoutMs;
+    if (wait_for_ping_echo_locked(*pipe, ack_timeout_ms)) {
+      BOOST_LOG(info) << "Display helper IPC: REVERT acknowledged by helper worker";
       return true;
     }
+    BOOST_LOG(warning) << "Display helper IPC: REVERT written but helper worker did not acknowledge within "
+                       << ack_timeout_ms << "ms";
     return false;
   }
 
@@ -362,10 +429,14 @@ namespace platf::display_helper_client {
     }
     std::vector<uint8_t> payload;
     auto &pipe = pipe_singleton();
-    if (pipe && send_message(*pipe, MsgType::Ping, payload)) {
-      return true;
+    if (!pipe) {
+      return false;
     }
-    return false;
+    drain_stale_frames_locked(*pipe);
+    if (!send_message(*pipe, MsgType::Ping, payload)) {
+      return false;
+    }
+    return wait_for_ping_echo_locked(*pipe, effective_ping_ack_timeout());
   }
 }  // namespace platf::display_helper_client
 
