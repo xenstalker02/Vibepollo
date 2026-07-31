@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.15.24] — 2026-07-31
+
+### Fixed
+- **A failed display-helper restart no longer leaves you with no helper at all.** When the
+  helper did not answer within its startup window, Vibepollo armed a short cooldown and then
+  made two more attempts. The last of those asked for a hard restart, which terminated the
+  running helper *before* the cooldown was checked — so it killed the one process able to
+  restore your display layout, then declined to start a replacement. While streaming to a
+  virtual display this could leave the desktop on the stream's layout until the next sign-in,
+  when the scheduled restore task runs. Vibepollo now keeps the existing helper rather than
+  terminating one it is not allowed to replace, and stops retrying once the cooldown makes
+  further attempts pointless. Behaviour is unchanged when the helper is healthy.
+- **The web UI's settings page can no longer crash Vibepollo.** The lossless-scaling status
+  endpoint used a filesystem check that throws on an OS-level path error; the exception
+  escaped the HTTP handler and terminated the process. It now returns a degraded status
+  instead. (Adopted from upstream `1c9e0f5c`.)
+- **A rare crash when starting or stopping a stream.** An expired internal message post could
+  hand a null reference to broadcast threads. (Adopted from upstream `d2ef4751`.)
+
 ## [1.15.23] — 2026-07-25
 
 ### Fixed
