@@ -20,6 +20,7 @@
   #include <cwchar>
   #include <filesystem>
   #include <functional>
+  #include <future>
   #include <memory>
   #include <map>
   #include <mutex>
@@ -2212,6 +2213,16 @@ namespace {
     std::filesystem::path session_current_path;  // file to store current session baseline snapshot (first apply)
     std::filesystem::path session_previous_path;  // file to persist last known-good baseline across runs
     std::atomic<bool> session_saved {false};
+    // Completed when main()'s startup snapshot preload finishes. The pipe server
+    // now comes up before that disk I/O, so anything that reads or mutates
+    // snapshot state must wait on this first (Ping deliberately does not).
+    std::shared_future<void> snapshot_preload_done;
+
+    void wait_for_snapshot_preload() const {
+      if (snapshot_preload_done.valid()) {
+        snapshot_preload_done.wait();
+      }
+    }
     // Track last APPLY to suppress revert-on-topology within a grace window
     std::atomic<long long> last_apply_ms {0};
     // If a REVERT was requested directly by Sunshine, bypass grace
@@ -3410,6 +3421,9 @@ namespace {
 
     static void restore_poll_proc(std::stop_token st, ServiceState *self) {
       using namespace std::chrono_literals;
+      // Restore decisions read the preloaded snapshot state; disconnect-driven
+      // entry points don't pass through the command worker's preload gate.
+      self->wait_for_snapshot_preload();
       const auto kPoll = 3s;
       const auto kLogThrottle = std::chrono::minutes(15);
       auto last_log = std::chrono::steady_clock::now() - kLogThrottle;  // allow immediate log
@@ -4956,6 +4970,12 @@ namespace {
       type = static_cast<MsgType>(frame[0]);
       payload = frame.subspan(1);
     }
+    // Ping stays instant so the parent's IPC-readiness probe is answered before
+    // the startup snapshot preload finishes; every other frame reads or mutates
+    // snapshot state and must not race the preload thread.
+    if (type != MsgType::Ping) {
+      state.wait_for_snapshot_preload();
+    }
     handle_frame(state, async_pipe, type, payload, running);
   }
 }  // namespace
@@ -4977,17 +4997,23 @@ int main(int argc, char *argv[]) {
     hide_console_window();
   }
 
-  HANDLE singleton = nullptr;
-  if (!ensure_single_instance(singleton)) {
-    return 3;
-  }
-
+  // Logging comes up before the singleton check: a second instance used to exit
+  // with code 3 and zero diagnostics (the 07-31 pid-59864 blind spot). The file
+  // sink opens for append, so the loser writing one line alongside the winner
+  // is harmless.
   const auto logdir = compute_log_dir();
   const auto snapshot_dir = compute_snapshot_dir();
   const auto logfile = (logdir / L"sunshine_display_helper.log");
   const auto active_snapshots = make_snapshot_paths(snapshot_dir);
   const auto search_roots = snapshot_search_roots();
   auto _log_guard = logging::init(2 /*info*/, logfile);
+
+  HANDLE singleton = nullptr;
+  if (!ensure_single_instance(singleton)) {
+    BOOST_LOG(warning) << "Another display helper instance holds the singleton mutex; exiting with code 3.";
+    logging::log_flush();
+    return 3;
+  }
 
   if (restore_mode) {
     BOOST_LOG(info) << "Display helper started in restore mode (--restore flag)";
@@ -5071,55 +5097,74 @@ int main(int argc, char *argv[]) {
   state.golden_path = active_snapshots.golden;
   state.session_current_path = active_snapshots.session_current;
   state.session_previous_path = active_snapshots.session_previous;
-  {
-    // Load snapshot exclusions from vibeshine_state.json (source of truth from Sunshine).
-    std::vector<std::string> persisted;
-    for (const auto &root : search_roots) {
-      const auto vibeshine_state_file = root / L"vibeshine_state.json";
-      if (load_vibeshine_snapshot_exclusions(vibeshine_state_file, persisted)) {
-        BOOST_LOG(info) << "Loaded snapshot exclusions from vibeshine_state.json (" << persisted.size()
-                        << ") at " << vibeshine_state_file.string();
-        state.controller.set_snapshot_exclusions(persisted);
-        break;
-      }
-    }
-  }
-  {
-    for (const auto &root : search_roots) {
-      auto paths = make_snapshot_paths(root);
-      std::error_code ec_cur;
-      const bool cur_exists = std::filesystem::exists(paths.session_current, ec_cur);
-      if (cur_exists && !ec_cur) {
-        if (validate_session_snapshot(state, paths.session_current)) {
-          state.session_saved.store(true, std::memory_order_release);
-          BOOST_LOG(info) << "Existing current session snapshot detected; will preserve until confirmed restore: "
-                          << paths.session_current.string();
-          if (paths.session_current != state.session_current_path) {
-            std::error_code ec_copy;
-            std::filesystem::create_directories(state.session_current_path.parent_path(), ec_copy);
-            std::filesystem::copy_file(paths.session_current, state.session_current_path, std::filesystem::copy_options::overwrite_existing, ec_copy);
+
+  // Bring IPC up before disk I/O. The parent allows only 5s for the helper to
+  // become IPC-ready, and this preload is unbounded filesystem work — on 07-31
+  // a helper spent its entire 6.06s life before the pipe server existed. Run the
+  // preload on a one-shot background thread; non-Ping frames and the restore
+  // poll loop wait on snapshot_preload_done before touching snapshot state.
+  // (state and search_roots are main()-locals that outlive the service loop.)
+  std::promise<void> snapshot_preload_promise;
+  state.snapshot_preload_done = snapshot_preload_promise.get_future().share();
+  std::thread([&state, &search_roots, promise = std::move(snapshot_preload_promise)]() mutable {
+    try {
+      {
+        // Load snapshot exclusions from vibeshine_state.json (source of truth from Sunshine).
+        std::vector<std::string> persisted;
+        for (const auto &root : search_roots) {
+          const auto vibeshine_state_file = root / L"vibeshine_state.json";
+          if (load_vibeshine_snapshot_exclusions(vibeshine_state_file, persisted)) {
+            BOOST_LOG(info) << "Loaded snapshot exclusions from vibeshine_state.json (" << persisted.size()
+                            << ") at " << vibeshine_state_file.string();
+            state.controller.set_snapshot_exclusions(persisted);
+            break;
           }
-          break;
         }
       }
-    }
-  }
-  {
-    for (const auto &root : search_roots) {
-      auto paths = make_snapshot_paths(root);
-      std::error_code ec_prev_check;
-      if (std::filesystem::exists(paths.session_previous, ec_prev_check) && !ec_prev_check) {
-        if (validate_session_snapshot(state, paths.session_previous)) {
-          if (paths.session_previous != state.session_previous_path) {
-            std::error_code ec_copy;
-            std::filesystem::create_directories(state.session_previous_path.parent_path(), ec_copy);
-            std::filesystem::copy_file(paths.session_previous, state.session_previous_path, std::filesystem::copy_options::overwrite_existing, ec_copy);
+      {
+        for (const auto &root : search_roots) {
+          auto paths = make_snapshot_paths(root);
+          std::error_code ec_cur;
+          const bool cur_exists = std::filesystem::exists(paths.session_current, ec_cur);
+          if (cur_exists && !ec_cur) {
+            if (validate_session_snapshot(state, paths.session_current)) {
+              state.session_saved.store(true, std::memory_order_release);
+              BOOST_LOG(info) << "Existing current session snapshot detected; will preserve until confirmed restore: "
+                              << paths.session_current.string();
+              if (paths.session_current != state.session_current_path) {
+                std::error_code ec_copy;
+                std::filesystem::create_directories(state.session_current_path.parent_path(), ec_copy);
+                std::filesystem::copy_file(paths.session_current, state.session_current_path, std::filesystem::copy_options::overwrite_existing, ec_copy);
+              }
+              break;
+            }
           }
-          break;
         }
       }
+      {
+        for (const auto &root : search_roots) {
+          auto paths = make_snapshot_paths(root);
+          std::error_code ec_prev_check;
+          if (std::filesystem::exists(paths.session_previous, ec_prev_check) && !ec_prev_check) {
+            if (validate_session_snapshot(state, paths.session_previous)) {
+              if (paths.session_previous != state.session_previous_path) {
+                std::error_code ec_copy;
+                std::filesystem::create_directories(state.session_previous_path.parent_path(), ec_copy);
+                std::filesystem::copy_file(paths.session_previous, state.session_previous_path, std::filesystem::copy_options::overwrite_existing, ec_copy);
+              }
+              break;
+            }
+          }
+        }
+      }
+      BOOST_LOG(info) << "Startup snapshot preload complete.";
+    } catch (const std::exception &ex) {
+      BOOST_LOG(error) << "Startup snapshot preload failed: " << ex.what();
+    } catch (...) {
+      BOOST_LOG(error) << "Startup snapshot preload failed with an unknown exception.";
     }
-  }
+    promise.set_value();
+  }).detach();
   // Topology-based retries disabled; no watcher needed anymore.
 
   std::atomic<bool> running {true};
@@ -5204,6 +5249,29 @@ int main(int argc, char *argv[]) {
               process_incoming_frame(state, pipe, next, running);
             } catch (const std::exception &ex) {
               BOOST_LOG(error) << "IPC framing error in command worker: " << ex.what();
+            }
+            // TEST HOOK (inert unless the env var is set): wedge only the command
+            // worker after the first non-Ping frame — the exact live-pipe /
+            // dead-worker topology of the 07-31 incident, used to verify the
+            // truthful-ping/revert and cooldown-escalation paths on hardware.
+            static const bool wedge_worker = std::getenv("VIBEPOLLO_TEST_WEDGE_WORKER") != nullptr;
+            uint8_t frame_type = next[0];
+            if (next.size() >= 5) {
+              // Mirror process_incoming_frame's parse: length-prefixed frames
+              // carry the type at offset 4.
+              uint32_t len = 0;
+              std::memcpy(&len, next.data(), 4);
+              if (len > 0 && next.size() >= 4u + len) {
+                frame_type = next[4];
+              }
+            }
+            if (wedge_worker && frame_type != static_cast<uint8_t>(MsgType::Ping)) {
+              BOOST_LOG(warning) << "TEST HOOK: VIBEPOLLO_TEST_WEDGE_WORKER set; wedging command worker now.";
+              while (!state.command_worker_stop.load(std::memory_order_acquire)) {
+                std::this_thread::sleep_for(1s);
+              }
+              BOOST_LOG(warning) << "TEST HOOK: wedge released by worker stop request.";
+              break;
             }
           }
         }
