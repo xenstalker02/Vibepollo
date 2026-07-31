@@ -8,6 +8,7 @@
   #include "src/platform/windows/virtual_display.h"
 
   #include <algorithm>
+  #include <atomic>
   #include <chrono>
   #include <display_device/windows/win_api_layer.h>
   #include <display_device/windows/win_display_device.h>
@@ -20,6 +21,16 @@
 // src/process.cpp — releases the SudoVDA driver when no stream is active + host not headless.
 namespace proc {
   void release_idle_vdisplay();
+}
+
+// Forward-declared to avoid pulling in the rtsp/webrtc headers here (same rationale
+// as proc above). Defined in src/rtsp.cpp and src/webrtc_stream.cpp.
+namespace rtsp_stream {
+  int session_count();
+}
+
+namespace webrtc_stream {
+  bool has_active_sessions();
 }
 
 namespace platf::virtual_display_cleanup {
@@ -79,6 +90,10 @@ namespace platf::virtual_display_cleanup {
       }
       return false;
     }
+
+    // Single-flight guard for the asynchronous database restore dispatched when
+    // the helper failure cooldown blocks the synchronous path.
+    std::atomic<bool> g_async_restore_inflight {false};
   }  // namespace
 
   cleanup_result_t run(
@@ -141,8 +156,31 @@ namespace platf::virtual_display_cleanup {
 
       if (!result.helper_revert_dispatched) {
         if (helper_unavailable) {
-          BOOST_LOG(warning) << "Virtual display cleanup: helper unavailable (failure cooldown); "
-                                "skipping synchronous database restore during teardown.";
+          // Skipping outright here left BOTH restore routes disabled for the whole
+          // cooldown window (helper revert above + this database restore), which is
+          // how the monitors stayed black on 07-31. Keep teardown fast, but run the
+          // potentially-slow restore on a detached single-flight thread instead of
+          // dropping it. database_restore_applied stays false: it was dispatched,
+          // not applied synchronously.
+          if (g_async_restore_inflight.exchange(true, std::memory_order_acq_rel)) {
+            BOOST_LOG(warning) << "Virtual display cleanup: helper unavailable (failure cooldown); "
+                                  "asynchronous database restore already in flight.";
+          } else {
+            BOOST_LOG(warning) << "Virtual display cleanup: helper unavailable (failure cooldown); "
+                                  "dispatched asynchronous database restore.";
+            std::thread([]() {
+              // A stream that started while this thread was being scheduled must not
+              // get a modeset underneath it.
+              if (rtsp_stream::session_count() == 0 && !webrtc_stream::has_active_sessions()) {
+                const bool restored = restore_windows_display_database();
+                BOOST_LOG(info) << "Virtual display cleanup: asynchronous database restore "
+                                << (restored ? "succeeded." : "failed.");
+              } else {
+                BOOST_LOG(info) << "Virtual display cleanup: asynchronous database restore skipped (stream active).";
+              }
+              g_async_restore_inflight.store(false, std::memory_order_release);
+            }).detach();
+          }
         } else {
           result.database_restore_applied = restore_windows_display_database();
         }

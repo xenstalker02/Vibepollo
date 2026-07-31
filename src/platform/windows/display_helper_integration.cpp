@@ -1228,14 +1228,19 @@ namespace display_helper_integration {
       if (request.action == DisplayApplyAction::Revert) {
         const bool helper_ready = ensure_helper_started(false, true);
         if (!helper_ready) {
+          // Keep the active-session state: it is what allows a later retry to
+          // start the helper (dd_feature_enabled reads it), and nothing else
+          // consumes it, so retaining it after a failed revert cannot re-apply
+          // stream configuration anywhere.
           BOOST_LOG(warning) << "Display helper: REVERT skipped (helper not reachable).";
-          clear_active_session();
           return false;
         }
         BOOST_LOG(info) << "Display helper: sending REVERT request (builder).";
         const bool ok = platf::display_helper_client::send_revert();
         BOOST_LOG(info) << "Display helper: REVERT dispatch result=" << (ok ? "true" : "false");
-        clear_active_session();
+        if (ok) {
+          clear_active_session();
+        }
         return ok;
       }
 
@@ -1358,7 +1363,9 @@ namespace display_helper_integration {
 
   bool revert(bool prefer_golden_if_current_missing) {
     clear_pending_apply();
-    if (!ensure_helper_started()) {
+    // force_enable: a revert must be able to start the helper even when the
+    // session state that keeps dd_feature_enabled() true was already cleared.
+    if (!ensure_helper_started(false, true)) {
       BOOST_LOG(info) << "Display helper unavailable; cannot send revert.";
       return false;
     }
@@ -1370,8 +1377,9 @@ namespace display_helper_integration {
       g_restore_expected.store(true, std::memory_order_relaxed);
       g_last_revert_us.store(now_steady_us(), std::memory_order_relaxed);
       g_restore_generation.fetch_add(1, std::memory_order_relaxed);
+      // Only a successful revert may discard the session state a retry needs.
+      clear_active_session();
     }
-    clear_active_session();
     return ok;
   }
 
