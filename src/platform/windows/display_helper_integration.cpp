@@ -1911,6 +1911,12 @@ namespace display_helper_integration {
   }
 
   void note_stream_display_start() {
+    // Publishing under the mutation mutex makes this a barrier as well as a
+    // note: a restore already past its final activity check holds the mutex,
+    // so preparation cannot proceed until that restore has fully completed —
+    // required for entry paths (WebRTC) that have no snapshot mutex barrier
+    // of their own.
+    std::lock_guard<std::mutex> mutation_lock(g_display_mutation_mutex);
     g_last_stream_start_note_us.store(now_steady_us(), std::memory_order_relaxed);
   }
 

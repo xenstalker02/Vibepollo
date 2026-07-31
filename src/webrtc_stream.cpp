@@ -192,6 +192,12 @@ namespace webrtc_stream {
         return;
       }
 
+      // WebRTC creates its virtual display before create_session() increments
+      // active_sessions, so without this note the async cooldown restore could
+      // overlap display preparation. The note also barriers on the mutation
+      // mutex, so a restore already past its final check completes first.
+      display_helper_integration::note_stream_display_start();
+
       std::optional<std::string> app_output_override;
       if (session->output_name_override && !session->output_name_override->empty()) {
         app_output_override = boost::algorithm::trim_copy(*session->output_name_override);
