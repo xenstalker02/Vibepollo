@@ -170,15 +170,21 @@ namespace platf::virtual_display_cleanup {
                                   "dispatched asynchronous database restore.";
             std::thread([]() {
               // A stream that started while this thread was being scheduled must not
-              // get a modeset underneath it. ms_since_last_apply() flips at APPLY —
-              // before the RTSP session registers, and for the in-process fallback
-              // too — so together with the settle-and-recheck it closes the
-              // check-then-restore window down to a sliver far smaller than the
-              // seconds a session start actually takes. (The ended session's own
-              // apply lies minutes back, so it cannot false-positive this.)
+              // get a modeset underneath it. apply_in_progress() flips at APPLY
+              // dispatch — before the RTSP session registers, on both the helper
+              // and in-process paths — and ms_since_last_apply() covers the gap
+              // between an apply completing and the session registering. Together
+              // with the settle-and-recheck this closes the check-then-restore
+              // window down to a sliver far smaller than the seconds a session
+              // start actually takes. Known accepted corner: a session that both
+              // started and ended within the last 5s of a cooldown window skips
+              // this restore (the recency term cannot tell it from a starting
+              // one); the restore hotkey and the next session start remain the
+              // recovery paths there.
               auto stream_activity = []() {
                 return rtsp_stream::session_count() > 0 ||
                        webrtc_stream::has_active_sessions() ||
+                       display_helper_integration::apply_in_progress() ||
                        display_helper_integration::ms_since_last_apply() < 5000;
               };
               bool clear = !stream_activity();

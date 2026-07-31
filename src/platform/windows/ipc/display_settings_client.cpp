@@ -379,20 +379,27 @@ namespace platf::display_helper_client {
 
   bool send_disarm_restore_fast(int timeout_ms) {
     BOOST_LOG(debug) << "Display helper IPC: DISARM (fast) request queued (timeout_ms=" << timeout_ms << ")";
-    // The fast path has a hard time budget, and send_revert can now hold the
-    // pipe mutex for up to 5s while awaiting its echo. Include the mutex
-    // acquisition in the budget instead of blocking unboundedly behind it.
+    // The fast path has a hard TOTAL time budget, and send_revert can now hold
+    // the pipe mutex for up to 5s while awaiting its echo. Lock acquisition,
+    // connect, and send all draw from the same deadline instead of each getting
+    // the full budget.
+    using namespace std::chrono;
+    const auto deadline = steady_clock::now() + milliseconds(timeout_ms);
+    auto remaining_ms = [&]() -> int {
+      const auto left = duration_cast<milliseconds>(deadline - steady_clock::now()).count();
+      return static_cast<int>(std::max<long long>(0LL, left));
+    };
     std::unique_lock<std::timed_mutex> lk(pipe_mutex(), std::defer_lock);
-    if (!lk.try_lock_for(std::chrono::milliseconds(timeout_ms))) {
+    if (!lk.try_lock_for(milliseconds(timeout_ms))) {
       BOOST_LOG(debug) << "Display helper IPC: DISARM (fast) skipped - pipe busy beyond budget";
       return false;
     }
-    if (!ensure_connected_locked(timeout_ms)) {
+    if (!ensure_connected_locked(remaining_ms())) {
       return false;
     }
     std::vector<uint8_t> payload;
     auto &pipe = pipe_singleton();
-    if (pipe && send_message(*pipe, MsgType::Disarm, payload, timeout_ms)) {
+    if (pipe && send_message(*pipe, MsgType::Disarm, payload, std::max(remaining_ms(), 1))) {
       return true;
     }
     return false;

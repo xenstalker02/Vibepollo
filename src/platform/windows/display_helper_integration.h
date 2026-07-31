@@ -95,4 +95,9 @@ namespace display_helper_integration {
   // helper-dependent work instead of spending the hang-watchdog budget on it.
   bool helper_recently_failed();
 
+  // True while an APPLY dispatch (helper or in-process) is executing. Flips at
+  // dispatch start — before the RTSP session registers — so it is the earliest
+  // "a stream is starting" signal for code that must not modeset underneath one.
+  bool apply_in_progress();
+
 }  // namespace display_helper_integration

@@ -81,16 +81,17 @@ namespace VDISPLAY {
 
     std::atomic<bool> g_watchdog_feed_requested {false};
     std::atomic<bool> g_watchdog_stop_requested {false};
-    // Generation tokens: each ping thread belongs to one generation. A detached
-    // straggler from an older generation exits as soon as it observes a newer
-    // generation (even after startPingThread cleared the stop flag for its
-    // successor), and its exit report cannot satisfy a newer generation's
-    // bounded join in stop_watchdog_thread.
+    // Generation counter: a detached straggler from an older generation exits as
+    // soon as it observes a newer generation (even after startPingThread cleared
+    // the stop flag for its successor).
     std::atomic<std::uint64_t> g_watchdog_generation {0};
-    std::atomic<std::uint64_t> g_watchdog_exited_generation {0};
     std::atomic<std::int64_t> g_watchdog_grace_deadline_ns {0};
     std::mutex g_watchdog_thread_mutex;
     std::thread g_watchdog_thread;
+    // Paired with g_watchdog_thread under g_watchdog_thread_mutex: THIS thread's
+    // own exit report. Kept per-thread (not a shared counter) so no other
+    // generation's exit can ever satisfy a bounded join against this one.
+    std::shared_ptr<std::atomic<bool>> g_watchdog_thread_exited;
     std::function<void()> g_watchdog_fail_cb;
     std::atomic<std::int64_t> g_last_teardown_ns {0};
     std::atomic<std::int64_t> g_last_restart_failure_ns {0};
@@ -146,12 +147,14 @@ namespace VDISPLAY {
       g_watchdog_stop_requested.store(true, std::memory_order_release);
 
       std::thread watchdog_thread;
+      std::shared_ptr<std::atomic<bool>> thread_exited;
       {
         std::lock_guard<std::mutex> lock(g_watchdog_thread_mutex);
         if (!g_watchdog_thread.joinable()) {
           return;
         }
         watchdog_thread = std::move(g_watchdog_thread);
+        thread_exited = std::move(g_watchdog_thread_exited);
       }
 
       if (!watchdog_thread.joinable()) {
@@ -169,17 +172,16 @@ namespace VDISPLAY {
         // healthy thread exits almost immediately. The one unbounded case is a
         // synchronous PingDriver DeviceIoControl blocked inside a wedged driver:
         // joining that from session teardown is exactly the 40s stall that trips
-        // the 10s hang watchdog. Poll for the current generation's exit report
-        // and detach if it never comes; the thread owns a duplicated driver
-        // handle it closes itself, and shares only atomics with the rest of the
-        // process, so a detached straggler is inert. Generation matching keeps a
-        // stale straggler's exit from ever standing in for this thread's.
+        // the 10s hang watchdog. Poll THIS thread's own exit report (moved out
+        // under the same mutex as the thread, so they cannot be mismatched) and
+        // detach if it never comes; the thread owns a duplicated driver handle
+        // it closes itself, and shares only atomics with the rest of the
+        // process, so a detached straggler is inert.
         using namespace std::chrono;
-        const auto gen = g_watchdog_generation.load(std::memory_order_acquire);
         const auto deadline = steady_clock::now() + seconds(2);
         bool exited = false;
         while (steady_clock::now() < deadline) {
-          if (g_watchdog_exited_generation.load(std::memory_order_acquire) >= gen) {
+          if (!thread_exited || thread_exited->load(std::memory_order_acquire)) {
             exited = true;
             break;
           }
@@ -2859,22 +2861,13 @@ namespace VDISPLAY {
     const auto interval_ms = std::max<long long>(static_cast<long long>(watchdogOut.Timeout) * 1000ll / 3ll, 100ll);
     const auto sleep_duration = std::chrono::milliseconds(interval_ms);
 
-    std::thread ping_thread([sleep_duration, failCb = std::move(failCb), ping_handle, my_generation] {
+    auto thread_exited = std::make_shared<std::atomic<bool>>(false);
+    std::thread ping_thread([sleep_duration, failCb = std::move(failCb), ping_handle, my_generation, thread_exited] {
       auto stale_generation = [my_generation]() {
         return g_watchdog_generation.load(std::memory_order_acquire) != my_generation;
       };
-      auto note_exit = [my_generation]() {
-        // Monotonic max: a straggler finishing late must never overwrite a newer
-        // generation's exit report with an older value.
-        auto prev = g_watchdog_exited_generation.load(std::memory_order_relaxed);
-        while (prev < my_generation &&
-               !g_watchdog_exited_generation.compare_exchange_weak(
-                 prev,
-                 my_generation,
-                 std::memory_order_release,
-                 std::memory_order_relaxed
-               )) {
-        }
+      auto note_exit = [&thread_exited]() {
+        thread_exited->store(true, std::memory_order_release);
       };
       auto close_ping_handle = [ping_handle]() {
         if (ping_handle != INVALID_HANDLE_VALUE) {
@@ -2939,6 +2932,7 @@ namespace VDISPLAY {
     {
       std::lock_guard<std::mutex> lock(g_watchdog_thread_mutex);
       g_watchdog_thread = std::move(ping_thread);
+      g_watchdog_thread_exited = std::move(thread_exited);
     }
 
     return true;

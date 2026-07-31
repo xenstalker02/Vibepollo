@@ -213,7 +213,7 @@ namespace {
   constexpr int kMaxDeferredApplyAttempts = 6;
 
   bool shutdown_requested();
-  bool ensure_helper_started(bool force_restart = false, bool force_enable = false);
+  bool ensure_helper_started(bool force_restart = false, bool force_enable = false, bool allow_slow_recovery = false);
   const char *virtual_layout_to_string(const display_helper_integration::VirtualDisplayArrangement layout);
 
   std::chrono::milliseconds deferred_apply_retry_delay(int attempts) {
@@ -588,6 +588,21 @@ namespace {
   // can add a stabilization delay before attempting to reinit after topology changes.
   static std::atomic<std::int64_t> g_last_apply_completed_us {0};
 
+  // Count of APPLY dispatches currently executing (helper or in-process). The
+  // async cooldown restore consults this so it cannot modeset underneath an
+  // apply that started after its liveness checks.
+  static std::atomic<int> g_applies_in_flight {0};
+
+  struct ApplyInFlightGuard {
+    ApplyInFlightGuard() {
+      g_applies_in_flight.fetch_add(1, std::memory_order_acq_rel);
+    }
+
+    ~ApplyInFlightGuard() {
+      g_applies_in_flight.fetch_sub(1, std::memory_order_acq_rel);
+    }
+  };
+
   static std::int64_t now_steady_us() {
     using namespace std::chrono;
     return duration_cast<microseconds>(steady_clock::now().time_since_epoch()).count();
@@ -751,12 +766,12 @@ namespace {
     return false;
   }
 
-  bool ensure_helper_started(bool force_restart, bool force_enable) {
+  bool ensure_helper_started(bool force_restart, bool force_enable, bool allow_slow_recovery) {
     if (!force_enable && !dd_feature_enabled()) {
       return false;
     }
     const bool shutting_down = shutdown_requested();
-    std::lock_guard<std::mutex> lg(helper_mutex());
+    std::unique_lock<std::mutex> lg(helper_mutex());
     // Already started? Verify liveness to avoid stale or wedged state
     if (HANDLE h = helper_proc().get_process_handle(); h != nullptr) {
       BOOST_LOG(debug) << "Display helper: checking existing process handle...";
@@ -793,10 +808,21 @@ namespace {
           }
           // Second-or-later failed probe cycle. Probes are suppressed while the
           // cooldown is active, so reaching here means the helper has been
-          // unresponsive across a full cooldown window — but "busy" and "wedged"
-          // both look like missed short pings. Give it one extended chance: a
-          // busy worker echoes as soon as it drains its queue; a wedged one
-          // never does. Only a failure here licenses termination.
+          // unresponsive across a full cooldown window. Slow recovery (an
+          // extended probe and possible terminate+relaunch, ~10s+) is licensed
+          // only from the stream watchdog — never from teardown paths, which
+          // run inside the 10s session hang watchdog.
+          if (!allow_slow_recovery) {
+            BOOST_LOG(warning) << "Display helper process ping failed; keeping existing instance and deferring "
+                                  "restart (slow recovery not permitted on this path).";
+            note_helper_start_failure("failed ping");
+            return false;
+          }
+          // "Busy" and "wedged" both look like missed short pings. Give it one
+          // extended chance — outside the helper mutex, so DISARM and teardown
+          // paths are not blocked behind a ~10s probe: a busy worker echoes as
+          // soon as it drains its queue; a wedged one never does.
+          lg.unlock();
           bool late_echo = false;
           for (int i = 0; i < 3 && !late_echo; ++i) {
             late_echo = platf::display_helper_client::send_ping();
@@ -804,12 +830,22 @@ namespace {
               std::this_thread::sleep_for(std::chrono::milliseconds(500));
             }
           }
+          lg.lock();
           if (late_echo) {
             BOOST_LOG(info) << "Display helper: helper answered the extended probe after missing short pings "
                                "(busy, not wedged); keeping instance (pid="
                             << pid << ").";
             note_helper_start_success();
             return true;
+          }
+          // Revalidate after reacquiring: another thread may have replaced or
+          // reaped the helper while the probe ran unlocked.
+          HANDLE h_now = helper_proc().get_process_handle();
+          if (h_now != h || h_now == nullptr || WaitForSingleObject(h_now, 0) != WAIT_TIMEOUT ||
+              GetProcessId(h_now) != pid) {
+            BOOST_LOG(info) << "Display helper: helper state changed during extended probe; deferring to the "
+                               "next probe cycle.";
+            return false;
           }
           // Genuinely wedged: without this branch nothing would ever replace it
           // (the only terminating path is force_restart, which the cooldown
@@ -1188,7 +1224,10 @@ namespace {
         }
 
         if (!helper_ready) {
-          helper_ready = ensure_helper_started();
+          // The stream watchdog is the one context where slow recovery (extended
+          // probe + terminate/relaunch of a wedged helper) is allowed — it runs
+          // on its own thread, never inside the session teardown budget.
+          helper_ready = ensure_helper_started(false, false, true);
           if (!helper_ready) {
             sleep_interruptible(kActiveInterval);
             continue;
@@ -1211,7 +1250,7 @@ namespace {
           if (!platf::display_helper_client::send_ping()) {
             // Avoid logging ping failures to reduce log spam; proceed to reconnect
             platf::display_helper_client::reset_connection();
-            helper_ready = ensure_helper_started();
+            helper_ready = ensure_helper_started(false, false, true);
             if (!helper_ready) {
               continue;
             }
@@ -1265,6 +1304,10 @@ namespace display_helper_integration {
       if (request.action != DisplayApplyAction::Apply) {
         return false;
       }
+
+      // Visible to the async cooldown restore for the whole apply, dispatch
+      // through completion, on both the helper and in-process paths.
+      ApplyInFlightGuard apply_in_flight_guard;
 
       // Prefer the helper for APPLY, even when running as SYSTEM without an interactive user session.
       // In-process display APIs frequently return ERROR_ACCESS_DENIED in that context.
@@ -1841,6 +1884,10 @@ namespace display_helper_integration {
     const auto elapsed_us = now_steady_us() - last_us;
     const auto cooldown_us = std::chrono::duration_cast<std::chrono::microseconds>(kHelperStartFailureCooldown).count();
     return elapsed_us < cooldown_us;
+  }
+
+  bool apply_in_progress() {
+    return g_applies_in_flight.load(std::memory_order_acquire) > 0;
   }
 
 }  // namespace display_helper_integration

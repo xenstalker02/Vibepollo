@@ -4869,12 +4869,14 @@ namespace {
       state.controller.set_snapshot_exclusions(*exclusions);
     }
     // Snapshot-mutating ops must not race the startup preload's validate/copy
-    // pass over the same files. Bounded: these are rare, manual-cadence ops, and
-    // proceeding after the bound (with a note) beats freezing the worker.
+    // pass over the same files. Bounded wait, then REJECT rather than proceed:
+    // these are rare, manual-cadence ops, and a refused export is recoverable
+    // while a preload validate deleting a half-written snapshot is not.
     if (type == MsgType::ExportGolden || type == MsgType::Reset || type == MsgType::SnapshotCurrent) {
       if (!state.snapshot_preload_ready_within(std::chrono::milliseconds(4000))) {
         BOOST_LOG(warning) << "Snapshot operation (type=" << static_cast<int>(type)
-                           << ") proceeding while startup preload is still running.";
+                           << ") rejected: startup preload still running. Retry shortly.";
+        return;
       }
     }
     if (type == MsgType::ExportGolden) {
@@ -5139,7 +5141,10 @@ int main(int argc, char *argv[]) {
   // (state and search_roots are main()-locals that outlive the service loop.)
   std::promise<void> snapshot_preload_promise;
   state.snapshot_preload_done = snapshot_preload_promise.get_future().share();
-  std::thread([&state, &search_roots, promise = std::move(snapshot_preload_promise)]() mutable {
+  // Owned (not detached): declared after `state` and `search_roots`, so its
+  // jthread destructor joins before they are destroyed when main() returns —
+  // a detached preload could otherwise use them after scope exit on a STOP.
+  std::jthread snapshot_preload_thread([&state, &search_roots, promise = std::move(snapshot_preload_promise)]() mutable {
     try {
       {
         // Load snapshot exclusions from vibeshine_state.json (source of truth from Sunshine).
@@ -5197,7 +5202,7 @@ int main(int argc, char *argv[]) {
       BOOST_LOG(error) << "Startup snapshot preload failed with an unknown exception.";
     }
     promise.set_value();
-  }).detach();
+  });
   // Topology-based retries disabled; no watcher needed anymore.
 
   std::atomic<bool> running {true};
