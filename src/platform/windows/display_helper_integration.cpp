@@ -779,6 +779,19 @@ namespace {
           return false;
         }
 
+        // A hard restart during an active start-failure cooldown is a pure destructor:
+        // the termination below is unconditional, but the relaunch further down is gated
+        // by helper_start_failure_cooldown_active() and will refuse. That combination
+        // kills the one helper we have and starts nothing — which is exactly what
+        // happened on 2026-07-31, destroying the only process able to revert the display.
+        // Keep the existing instance instead; a wedged helper still beats no helper.
+        if (helper_start_failure_cooldown_active()) {
+          BOOST_LOG(warning) << "Display helper: hard restart requested during start-failure cooldown; keeping existing "
+                                "instance (pid="
+                             << pid << ") rather than terminating one we are not allowed to replace.";
+          return false;
+        }
+
         BOOST_LOG(warning) << "Display helper: hard restart requested; terminating existing instance (pid=" << pid
                            << ") with no grace period.";
         platf::display_helper_client::reset_connection();
@@ -1203,12 +1216,21 @@ namespace display_helper_integration {
       const bool hard_restart = (request.session != nullptr);
 
       bool helper_ready = ensure_helper_started(hard_restart, true);
-      if (!helper_ready && hard_restart) {
-        BOOST_LOG(warning) << "Display helper: hard restart path unavailable; retrying helper start without restart.";
-        helper_ready = ensure_helper_started(false, true);
-      }
-      if (!helper_ready) {
-        helper_ready = ensure_helper_started(hard_restart, true);
+      if (!helper_ready && helper_start_failure_cooldown_active()) {
+        // The first attempt armed the start-failure cooldown (any IPC-readiness timeout
+        // does), and every gate in ensure_helper_started() honours it. The remaining
+        // attempts below are therefore guaranteed to fail; running them only burns the
+        // caller's budget and, before the guard above, destroyed a live helper.
+        BOOST_LOG(warning) << "Display helper: start-failure cooldown armed by the first attempt; skipping the "
+                              "remaining retries, which cannot succeed.";
+      } else {
+        if (!helper_ready && hard_restart) {
+          BOOST_LOG(warning) << "Display helper: hard restart path unavailable; retrying helper start without restart.";
+          helper_ready = ensure_helper_started(false, true);
+        }
+        if (!helper_ready) {
+          helper_ready = ensure_helper_started(hard_restart, true);
+        }
       }
 
       if (helper_ready) {
