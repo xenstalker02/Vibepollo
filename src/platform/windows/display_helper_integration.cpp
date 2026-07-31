@@ -616,6 +616,16 @@ namespace {
     BOOST_LOG(warning) << "Display helper: helper start failure cooldown armed after " << reason << ".";
   }
 
+  // Consecutive failed liveness-probe cycles against a kept-alive helper.
+  // Incremented by the reuse path in ensure_helper_started(); reset whenever
+  // the helper demonstrates real health (echo ping / IPC readiness).
+  static std::atomic<int> g_failed_ping_probes {0};
+
+  void note_helper_start_success() {
+    g_last_helper_start_failure_us.store(0, std::memory_order_relaxed);
+    g_failed_ping_probes.store(0, std::memory_order_relaxed);
+  }
+
   // Active session display parameters snapshot for re-apply on reconnect.
   // We do NOT cache serialized JSON, only the subset of session fields that
   // affect display configuration. On reconnect, we rebuild the full
@@ -771,48 +781,70 @@ namespace {
             }
           }
           if (ping_ok) {
+            note_helper_start_success();
             return true;
           }
           platf::display_helper_client::reset_connection();
-          BOOST_LOG(warning) << "Display helper process ping failed; keeping existing instance and deferring restart.";
-          note_helper_start_failure("failed ping");
-          return false;
-        }
-
-        // A hard restart during an active start-failure cooldown is a pure destructor:
-        // the termination below is unconditional, but the relaunch further down is gated
-        // by helper_start_failure_cooldown_active() and will refuse. That combination
-        // kills the one helper we have and starts nothing — which is exactly what
-        // happened on 2026-07-31, destroying the only process able to revert the display.
-        // Keep the existing instance instead; a wedged helper still beats no helper.
-        if (helper_start_failure_cooldown_active()) {
-          BOOST_LOG(warning) << "Display helper: hard restart requested during start-failure cooldown; keeping existing "
+          const int failed_probes = g_failed_ping_probes.fetch_add(1, std::memory_order_relaxed) + 1;
+          if (failed_probes < 2) {
+            BOOST_LOG(warning) << "Display helper process ping failed; keeping existing instance and deferring restart.";
+            note_helper_start_failure("failed ping");
+            return false;
+          }
+          // Second-or-later failed probe cycle. Probes are suppressed while the
+          // cooldown is active, so reaching here means the helper has been
+          // unresponsive across a full cooldown window — it is genuinely wedged,
+          // and without this branch nothing would ever replace it (the only
+          // terminating path is force_restart, which the cooldown gates). The
+          // cooldown has expired and is deliberately NOT re-armed here, so the
+          // relaunch below is provably un-gated; terminate and relaunch happen
+          // under the same helper_mutex hold, atomically to all other threads.
+          BOOST_LOG(warning) << "Display helper: helper still unresponsive after cooldown expiry; terminating wedged "
                                 "instance (pid="
-                             << pid << ") rather than terminating one we are not allowed to replace.";
-          return false;
-        }
-
-        BOOST_LOG(warning) << "Display helper: hard restart requested; terminating existing instance (pid=" << pid
-                           << ") with no grace period.";
-        platf::display_helper_client::reset_connection();
-        helper_proc().terminate();
-
-        DWORD wait_result = WaitForSingleObject(h, kHelperForceKillWaitMs);
-        if (wait_result == WAIT_OBJECT_0) {
-          DWORD exit_code = 0;
-          GetExitCodeProcess(h, &exit_code);
-          BOOST_LOG(info) << "Display helper exited after forced termination (code=" << exit_code << ").";
-        } else if (wait_result == WAIT_TIMEOUT) {
-          BOOST_LOG(warning) << "Display helper: process did not exit within " << kHelperForceKillWaitMs
-                             << " ms after termination request; continuing with cleanup.";
+                             << pid << ") and relaunching.";
+          helper_proc().terminate();
+          DWORD wedge_wait = WaitForSingleObject(h, kHelperForceKillWaitMs);
+          if (wedge_wait != WAIT_OBJECT_0) {
+            BOOST_LOG(warning) << "Display helper: wedged instance did not exit within " << kHelperForceKillWaitMs
+                               << " ms after termination request; continuing with cleanup.";
+          }
+          std::this_thread::sleep_for(std::chrono::milliseconds(100));
         } else {
-          DWORD wait_err = GetLastError();
-          BOOST_LOG(warning) << "Display helper: wait after termination failed (winerr=" << wait_err
-                             << "); continuing with cleanup.";
-        }
+          // A hard restart during an active start-failure cooldown is a pure destructor:
+          // the termination below is unconditional, but the relaunch further down is gated
+          // by helper_start_failure_cooldown_active() and will refuse. That combination
+          // kills the one helper we have and starts nothing — which is exactly what
+          // happened on 2026-07-31, destroying the only process able to revert the display.
+          // Keep the existing instance instead; a wedged helper still beats no helper.
+          if (helper_start_failure_cooldown_active()) {
+            BOOST_LOG(warning) << "Display helper: hard restart requested during start-failure cooldown; keeping existing "
+                                  "instance (pid="
+                               << pid << ") rather than terminating one we are not allowed to replace.";
+            return false;
+          }
 
-        // Small delay to reduce the chance of named pipe / mutex conflicts during rapid restart.
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+          BOOST_LOG(warning) << "Display helper: hard restart requested; terminating existing instance (pid=" << pid
+                             << ") with no grace period.";
+          platf::display_helper_client::reset_connection();
+          helper_proc().terminate();
+
+          DWORD wait_result = WaitForSingleObject(h, kHelperForceKillWaitMs);
+          if (wait_result == WAIT_OBJECT_0) {
+            DWORD exit_code = 0;
+            GetExitCodeProcess(h, &exit_code);
+            BOOST_LOG(info) << "Display helper exited after forced termination (code=" << exit_code << ").";
+          } else if (wait_result == WAIT_TIMEOUT) {
+            BOOST_LOG(warning) << "Display helper: process did not exit within " << kHelperForceKillWaitMs
+                               << " ms after termination request; continuing with cleanup.";
+          } else {
+            DWORD wait_err = GetLastError();
+            BOOST_LOG(warning) << "Display helper: wait after termination failed (winerr=" << wait_err
+                               << "); continuing with cleanup.";
+          }
+
+          // Small delay to reduce the chance of named pipe / mutex conflicts during rapid restart.
+          std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
       } else {
         // Process exited; fall through to restart
         DWORD exit_code = 0;
@@ -889,6 +921,7 @@ namespace {
       platf::display_helper_client::reset_connection();
       if (platf::display_helper_client::send_ping()) {
         BOOST_LOG(warning) << "Display helper: adopting existing external instance reachable via IPC.";
+        note_helper_start_success();
         return true;
       }
       note_helper_start_failure("process launch failure");
@@ -943,6 +976,8 @@ namespace {
     const bool ipc_ready = wait_for_helper_ipc_ready_locked();
     if (!ipc_ready) {
       note_helper_start_failure("IPC readiness timeout");
+    } else {
+      note_helper_start_success();
     }
     return ipc_ready;
   }
