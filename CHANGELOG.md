@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.15.25] — 2026-07-31
+
+### Fixed
+- **Your monitors now come back after a stream even when the display helper is wedged.**
+  Health pings and REVERT requests previously counted a successful pipe *write* as success,
+  so a helper whose worker thread was stuck passed every check and "acknowledged" a revert
+  it never performed — Vibepollo then skipped its own in-process restore, and the desktop
+  stayed on the stream's layout with clean-looking logs. Both now wait for the helper worker's
+  actual echo; when it doesn't come, Vibepollo restores the display database itself. The
+  fallback also runs (asynchronously) during the helper failure cooldown, which previously
+  disabled every restore route at once.
+- **Session teardown no longer stalls for 40+ seconds.** The virtual-display watchdog thread
+  slept its full feed interval (driver timeout / 3 — tens of seconds) in one shot, and ending
+  a session waited for it. It now wakes within 100 ms of a stop request, and a thread stuck
+  inside a wedged driver call is abandoned with a warning instead of freezing teardown until
+  the hang watchdog kills the process. Teardown also logs how long releasing the driver took.
+- **A wedged helper is replaced instead of being kept forever.** The failure cooldown was
+  never cleared on success and was re-armed by every failed probe, while the only code path
+  able to replace the helper was gated behind that same cooldown. The cooldown now clears
+  when the helper proves healthy, and a helper that stays unresponsive across a full cooldown
+  window is terminated and relaunched in one atomic step.
+- **A failed revert can be retried.** Revert paths discarded their session state even on
+  failure, which could prevent a later attempt from starting the helper at all.
+- **Helper startup no longer loses the race between disk I/O and the readiness window.** The
+  helper's IPC pipe now comes up before its snapshot preload (which runs in the background),
+  so a slow disk can't make a healthy helper look dead. A helper that exits because another
+  instance is already running now logs that fact instead of dying silently.
+- **Endless display-restore loop eliminated.** Display topologies that differ only in
+  adapter enumeration order are now recognized as identical, stopping repeated restore
+  attempts that could scramble hardware overlay planes. (Adopted from upstream `408bc3fd`.)
+
 ## [1.15.24] — 2026-07-31
 
 ### Fixed
