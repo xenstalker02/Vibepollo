@@ -793,14 +793,32 @@ namespace {
           }
           // Second-or-later failed probe cycle. Probes are suppressed while the
           // cooldown is active, so reaching here means the helper has been
-          // unresponsive across a full cooldown window — it is genuinely wedged,
-          // and without this branch nothing would ever replace it (the only
-          // terminating path is force_restart, which the cooldown gates). The
-          // cooldown has expired and is deliberately NOT re-armed here, so the
-          // relaunch below is provably un-gated; terminate and relaunch happen
-          // under the same helper_mutex hold, atomically to all other threads.
-          BOOST_LOG(warning) << "Display helper: helper still unresponsive after cooldown expiry; terminating wedged "
-                                "instance (pid="
+          // unresponsive across a full cooldown window — but "busy" and "wedged"
+          // both look like missed short pings. Give it one extended chance: a
+          // busy worker echoes as soon as it drains its queue; a wedged one
+          // never does. Only a failure here licenses termination.
+          bool late_echo = false;
+          for (int i = 0; i < 3 && !late_echo; ++i) {
+            late_echo = platf::display_helper_client::send_ping();
+            if (!late_echo) {
+              std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            }
+          }
+          if (late_echo) {
+            BOOST_LOG(info) << "Display helper: helper answered the extended probe after missing short pings "
+                               "(busy, not wedged); keeping instance (pid="
+                            << pid << ").";
+            note_helper_start_success();
+            return true;
+          }
+          // Genuinely wedged: without this branch nothing would ever replace it
+          // (the only terminating path is force_restart, which the cooldown
+          // gates). The cooldown has expired and is deliberately NOT re-armed
+          // here, so the relaunch below is provably un-gated; terminate and
+          // relaunch happen under the same helper_mutex hold, atomically to all
+          // other threads.
+          BOOST_LOG(warning) << "Display helper: helper still unresponsive after cooldown expiry and extended probe; "
+                                "terminating wedged instance (pid="
                              << pid << ") and relaunching.";
           helper_proc().terminate();
           DWORD wedge_wait = WaitForSingleObject(h, kHelperForceKillWaitMs);
@@ -1824,6 +1842,7 @@ namespace display_helper_integration {
     const auto cooldown_us = std::chrono::duration_cast<std::chrono::microseconds>(kHelperStartFailureCooldown).count();
     return elapsed_us < cooldown_us;
   }
+
 }  // namespace display_helper_integration
 
 #endif

@@ -198,8 +198,8 @@ namespace platf::display_helper_client {
 
   // Global mutex to serialize all access to the pipe (connect, reset, send)
   // and prevent interleaved writes on a BYTE-mode pipe.
-  static std::mutex &pipe_mutex() {
-    static std::mutex m;
+  static std::timed_mutex &pipe_mutex() {
+    static std::timed_mutex m;
     return m;
   }
 
@@ -266,7 +266,7 @@ namespace platf::display_helper_client {
   }
 
   void reset_connection() {
-    std::lock_guard<std::mutex> lg(pipe_mutex());
+    std::lock_guard<std::timed_mutex> lg(pipe_mutex());
     auto &pipe = pipe_singleton();
     if (pipe) {
       BOOST_LOG(debug) << "Display helper IPC: resetting cached connection";
@@ -277,7 +277,7 @@ namespace platf::display_helper_client {
 
   bool send_apply_json(const std::string &json) {
     BOOST_LOG(debug) << "Display helper IPC: APPLY request queued (json_len=" << json.size() << ")";
-    std::unique_lock<std::mutex> lk(pipe_mutex());
+    std::unique_lock<std::timed_mutex> lk(pipe_mutex());
     if (!ensure_connected_locked()) {
       BOOST_LOG(warning) << "Display helper IPC: APPLY aborted - no connection";
       return false;
@@ -302,7 +302,7 @@ namespace platf::display_helper_client {
 
   bool send_revert(const std::string &json_payload) {
     BOOST_LOG(debug) << "Display helper IPC: REVERT request queued";
-    std::unique_lock<std::mutex> lk(pipe_mutex());
+    std::unique_lock<std::timed_mutex> lk(pipe_mutex());
     if (!ensure_connected_locked()) {
       BOOST_LOG(warning) << "Display helper IPC: REVERT aborted - no connection";
       return false;
@@ -334,7 +334,7 @@ namespace platf::display_helper_client {
 
   bool send_export_golden(const std::string &json_payload) {
     BOOST_LOG(debug) << "Display helper IPC: EXPORT_GOLDEN request queued";
-    std::unique_lock<std::mutex> lk(pipe_mutex());
+    std::unique_lock<std::timed_mutex> lk(pipe_mutex());
     if (!ensure_connected_locked()) {
       BOOST_LOG(warning) << "Display helper IPC: EXPORT_GOLDEN aborted - no connection";
       return false;
@@ -349,7 +349,7 @@ namespace platf::display_helper_client {
 
   bool send_reset() {
     BOOST_LOG(debug) << "Display helper IPC: RESET request queued";
-    std::unique_lock<std::mutex> lk(pipe_mutex());
+    std::unique_lock<std::timed_mutex> lk(pipe_mutex());
     if (!ensure_connected_locked()) {
       BOOST_LOG(warning) << "Display helper IPC: RESET aborted - no connection";
       return false;
@@ -364,7 +364,7 @@ namespace platf::display_helper_client {
 
   bool send_disarm_restore() {
     BOOST_LOG(info) << "Display helper IPC: DISARM request queued";
-    std::unique_lock<std::mutex> lk(pipe_mutex());
+    std::unique_lock<std::timed_mutex> lk(pipe_mutex());
     if (!ensure_connected_locked()) {
       BOOST_LOG(warning) << "Display helper IPC: DISARM aborted - no connection";
       return false;
@@ -379,7 +379,14 @@ namespace platf::display_helper_client {
 
   bool send_disarm_restore_fast(int timeout_ms) {
     BOOST_LOG(debug) << "Display helper IPC: DISARM (fast) request queued (timeout_ms=" << timeout_ms << ")";
-    std::unique_lock<std::mutex> lk(pipe_mutex());
+    // The fast path has a hard time budget, and send_revert can now hold the
+    // pipe mutex for up to 5s while awaiting its echo. Include the mutex
+    // acquisition in the budget instead of blocking unboundedly behind it.
+    std::unique_lock<std::timed_mutex> lk(pipe_mutex(), std::defer_lock);
+    if (!lk.try_lock_for(std::chrono::milliseconds(timeout_ms))) {
+      BOOST_LOG(debug) << "Display helper IPC: DISARM (fast) skipped - pipe busy beyond budget";
+      return false;
+    }
     if (!ensure_connected_locked(timeout_ms)) {
       return false;
     }
@@ -393,7 +400,7 @@ namespace platf::display_helper_client {
 
   bool send_snapshot_current(const std::string &json_payload) {
     BOOST_LOG(debug) << "Display helper IPC: SNAPSHOT_CURRENT request queued";
-    std::unique_lock<std::mutex> lk(pipe_mutex());
+    std::unique_lock<std::timed_mutex> lk(pipe_mutex());
     if (!ensure_connected_locked()) {
       BOOST_LOG(warning) << "Display helper IPC: SNAPSHOT_CURRENT aborted - no connection";
       return false;
@@ -408,7 +415,7 @@ namespace platf::display_helper_client {
 
   bool send_stop() {
     BOOST_LOG(info) << "Display helper IPC: STOP request queued";
-    std::unique_lock<std::mutex> lk(pipe_mutex());
+    std::unique_lock<std::timed_mutex> lk(pipe_mutex());
     if (!ensure_connected_locked()) {
       BOOST_LOG(warning) << "Display helper IPC: STOP aborted - no connection";
       return false;
@@ -423,7 +430,7 @@ namespace platf::display_helper_client {
 
   bool send_ping() {
     // No logging for ping path to reduce log spam
-    std::unique_lock<std::mutex> lk(pipe_mutex());
+    std::unique_lock<std::timed_mutex> lk(pipe_mutex());
     if (!ensure_connected_locked()) {
       return false;
     }

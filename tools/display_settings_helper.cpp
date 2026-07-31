@@ -2214,14 +2214,21 @@ namespace {
     std::filesystem::path session_previous_path;  // file to persist last known-good baseline across runs
     std::atomic<bool> session_saved {false};
     // Completed when main()'s startup snapshot preload finishes. The pipe server
-    // now comes up before that disk I/O, so anything that reads or mutates
-    // snapshot state must wait on this first (Ping deliberately does not).
+    // now comes up before that disk I/O, so work that reads or mutates snapshot
+    // state waits on this first — always with a bound or an interruptible loop,
+    // never a bare wait(), so a slow disk cannot silently freeze a worker whose
+    // peer runs fixed IPC timeouts.
     std::shared_future<void> snapshot_preload_done;
 
-    void wait_for_snapshot_preload() const {
-      if (snapshot_preload_done.valid()) {
-        snapshot_preload_done.wait();
+    bool snapshot_preload_ready_within(std::chrono::milliseconds timeout) const {
+      if (!snapshot_preload_done.valid()) {
+        return true;
       }
+      return snapshot_preload_done.wait_for(timeout) == std::future_status::ready;
+    }
+
+    bool snapshot_preload_pending() const {
+      return !snapshot_preload_ready_within(std::chrono::milliseconds(0));
     }
     // Track last APPLY to suppress revert-on-topology within a grace window
     std::atomic<long long> last_apply_ms {0};
@@ -3422,8 +3429,15 @@ namespace {
     static void restore_poll_proc(std::stop_token st, ServiceState *self) {
       using namespace std::chrono_literals;
       // Restore decisions read the preloaded snapshot state; disconnect-driven
-      // entry points don't pass through the command worker's preload gate.
-      self->wait_for_snapshot_preload();
+      // entry points don't pass through the command worker's gates. Wait in an
+      // interruptible loop so a DISARM's stop-and-join cannot deadlock against a
+      // slow preload.
+      while (!st.stop_requested() && self->snapshot_preload_pending()) {
+        std::this_thread::sleep_for(50ms);
+      }
+      if (st.stop_requested()) {
+        return;
+      }
       const auto kPoll = 3s;
       const auto kLogThrottle = std::chrono::minutes(15);
       auto last_log = std::chrono::steady_clock::now() - kLogThrottle;  // allow immediate log
@@ -4854,6 +4868,15 @@ namespace {
     if (auto exclusions = parse_snapshot_exclude_payload(payload)) {
       state.controller.set_snapshot_exclusions(*exclusions);
     }
+    // Snapshot-mutating ops must not race the startup preload's validate/copy
+    // pass over the same files. Bounded: these are rare, manual-cadence ops, and
+    // proceeding after the bound (with a note) beats freezing the worker.
+    if (type == MsgType::ExportGolden || type == MsgType::Reset || type == MsgType::SnapshotCurrent) {
+      if (!state.snapshot_preload_ready_within(std::chrono::milliseconds(4000))) {
+        BOOST_LOG(warning) << "Snapshot operation (type=" << static_cast<int>(type)
+                           << ") proceeding while startup preload is still running.";
+      }
+    }
     if (type == MsgType::ExportGolden) {
       const bool saved = state.save_snapshot_with_retry(state.golden_path, "export-golden");
       BOOST_LOG(info) << "Export golden restore snapshot result=" << (saved ? "true" : "false");
@@ -4875,6 +4898,20 @@ namespace {
 
   void handle_frame(ServiceState &state, platf::dxgi::AsyncNamedPipe &async_pipe, MsgType type, std::span<const uint8_t> payload, std::atomic<bool> &running) {
     if (type == MsgType::Apply) {
+      // The client's ApplyResult timeout is 5s. An APPLY that blocked on a slow
+      // startup preload and then executed late — after the client had already
+      // recorded failure and fallen back — would desynchronize both sides, so
+      // fail fast instead of executing late. (The preload completes in
+      // milliseconds on a healthy disk; this bound exists for the sick one.)
+      if (!state.snapshot_preload_ready_within(std::chrono::milliseconds(4000))) {
+        BOOST_LOG(warning) << "APPLY rejected: startup snapshot preload still running.";
+        std::vector<uint8_t> late_payload;
+        late_payload.push_back(0u);
+        static constexpr char kPreloadMsg[] = "snapshot preload in progress";
+        late_payload.insert(late_payload.end(), kPreloadMsg, kPreloadMsg + sizeof(kPreloadMsg) - 1);
+        send_framed_content(async_pipe, MsgType::ApplyResult, late_payload);
+        return;
+      }
       std::string error_msg;
       bool success = handle_apply(state, payload, error_msg);
       std::vector<uint8_t> result_payload;
@@ -4970,12 +5007,6 @@ namespace {
       type = static_cast<MsgType>(frame[0]);
       payload = frame.subspan(1);
     }
-    // Ping stays instant so the parent's IPC-readiness probe is answered before
-    // the startup snapshot preload finishes; every other frame reads or mutates
-    // snapshot state and must not race the preload thread.
-    if (type != MsgType::Ping) {
-      state.wait_for_snapshot_preload();
-    }
     handle_frame(state, async_pipe, type, payload, running);
   }
 }  // namespace
@@ -4997,23 +5028,25 @@ int main(int argc, char *argv[]) {
     hide_console_window();
   }
 
-  // Logging comes up before the singleton check: a second instance used to exit
-  // with code 3 and zero diagnostics (the 07-31 pid-59864 blind spot). The file
-  // sink opens for append, so the loser writing one line alongside the winner
-  // is harmless.
   const auto logdir = compute_log_dir();
   const auto snapshot_dir = compute_snapshot_dir();
   const auto logfile = (logdir / L"sunshine_display_helper.log");
   const auto active_snapshots = make_snapshot_paths(snapshot_dir);
   const auto search_roots = snapshot_search_roots();
-  auto _log_guard = logging::init(2 /*info*/, logfile);
 
   HANDLE singleton = nullptr;
   if (!ensure_single_instance(singleton)) {
+    // A singleton loser used to exit with code 3 and zero diagnostics (the
+    // 07-31 pid-59864 blind spot). Append-mode logging records why without the
+    // session rotation of logging::init, which would rotate/purge the winner's
+    // live log out from under it.
+    auto _log_guard = logging::init_append(2 /*info*/, logfile);
     BOOST_LOG(warning) << "Another display helper instance holds the singleton mutex; exiting with code 3.";
     logging::log_flush();
     return 3;
   }
+
+  auto _log_guard = logging::init(2 /*info*/, logfile);
 
   if (restore_mode) {
     BOOST_LOG(info) << "Display helper started in restore mode (--restore flag)";

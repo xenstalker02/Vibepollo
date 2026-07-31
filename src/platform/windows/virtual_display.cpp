@@ -81,9 +81,13 @@ namespace VDISPLAY {
 
     std::atomic<bool> g_watchdog_feed_requested {false};
     std::atomic<bool> g_watchdog_stop_requested {false};
-    // Set by the ping thread just before it returns, so stop_watchdog_thread can
-    // bound its join instead of inheriting an in-flight DeviceIoControl block.
-    std::atomic<bool> g_watchdog_thread_exiting {false};
+    // Generation tokens: each ping thread belongs to one generation. A detached
+    // straggler from an older generation exits as soon as it observes a newer
+    // generation (even after startPingThread cleared the stop flag for its
+    // successor), and its exit report cannot satisfy a newer generation's
+    // bounded join in stop_watchdog_thread.
+    std::atomic<std::uint64_t> g_watchdog_generation {0};
+    std::atomic<std::uint64_t> g_watchdog_exited_generation {0};
     std::atomic<std::int64_t> g_watchdog_grace_deadline_ns {0};
     std::mutex g_watchdog_thread_mutex;
     std::thread g_watchdog_thread;
@@ -165,23 +169,23 @@ namespace VDISPLAY {
         // healthy thread exits almost immediately. The one unbounded case is a
         // synchronous PingDriver DeviceIoControl blocked inside a wedged driver:
         // joining that from session teardown is exactly the 40s stall that trips
-        // the 10s hang watchdog. Poll the thread's exit flag briefly and detach
-        // if it never comes; the thread owns a duplicated driver handle it closes
-        // itself, and shares only atomics with the rest of the process, so a
-        // detached straggler is inert. (Rare double-wedge race: a previously
-        // detached straggler setting the flag can make this join a real join —
-        // which is no worse than the unconditional join this replaces.)
+        // the 10s hang watchdog. Poll for the current generation's exit report
+        // and detach if it never comes; the thread owns a duplicated driver
+        // handle it closes itself, and shares only atomics with the rest of the
+        // process, so a detached straggler is inert. Generation matching keeps a
+        // stale straggler's exit from ever standing in for this thread's.
         using namespace std::chrono;
+        const auto gen = g_watchdog_generation.load(std::memory_order_acquire);
         const auto deadline = steady_clock::now() + seconds(2);
         bool exited = false;
         while (steady_clock::now() < deadline) {
-          if (g_watchdog_thread_exiting.load(std::memory_order_acquire)) {
+          if (g_watchdog_exited_generation.load(std::memory_order_acquire) >= gen) {
             exited = true;
             break;
           }
           std::this_thread::sleep_for(milliseconds(25));
         }
-        if (exited || g_watchdog_thread_exiting.load(std::memory_order_acquire)) {
+        if (exited) {
           watchdog_thread.join();
         } else {
           BOOST_LOG(warning) << "SudoVDA watchdog thread did not exit within bound; detaching (driver IOCTL wedged).";
@@ -2846,14 +2850,32 @@ namespace VDISPLAY {
     const auto now = std::chrono::steady_clock::now();
     const auto deadline = now + WATCHDOG_INIT_GRACE;
     g_watchdog_stop_requested.store(false, std::memory_order_release);
-    g_watchdog_thread_exiting.store(false, std::memory_order_release);
+    // Advancing the generation also orders any detached straggler from a prior
+    // generation to exit, even though the stop flag was just cleared for us.
+    const auto my_generation = g_watchdog_generation.fetch_add(1, std::memory_order_acq_rel) + 1;
     g_watchdog_grace_deadline_ns.store(steady_ticks_from_time(deadline), std::memory_order_release);
     g_watchdog_feed_requested.store(false, std::memory_order_release);
 
     const auto interval_ms = std::max<long long>(static_cast<long long>(watchdogOut.Timeout) * 1000ll / 3ll, 100ll);
     const auto sleep_duration = std::chrono::milliseconds(interval_ms);
 
-    std::thread ping_thread([sleep_duration, failCb = std::move(failCb), ping_handle] {
+    std::thread ping_thread([sleep_duration, failCb = std::move(failCb), ping_handle, my_generation] {
+      auto stale_generation = [my_generation]() {
+        return g_watchdog_generation.load(std::memory_order_acquire) != my_generation;
+      };
+      auto note_exit = [my_generation]() {
+        // Monotonic max: a straggler finishing late must never overwrite a newer
+        // generation's exit report with an older value.
+        auto prev = g_watchdog_exited_generation.load(std::memory_order_relaxed);
+        while (prev < my_generation &&
+               !g_watchdog_exited_generation.compare_exchange_weak(
+                 prev,
+                 my_generation,
+                 std::memory_order_release,
+                 std::memory_order_relaxed
+               )) {
+        }
+      };
       auto close_ping_handle = [ping_handle]() {
         if (ping_handle != INVALID_HANDLE_VALUE) {
           CloseHandle(ping_handle);
@@ -2862,13 +2884,16 @@ namespace VDISPLAY {
       // The feed interval can be tens of seconds (driver Timeout / 3). Sleeping it
       // in one shot made stop_watchdog_thread's join inherit that full latency on
       // session teardown — the 41-45s hangs of 07-31. Sleep in 100ms slices and
-      // bail as soon as a stop is requested; total slept time is unchanged, so the
-      // driver-visible feed cadence is identical.
-      auto interruptible_sleep = [](std::chrono::milliseconds total) {
+      // bail as soon as a stop is requested or a newer generation supersedes us;
+      // total slept time is unchanged, so the driver-visible feed cadence is
+      // identical.
+      auto interruptible_sleep = [&stale_generation](std::chrono::milliseconds total) {
         using namespace std::chrono;
         constexpr auto kSlice = milliseconds(100);
         auto remaining = total;
-        while (remaining.count() > 0 && !g_watchdog_stop_requested.load(std::memory_order_acquire)) {
+        while (remaining.count() > 0 &&
+               !g_watchdog_stop_requested.load(std::memory_order_acquire) &&
+               !stale_generation()) {
           const auto slice = remaining < kSlice ? remaining : kSlice;
           std::this_thread::sleep_for(slice);
           remaining -= slice;
@@ -2876,9 +2901,9 @@ namespace VDISPLAY {
       };
       uint8_t fail_count = 0;
       for (;;) {
-        if (g_watchdog_stop_requested.load(std::memory_order_acquire)) {
+        if (g_watchdog_stop_requested.load(std::memory_order_acquire) || stale_generation()) {
           close_ping_handle();
-          g_watchdog_thread_exiting.store(true, std::memory_order_release);
+          note_exit();
           return;
         }
 
@@ -2900,7 +2925,7 @@ namespace VDISPLAY {
             if (failCb) {
               failCb();
             }
-            g_watchdog_thread_exiting.store(true, std::memory_order_release);
+            note_exit();
             return;
           }
         } else {
