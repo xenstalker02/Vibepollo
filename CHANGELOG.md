@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.15.27] — 2026-08-01
+
+### Fixed
+- **Your monitors stayed disabled after quitting a game.** Ending a session by quitting the
+  game from inside the stream — the normal way — left the physical displays switched off with
+  nothing scheduled to bring them back, so recovery meant a hotkey, a sign-out, or a reboot.
+  The teardown was passing the "revert display configuration on disconnect" setting through to
+  the final cleanup; with that setting off (the default), the cleanup removed the virtual
+  display but skipped restoring the real ones. That setting exists to preserve your layout
+  while a *paused* session might resume — but once the application has exited there is nothing
+  to resume, so the restore now always runs when the session genuinely ends. Verified on
+  hardware: displays return unaided and teardown completes in 3.6 s, down from 77 s.
+
 ## [1.15.26] — 2026-07-31
 
 ### Changed
