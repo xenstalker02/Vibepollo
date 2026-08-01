@@ -49,56 +49,6 @@ namespace platf::dxgi {
     return static_cast<bool>(_event);
   }
 
-  // safe_dacl implementation
-  safe_dacl::safe_dacl() = default;
-
-  safe_dacl::safe_dacl(PACL dacl_ptr):
-      _dacl(dacl_ptr) {}
-
-  safe_dacl::~safe_dacl() {
-    if (_dacl) {
-      LocalFree(_dacl);
-    }
-  }
-
-  safe_dacl::safe_dacl(safe_dacl &&other) noexcept
-      :
-      _dacl(other._dacl) {
-    other._dacl = nullptr;
-  }
-
-  safe_dacl &safe_dacl::operator=(safe_dacl &&other) noexcept {
-    if (this != &other) {
-      if (_dacl) {
-        LocalFree(_dacl);
-      }
-      _dacl = other._dacl;
-      other._dacl = nullptr;
-    }
-    return *this;
-  }
-
-  void safe_dacl::reset(PACL dacl_ptr) {
-    if (_dacl) {
-      LocalFree(_dacl);
-    }
-    _dacl = dacl_ptr;
-  }
-
-  PACL safe_dacl::get() const {
-    return _dacl;
-  }
-
-  PACL safe_dacl::release() {
-    PACL tmp = _dacl;
-    _dacl = nullptr;
-    return tmp;
-  }
-
-  safe_dacl::operator bool() const {
-    return _dacl != nullptr;
-  }
-
   bool is_user_admin(HANDLE user_token) {
     WINBOOL is_admin;
     SID_IDENTIFIER_AUTHORITY nt_authority = SECURITY_NT_AUTHORITY;

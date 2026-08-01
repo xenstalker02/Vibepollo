@@ -1052,53 +1052,6 @@ namespace {
   // Watchdog state for helper liveness during active streams
   static std::atomic<bool> g_watchdog_running {false};
   static std::jthread g_watchdog_thread;
-  static std::chrono::steady_clock::time_point g_last_vd_reenable {};
-
-  constexpr auto kVirtualDisplayReenableCooldown = std::chrono::seconds(3);
-
-  bool recently_reenabled_virtual_display() {
-    if (g_last_vd_reenable.time_since_epoch().count() == 0) {
-      return false;
-    }
-    return (std::chrono::steady_clock::now() - g_last_vd_reenable) < kVirtualDisplayReenableCooldown;
-  }
-
-  [[maybe_unused]] void explicit_virtual_display_reset_and_apply(
-    display_helper_integration::DisplayApplyBuilder &builder,
-    const rtsp_stream::launch_session_t &session,
-    std::function<bool(const display_helper_integration::DisplayApplyRequest &)> apply_fn
-  ) {
-    // Only act if virtual display is in play.
-    if (!session.virtual_display && !builder.build().session_overrides.virtual_display_override.value_or(false)) {
-      return;
-    }
-
-    // Debounce to avoid hammering the driver.
-    if (recently_reenabled_virtual_display()) {
-      return;
-    }
-
-    // First send a "blank" request to detach virtual display.
-    display_helper_integration::DisplayApplyBuilder disable_builder;
-    disable_builder.set_session(session);
-    auto &overrides = disable_builder.mutable_session_overrides();
-    overrides.virtual_display_override = false;
-    disable_builder.set_action(display_helper_integration::DisplayApplyAction::Apply);
-    auto disable_req = disable_builder.build();
-
-    BOOST_LOG(info) << "Display helper: explicit virtual display disable before re-enable.";
-    (void) apply_fn(disable_req);
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(1500));
-
-    // Re-enable with the original builder intent.
-    BOOST_LOG(info) << "Display helper: explicit virtual display re-enable after disappearance.";
-    auto enable_req = builder.build();
-    if (apply_fn(enable_req)) {
-      g_last_vd_reenable = std::chrono::steady_clock::now();
-    }
-  }
-
   static void set_active_session(
     const rtsp_stream::launch_session_t &session,
     std::optional<std::string> device_id_override = std::nullopt,
@@ -1122,11 +1075,6 @@ namespace {
       .gen1_framegen_fix = session.gen1_framegen_fix,
       .gen2_framegen_fix = session.gen2_framegen_fix,
     };
-  }
-
-  [[maybe_unused]] static std::optional<session_dd_fields_t> get_active_session_copy() {
-    std::lock_guard<std::mutex> lg(g_session_mutex);
-    return g_active_session_dd;
   }
 
   static void clear_active_session() {

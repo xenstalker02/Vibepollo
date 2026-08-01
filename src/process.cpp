@@ -61,7 +61,6 @@
 #include "process.h"
 #ifdef _WIN32
   #include "platform/windows/virtual_display.h"
-  #include "platform/windows/virtual_display_legacy.h"
 #endif
 #include "rtsp.h"
 #include "system_tray.h"

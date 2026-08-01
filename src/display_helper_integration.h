@@ -15,16 +15,8 @@
   // Bring in the Windows implementation in the correct namespace
   #include "src/platform/windows/display_helper_integration.h"
 
-namespace display_helper_integration {
-  // On Windows, we exclusively use the helper and suppress in-process fallback.
-  inline bool suppress_fallback() {
-    return true;
-  }
-
-  // Enumerate display devices as a JSON string suitable for API responses.
-  // Implemented in the Windows backend.
-  std::string enumerate_devices_json(display_device::DeviceEnumerationDetail detail);
-}  // namespace display_helper_integration
+// The Windows backend header included above already declares the full surface
+// (enumerate_devices_json included), so nothing is re-declared here.
 
 #else
 
@@ -43,10 +35,6 @@ namespace display_helper_integration {
   }
 
   inline bool reset_persistence() {
-    return false;
-  }
-
-  inline bool suppress_fallback() {
     return false;
   }
 

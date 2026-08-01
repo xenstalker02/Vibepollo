@@ -31,7 +31,6 @@ namespace platf::dxgi {
 
   using safe_token = util::safe_ptr_v2<void, BOOL, &CloseHandle>;
   using safe_sid = util::safe_ptr_v2<void, PVOID, &FreeSid>;
-  using safe_local_mem = util::safe_ptr_v2<void, HLOCAL, &LocalFree>;
 
   /**
    * @brief RAII wrapper for OVERLAPPED asynchronous I/O with an auto-created event.
@@ -86,69 +85,6 @@ namespace platf::dxgi {
   private:
     OVERLAPPED _ovl;
     winrt::handle _event;
-  };
-
-  /**
-   * @brief RAII wrapper for a DACL (PACL) allocated by Windows APIs.
-   */
-  struct safe_dacl {
-    PACL _dacl = nullptr;
-
-    /**
-     * @brief Default construct empty wrapper.
-     */
-    safe_dacl();
-
-    /**
-     * @brief Take ownership of an existing PACL.
-     * @param p PACL to manage.
-     */
-    explicit safe_dacl(PACL p);
-
-    /**
-     * @brief Free the owned PACL (if any).
-     */
-    ~safe_dacl();
-
-    /**
-     * @brief Move construct, transferring ownership.
-     * @param other Source.
-     */
-    safe_dacl(safe_dacl &&other) noexcept;
-
-    /**
-     * @brief Move-assign, releasing any currently owned PACL.
-     * @param other Source.
-     * @return Reference to this instance.
-     */
-    safe_dacl &operator=(safe_dacl &&other) noexcept;
-
-    safe_dacl(const safe_dacl &) = delete;
-    safe_dacl &operator=(const safe_dacl &) = delete;
-
-    /**
-     * @brief Replace the managed PACL.
-     * @param p New PACL (or `nullptr`).
-     */
-    void reset(PACL p = nullptr);
-
-    /**
-     * @brief Get raw PACL pointer.
-     * @return Managed PACL pointer.
-     */
-    PACL get() const;
-
-    /**
-     * @brief Release ownership without freeing.
-     * @return Released PACL pointer.
-     */
-    PACL release();
-
-    /**
-     * @brief Test whether a PACL is owned.
-     * @return `true` if a PACL is set, else `false`.
-     */
-    explicit operator bool() const;
   };
 
   /**
