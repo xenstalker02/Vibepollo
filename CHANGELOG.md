@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.15.26] — 2026-07-31
+
+### Changed
+- **Removed ~1,370 lines of dead code.** All of it was verified unreferenced first, and none
+  of it changes behaviour. The largest items were two "extracted" helper classes that no
+  build target compiled — yet two unit-test suites exercised them and passed, while the live
+  implementations they mirrored had already drifted apart — and a 583-line legacy display
+  module whose only remaining trace was an unused `#include`. Also removed: two functions kept
+  alive solely by `[[maybe_unused]]`, a hand-written RAII wrapper duplicating a one-line alias
+  declared directly above it, a helper defined in both platform branches and called nowhere,
+  and two orphaned scripts (one of which was committed despite being listed in `.gitignore`
+  *and* named in CONTRIBUTING as local-only).
+
 ## [1.15.25] — 2026-07-31
 
 ### Fixed
