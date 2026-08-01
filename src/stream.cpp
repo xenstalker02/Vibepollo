@@ -2785,7 +2785,20 @@ namespace stream {
             BOOST_LOG(debug) << "Display cleanup: session is paused; keeping virtual display alive (config_revert_on_disconnect=false).";
           }
         } else {
-          const auto cleanup = platf::virtual_display_cleanup::run("rtsp_session_end", revert_display_config);
+          // Always restore here. Reaching this branch means skip_teardown_due_to_pause was
+          // false, i.e. one of: the app exited (is_paused false), it is a placebo app, or
+          // revert-on-disconnect is enabled. In every one of those cases the session is
+          // genuinely over and there is no paused session whose display configuration we
+          // are preserving, so suppressing the restore only strands the physical displays.
+          //
+          // This previously forwarded revert_display_config, which defaults to false. So
+          // quitting the game from inside the stream - the normal way to end a session -
+          // removed the virtual display and left the physical monitors disabled with
+          // nothing scheduled to bring them back. The sibling paused-timeout path already
+          // passes true unconditionally; this is the same intent, and matches the upstream
+          // 1.18.0 fix ("restore after an application exits and the last stream ends, even
+          // when revert-on-disconnect is disabled").
+          const auto cleanup = platf::virtual_display_cleanup::run("rtsp_session_end", true);
           if (cleanup.helper_revert_dispatched) {
             // If we reverted the display configuration, the helper watchdog is no longer needed.
             display_helper_integration::stop_watchdog();
@@ -2801,9 +2814,23 @@ namespace stream {
 
         // Restore any Windows-only integrations first
 #ifdef _WIN32
-        VDISPLAY::restorePhysicalHdrProfiles();
-        platf::rtss_set_sync_limiter_override(std::nullopt);
-        platf::frame_limiter_streaming_stop(is_paused);
+        // Timed individually: on 2026-08-01 a teardown spent 74 s somewhere in these three
+        // calls with no log output between them, tripping the 10 s hang watchdog. The
+        // SudoVDA release immediately before was already instrumented and came back in
+        // 128 ms, so the stall is in here. These stamps name the culprit on the next run.
+        {
+          const auto t0 = std::chrono::steady_clock::now();
+          VDISPLAY::restorePhysicalHdrProfiles();
+          const auto t1 = std::chrono::steady_clock::now();
+          platf::rtss_set_sync_limiter_override(std::nullopt);
+          const auto t2 = std::chrono::steady_clock::now();
+          platf::frame_limiter_streaming_stop(is_paused);
+          const auto t3 = std::chrono::steady_clock::now();
+          using ms = std::chrono::milliseconds;
+          BOOST_LOG(info) << "Teardown timing: hdr_profiles=" << std::chrono::duration_cast<ms>(t1 - t0).count()
+                          << "ms rtss_override=" << std::chrono::duration_cast<ms>(t2 - t1).count()
+                          << "ms frame_limiter_stop=" << std::chrono::duration_cast<ms>(t3 - t2).count() << "ms";
+        }
 #endif
         platf::streaming_will_stop();
 
