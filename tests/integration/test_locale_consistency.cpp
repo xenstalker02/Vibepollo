@@ -48,24 +48,22 @@ protected:
     return locales;
   }
 
-  // Extract locale options from General.vue
-  static std::map<std::string, std::string, std::less<>> extractGeneralVueLocales() {
+  // Extract locale options from the web UI's shared select-options source.
+  static std::map<std::string, std::string, std::less<>> extractWebUiLocales() {
     std::map<std::string, std::string, std::less<>> locales;
-    const std::string content = file_handler::read_file("src_assets/common/assets/web/configs/tabs/General.vue");
+    const std::string content = file_handler::read_file("src_assets/common/assets/web/configs/configSelectOptions.ts");
 
-    // Find the locale select section specifically
-    const std::regex localeSelectPattern("id=\"locale\"[^>]*>([^<]*(?:<option[^>]*>[^<]*</option>[^<]*)*)</select>");
+    const std::regex localeOptionsPattern(R"(const\s+localeOptions[^=]*=\s*\[([\s\S]*?)\];)");
 
-    if (std::smatch selectMatch; std::regex_search(content, selectMatch, localeSelectPattern)) {
-      const std::string localeSection = selectMatch[1].str();
+    if (std::smatch optionsMatch; std::regex_search(content, optionsMatch, localeOptionsPattern)) {
+      const std::string localeSection = optionsMatch[1].str();
 
-      // Extract option elements with locale codes and display names from the locale section
-      const std::regex optionPattern(R"delimiter(<option\s+value="([^"]+)">([^<]+)</option>)delimiter");
+      const std::regex optionPattern(R"delimiter(\{\s*label:\s*'([^']*)'\s*,\s*value:\s*'([^']+)'\s*\})delimiter");
       std::sregex_iterator iter(localeSection.begin(), localeSection.end(), optionPattern);
 
       for (const std::sregex_iterator end; iter != end; ++iter) {
-        const std::string localeCode = (*iter)[1].str();
-        const std::string displayName = (*iter)[2].str();
+        const std::string displayName = (*iter)[1].str();
+        const std::string localeCode = (*iter)[2].str();
         locales[localeCode] = displayName;
       }
     }
@@ -136,22 +134,22 @@ TEST_F(LocaleConsistencyTest, AllLocaleFilesHaveConfigCppEntries) {
   }
 }
 
-TEST_F(LocaleConsistencyTest, AllLocaleFilesHaveGeneralVueEntries) {
-  const auto vueLocales = extractGeneralVueLocales();
+TEST_F(LocaleConsistencyTest, AllLocaleFilesHaveWebUiEntries) {
+  const auto webUiLocales = extractWebUiLocales();
   const auto localeFiles = getAvailableLocaleFiles();
 
-  std::vector<std::string> missingFromVue;
+  std::vector<std::string> missingFromWebUi;
 
-  // Check that every locale file has a corresponding entry in General.vue
+  // Check that every locale file has a corresponding web UI entry.
   for (const auto &localeFile : localeFiles) {
-    if (!vueLocales.contains(localeFile)) {
-      missingFromVue.push_back(localeFile);
+    if (!webUiLocales.contains(localeFile)) {
+      missingFromWebUi.push_back(localeFile);
     }
   }
 
-  if (!missingFromVue.empty()) {
-    std::string errorMsg = "Locale files missing from General.vue:\n";
-    for (const auto &missing : missingFromVue) {
+  if (!missingFromWebUi.empty()) {
+    std::string errorMsg = "Locale files missing from configSelectOptions.ts:\n";
+    for (const auto &missing : missingFromWebUi) {
       errorMsg += std::format("  {}.json\n", missing);
     }
     FAIL() << errorMsg;
@@ -180,21 +178,21 @@ TEST_F(LocaleConsistencyTest, AllConfigCppLocalesHaveFiles) {
   }
 }
 
-TEST_F(LocaleConsistencyTest, AllGeneralVueLocalesHaveFiles) {
-  const auto vueLocales = extractGeneralVueLocales();
+TEST_F(LocaleConsistencyTest, AllWebUiLocalesHaveFiles) {
+  const auto webUiLocales = extractWebUiLocales();
   const auto localeFiles = getAvailableLocaleFiles();
 
   std::vector<std::string> missingFiles;
 
-  // Check that every General.vue locale has a corresponding JSON file
-  for (const auto &vueLocale : vueLocales | std::views::keys) {
-    if (!localeFiles.contains(vueLocale)) {
-      missingFiles.push_back(vueLocale);
+  // Check that every web UI locale has a corresponding JSON file.
+  for (const auto &webUiLocale : webUiLocales | std::views::keys) {
+    if (!localeFiles.contains(webUiLocale)) {
+      missingFiles.push_back(webUiLocale);
     }
   }
 
   if (!missingFiles.empty()) {
-    std::string errorMsg = "General.vue locales missing JSON files:\n";
+    std::string errorMsg = "configSelectOptions.ts locales missing JSON files:\n";
     for (const auto &missing : missingFiles) {
       errorMsg += std::format("  {}.json\n", missing);
     }
@@ -202,39 +200,39 @@ TEST_F(LocaleConsistencyTest, AllGeneralVueLocalesHaveFiles) {
   }
 }
 
-TEST_F(LocaleConsistencyTest, ConfigCppAndGeneralVueLocalesMatch) {
+TEST_F(LocaleConsistencyTest, ConfigCppAndWebUiLocalesMatch) {
   const auto configLocales = extractConfigCppLocales();
-  const auto vueLocales = extractGeneralVueLocales();
+  const auto webUiLocales = extractWebUiLocales();
 
   std::vector<std::string> configOnlyLocales;
-  std::vector<std::string> vueOnlyLocales;
+  std::vector<std::string> webUiOnlyLocales;
 
-  // Find locales in config.cpp but not in General.vue
+  // Find locales in config.cpp but not in the web UI.
   for (const auto &configLocale : configLocales) {
-    if (!vueLocales.contains(configLocale)) {
+    if (!webUiLocales.contains(configLocale)) {
       configOnlyLocales.push_back(configLocale);
     }
   }
 
-  // Find locales in General.vue but not in config.cpp
-  for (const auto &vueLocale : vueLocales | std::views::keys) {
-    if (!configLocales.contains(vueLocale)) {
-      vueOnlyLocales.push_back(vueLocale);
+  // Find locales in the web UI but not in config.cpp.
+  for (const auto &webUiLocale : webUiLocales | std::views::keys) {
+    if (!configLocales.contains(webUiLocale)) {
+      webUiOnlyLocales.push_back(webUiLocale);
     }
   }
 
   std::string errorMsg;
 
   if (!configOnlyLocales.empty()) {
-    errorMsg += "Locales in config.cpp but not in General.vue:\n";
+    errorMsg += "Locales in config.cpp but not in configSelectOptions.ts:\n";
     for (const auto &locale : configOnlyLocales) {
       errorMsg += std::format("  {}\n", locale);
     }
   }
 
-  if (!vueOnlyLocales.empty()) {
-    errorMsg += "Locales in General.vue but not in config.cpp:\n";
-    for (const auto &locale : vueOnlyLocales) {
+  if (!webUiOnlyLocales.empty()) {
+    errorMsg += "Locales in configSelectOptions.ts but not in config.cpp:\n";
+    for (const auto &locale : webUiOnlyLocales) {
       errorMsg += std::format("  {}\n", locale);
     }
   }
@@ -265,12 +263,12 @@ TEST_F(LocaleConsistencyTest, AllLocaleFilesAreValid) {
 }
 
 TEST_F(LocaleConsistencyTest, LocaleDisplayNamesAreConsistent) {
-  const auto vueLocales = extractGeneralVueLocales();
+  const auto webUiLocales = extractWebUiLocales();
   const auto localeFiles = getAvailableLocaleFiles();
   std::vector<std::string> inconsistentDisplayNames;
 
-  // Check that all locales in General.vue have corresponding JSON files
-  for (const auto &[localeCode, displayName] : vueLocales) {
+  // Check that all web UI locales have corresponding JSON files.
+  for (const auto &[localeCode, displayName] : webUiLocales) {
     if (!localeFiles.contains(localeCode)) {
       inconsistentDisplayNames.push_back(
         std::format("{}: has display name '{}' but no corresponding JSON file exists", localeCode, displayName)
@@ -278,11 +276,11 @@ TEST_F(LocaleConsistencyTest, LocaleDisplayNamesAreConsistent) {
     }
   }
 
-  // Also check that locale files that exist have entries in General.vue
+  // Also check that locale files that exist have entries in the web UI.
   for (const auto &localeFile : localeFiles) {
-    if (!vueLocales.contains(localeFile)) {
+    if (!webUiLocales.contains(localeFile)) {
       inconsistentDisplayNames.push_back(
-        std::format("{}: has JSON file but no display name in General.vue", localeFile)
+        std::format("{}: has JSON file but no display name in configSelectOptions.ts", localeFile)
       );
     }
   }
@@ -298,7 +296,7 @@ TEST_F(LocaleConsistencyTest, LocaleDisplayNamesAreConsistent) {
 
 TEST_F(LocaleConsistencyTest, NoOrphanedLocaleReferences) {
   const auto configLocales = extractConfigCppLocales();
-  const auto vueLocales = extractGeneralVueLocales();
+  const auto webUiLocales = extractWebUiLocales();
   const auto localeFiles = getAvailableLocaleFiles();
 
   std::vector<std::string> orphanedReferences;
@@ -310,9 +308,9 @@ TEST_F(LocaleConsistencyTest, NoOrphanedLocaleReferences) {
     }
   }
 
-  for (const auto &vueLocale : vueLocales | std::views::keys) {
-    if (!localeFiles.contains(vueLocale)) {
-      orphanedReferences.push_back(std::format("General.vue references missing file: {}.json", vueLocale));
+  for (const auto &webUiLocale : webUiLocales | std::views::keys) {
+    if (!localeFiles.contains(webUiLocale)) {
+      orphanedReferences.push_back(std::format("configSelectOptions.ts references missing file: {}.json", webUiLocale));
     }
   }
 
@@ -330,7 +328,6 @@ TEST_F(LocaleConsistencyTest, TestFrameworkDetectsLocaleInconsistencies) {
   const std::string testLocale = "test_framework_validation_locale";
 
   auto configLocales = extractConfigCppLocales();
-  auto vueLocales = extractGeneralVueLocales();
   const auto localeFiles = getAvailableLocaleFiles();
 
   // Add a fake locale to config to simulate a missing file

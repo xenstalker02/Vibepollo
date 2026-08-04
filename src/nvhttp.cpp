@@ -1481,8 +1481,9 @@ namespace nvhttp {
         named_cert_p->always_use_virtual_display = false;
         named_cert_p->output_name_override.clear();
 
-        auto it = map_id_sess.find(client.uniqueID);
-        map_id_sess.erase(it);
+        if (auto it = map_id_sess.find(client.uniqueID); it != map_id_sess.end()) {
+          map_id_sess.erase(it);
+        }
 
         add_authorized_client(named_cert_p);
 

@@ -31,7 +31,7 @@ TEST(PlayniteSync_Recent, SortsByLastPlayedAndRespectsLimit) {
   ASSERT_EQ(out.size(), 2u);
   EXPECT_EQ(out[0].id, "B");
   EXPECT_EQ(out[1].id, "A");
-  EXPECT_EQ(flags["B"] & 0x1, 0x1);
+  EXPECT_EQ(flags[to_lower_copy(std::string("B"))] & 0x1, 0x1);
 }
 
 TEST(PlayniteSync_Recent, AgeFilterSkipsInvalidTimestamps) {
@@ -97,7 +97,7 @@ TEST(PlayniteSync_TTL, NoDeleteWhenDisabledOrPlayedAfterAdded) {
   // delete_after_days <= 0 disables TTL
   EXPECT_FALSE(should_ttl_delete(app, 0, now, last));
   // mark as played after added
-  last["X"] = now;  // definitely >= added
+  last[to_lower_copy(std::string("X"))] = now;  // definitely >= added
   EXPECT_FALSE(should_ttl_delete(app, 1, now, last));
 }
 
@@ -115,7 +115,7 @@ TEST(PlayniteSync_Purge, RemovesUninstalledAndOptionallyNonSelectedWhenReplaceme
   auto now = std::time(nullptr);
   std::unordered_map<std::string, std::time_t> last_played;
   // selected set contains only A, so B is candidate for purge by uninstall and A remains
-  std::unordered_set<std::string> selected_ids {"A"};
+  std::unordered_set<std::string> selected_ids {to_lower_copy(std::string("A"))};
   bool changed = false;
   purge_uninstalled_and_ttl(root, uninstalled_lower, 0, now, last_played, true /*recent*/, true /*require repl*/, true /*remove uninstalled*/, true /*sync all*/, selected_ids, changed);
   EXPECT_TRUE(changed);
@@ -131,7 +131,7 @@ TEST(PlayniteSync_Purge, RemovesUninstalledAndOptionallyNonSelectedWhenReplaceme
   x["playnite-managed"] = "auto";
   root2["apps"].push_back(x);
   std::unordered_set<std::string> none;
-  std::unordered_set<std::string> selected {"Y"};  // Y not present currently, so 1 replacement available
+  std::unordered_set<std::string> selected {to_lower_copy(std::string("Y"))};  // Y not present currently, so 1 replacement available
   changed = false;
   purge_uninstalled_and_ttl(root2, none, 0, now, last_played, true, true, false /*remove uninstalled*/, true /*sync all*/, selected, changed);
   EXPECT_TRUE(changed);
@@ -154,10 +154,10 @@ TEST(PlayniteSync_AddMissing, AddsMissingSelectedWithMetadataAndTimestamps) {
   nlohmann::json root;
   root["apps"] = nlohmann::json::array();
   std::vector<Game> selected {G("S1", "2024-01-01T00:00:00Z"), G("S2", "2024-01-02T00:00:00Z")};
-  std::unordered_set<std::string> matched_ids {"S1"};
+  std::unordered_set<std::string> matched_ids {to_lower_copy(std::string("S1"))};
   std::unordered_map<std::string, int> src_flags;
-  src_flags["S1"] = 1;
-  src_flags["S2"] = 3;
+  src_flags[to_lower_copy(std::string("S1"))] = 1;
+  src_flags[to_lower_copy(std::string("S2"))] = 3;
   bool changed = false;
   add_missing_auto_entries(root, selected, matched_ids, src_flags, changed);
   EXPECT_TRUE(changed);
@@ -198,5 +198,5 @@ TEST(PlayniteSync_CurrentAutoIds, CollectsOnlyAutoManaged) {
   root["apps"].push_back(b);
   auto s = current_auto_ids(root);
   EXPECT_EQ(s.size(), 1u);
-  EXPECT_TRUE(s.contains("A"));
+  EXPECT_TRUE(s.contains(to_lower_copy(std::string("A"))));
 }

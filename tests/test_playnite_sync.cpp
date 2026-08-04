@@ -52,7 +52,7 @@ TEST(PlayniteSync_Select, RecentSelectionSkipsExcludedCategories) {
   auto sel = select_recent_installed_games(installed, 2, 0, excl_ids, excl_categories, excl_plugins, flags);
   ASSERT_EQ(sel.size(), 1u);
   EXPECT_EQ(sel[0].id, "B");
-  EXPECT_EQ(flags["B"] & 0x1, 0x1);
+  EXPECT_EQ(flags[to_lower_copy(std::string("B"))] & 0x1, 0x1);
 }
 
 TEST(PlayniteSync_Select, RecentSelectionSkipsExcludedPlugins) {
@@ -83,7 +83,7 @@ TEST(PlayniteSync_Select, CategorySelectionMatchesAnyCategory) {
   auto sel = select_category_games(installed, cats, excl, excl_categories, excl_plugins, flags);
   ASSERT_EQ(sel.size(), 1u);
   EXPECT_EQ(sel[0].id, "A");
-  EXPECT_EQ(flags["A"] & 0x2, 0x2);
+  EXPECT_EQ(flags[to_lower_copy(std::string("A"))] & 0x2, 0x2);
 }
 
 TEST(PlayniteSync_Purge, TTLAndReplacementPolicy) {
