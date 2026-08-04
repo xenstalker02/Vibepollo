@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.15.28] — 2026-08-03
+
+### Fixed
+- **Restore-hotkey registration now goes through the configured logger.** Startup previously
+  registered the Windows display-restore shortcut while configuration was still being parsed,
+  before file logging existed, which leaked one status line to the launch console. Initial
+  registration now happens after logging initializes, while live configuration reloads still
+  update the shortcut normally.
+- **Windows tests no longer require administrator elevation.** The test target now embeds an
+  `asInvoker` manifest instead of inheriting the production executable's elevated manifest, so
+  focused tests can run directly in local development and CI.
+
 ## [1.15.27] — 2026-08-01
 
 ### Fixed
