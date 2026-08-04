@@ -1890,13 +1890,6 @@ namespace config {
       }
     }
 
-#ifdef _WIN32
-    platf::hotkey::update_restore_hotkey(
-      video.dd.snapshot_restore_hotkey,
-      video.dd.snapshot_restore_hotkey_modifiers
-    );
-#endif
-
     if (sunshine.min_log_level <= 3) {
       for (auto &[var, _] : vars) {
         std::cout << "Warning: Unrecognized configurable option ["sv << var << ']' << std::endl;
@@ -2394,6 +2387,13 @@ namespace config {
       if (sunshine.min_log_level != old_min_level && sunshine.log_file == old_log_file) {
         logging::reconfigure_min_log_level(sunshine.min_log_level);
       }
+
+#ifdef _WIN32
+      platf::hotkey::update_restore_hotkey(
+        video.dd.snapshot_restore_hotkey,
+        video.dd.snapshot_restore_hotkey_modifiers
+      );
+#endif
 
       // Persist snapshot exclusion devices to vibeshine_state.json so the display helper
       // can read them directly without depending on IPC from Sunshine.

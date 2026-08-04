@@ -23,6 +23,16 @@ set(CMAKE_C_FLAGS "-fprofile-arcs -ftest-coverage -ggdb -O0")
 if (WIN32)
     # For Windows: Prevent overriding the parent project's compiler/linker settings
     set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)  # cmake-lint: disable=C0103
+
+    # The production executable intentionally embeds a requireAdministrator resource.
+    # Replace it with an asInvoker resource so tests can run unelevated in CI and locally.
+    list(REMOVE_ITEM SUNSHINE_EXTERNAL_LIBRARIES $<TARGET_OBJECTS:sunshine_rc_object>)
+    add_library(sunshine_test_rc_object OBJECT "${CMAKE_SOURCE_DIR}/src/platform/windows/windows.rc")
+    set_target_properties(sunshine_test_rc_object PROPERTIES
+        COMPILE_DEFINITIONS "PROJECT_ICON_PATH=${PROJECT_ICON_PATH};PROJECT_MANIFEST_PATH=${CMAKE_SOURCE_DIR}/packaging/windows/bootstrapper/app.manifest;PROJECT_NAME=${CMAKE_PROJECT_NAME};PROJECT_VENDOR=${SUNSHINE_PUBLISHER_NAME};PROJECT_VERSION=${CMAKE_PROJECT_VERSION};PROJECT_VERSION_MAJOR=${CMAKE_PROJECT_VERSION_MAJOR};PROJECT_VERSION_MINOR=${CMAKE_PROJECT_VERSION_MINOR};PROJECT_VERSION_PATCH=${CMAKE_PROJECT_VERSION_PATCH}"  # cmake-lint: disable=C0301
+        INCLUDE_DIRECTORIES ""
+    )
+    list(APPEND SUNSHINE_EXTERNAL_LIBRARIES $<TARGET_OBJECTS:sunshine_test_rc_object>)
 endif ()
 
 # modify SUNSHINE_DEFINITIONS
@@ -66,6 +76,7 @@ add_executable(${PROJECT_NAME}
 # This ensures both CLI and CLion can access the same files relative to the test executable
 # Using configure_file ensures files are copied when they change between builds
 set(INTEGRATION_TEST_FILES
+    "src/main.cpp"
     "src/config.cpp"
     "docs/configuration.md"
     "src_assets/common/assets/web/public/assets/locale/en.json"

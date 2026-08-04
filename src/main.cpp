@@ -31,6 +31,7 @@
 
   #include "src/display_helper_integration.h"
   #include "src/platform/windows/frame_limiter_nvcp.h"
+  #include "src/platform/windows/hotkey_manager.h"
   #include "src/platform/windows/misc.h"
   #include "src/platform/windows/playnite_integration.h"
   #include "src/platform/windows/rtss_integration.h"
@@ -215,6 +216,13 @@ int main(int argc, char *argv[]) {
   }
 #endif
   BOOST_LOG(info) << "Effective min_log_level=" << config::sunshine.min_log_level;
+
+#ifdef _WIN32
+  platf::hotkey::update_restore_hotkey(
+    config::video.dd.snapshot_restore_hotkey,
+    config::video.dd.snapshot_restore_hotkey_modifiers
+  );
+#endif
 
   // Log mic passthrough configuration for diagnostics
   if (!config::audio.mic_sink.empty()) {
