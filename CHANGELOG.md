@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.15.29] — 2026-08-04
+
+### Fixed
+- **Successful pairing no longer risks a host crash when its temporary session is already
+  absent.** Session cleanup now verifies that the pending pairing entry exists before erasing
+  it, preserving normal pairing behavior while safely handling an already-cleaned session.
+
 ## [1.15.28] — 2026-08-03
 
 ### Fixed
