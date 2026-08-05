@@ -7,6 +7,7 @@
 #include <format>
 #include <src/config.h>
 #include <src/display_device.h>
+#include <src/platform/windows/virtual_display_cleanup.h>
 #include <src/rtsp.h>
 
 namespace {
@@ -45,6 +46,95 @@ namespace {
   template<class T>
   struct DisplayDeviceConfigTest: testing::TestWithParam<T> {};
 }  // namespace
+
+#ifdef _WIN32
+TEST(VirtualDisplayCleanup, HelperDispatchDoesNotSuppressVerifiedDatabaseRestore) {
+  platf::virtual_display_cleanup::cleanup_result_t result;
+  result.helper_revert_dispatched = true;
+
+  int synchronous_restore_calls = 0;
+  int asynchronous_restore_calls = 0;
+  platf::virtual_display_cleanup::ensure_database_restore(
+    result,
+    true,
+    false,
+    [&]() {
+      ++synchronous_restore_calls;
+      return true;
+    },
+    [&]() {
+      ++asynchronous_restore_calls;
+    }
+  );
+
+  EXPECT_EQ(synchronous_restore_calls, 1);
+  EXPECT_EQ(asynchronous_restore_calls, 0);
+  EXPECT_TRUE(result.database_restore_applied);
+}
+
+TEST(VirtualDisplayCleanup, HelperFailureCooldownUsesAsynchronousRestore) {
+  platf::virtual_display_cleanup::cleanup_result_t result;
+
+  int synchronous_restore_calls = 0;
+  int asynchronous_restore_calls = 0;
+  platf::virtual_display_cleanup::ensure_database_restore(
+    result,
+    true,
+    true,
+    [&]() {
+      ++synchronous_restore_calls;
+      return true;
+    },
+    [&]() {
+      ++asynchronous_restore_calls;
+    }
+  );
+
+  EXPECT_EQ(synchronous_restore_calls, 0);
+  EXPECT_EQ(asynchronous_restore_calls, 1);
+  EXPECT_FALSE(result.database_restore_applied);
+}
+
+TEST(VirtualDisplayCleanup, FailedSynchronousRestoreIsNotReportedAsApplied) {
+  platf::virtual_display_cleanup::cleanup_result_t result;
+  result.helper_revert_dispatched = true;
+
+  platf::virtual_display_cleanup::ensure_database_restore(
+    result,
+    true,
+    false,
+    []() {
+      return false;
+    },
+    []() {}
+  );
+
+  EXPECT_FALSE(result.database_restore_applied);
+}
+
+TEST(VirtualDisplayCleanup, RestoreDisabledInvokesNoRestorePath) {
+  platf::virtual_display_cleanup::cleanup_result_t result;
+
+  int synchronous_restore_calls = 0;
+  int asynchronous_restore_calls = 0;
+  platf::virtual_display_cleanup::ensure_database_restore(
+    result,
+    false,
+    false,
+    [&]() {
+      ++synchronous_restore_calls;
+      return true;
+    },
+    [&]() {
+      ++asynchronous_restore_calls;
+    }
+  );
+
+  EXPECT_EQ(synchronous_restore_calls, 0);
+  EXPECT_EQ(asynchronous_restore_calls, 0);
+  EXPECT_FALSE(result.database_restore_applied);
+}
+#endif
 
 using ParseDeviceId = DisplayDeviceConfigTest<std::pair<std::string, std::string>>;
 INSTANTIATE_TEST_SUITE_P(

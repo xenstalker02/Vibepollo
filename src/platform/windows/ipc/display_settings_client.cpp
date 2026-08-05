@@ -317,14 +317,16 @@ namespace platf::display_helper_client {
       return false;
     }
     // The command worker processes frames in order, so a Ping echo arriving
-    // after the REVERT frame proves the revert handler has completed.
+    // after the REVERT frame proves the handler accepted and scheduled the
+    // restore. The helper performs the restore asynchronously after its grace
+    // period, so this does not prove that display state was restored.
     if (!send_message(*pipe, MsgType::Ping, {})) {
       BOOST_LOG(warning) << "Display helper IPC: REVERT written but follow-up ping could not be sent";
       return false;
     }
     const int ack_timeout_ms = shutdown_requested() ? kShutdownIpcTimeoutMs : kApplyResultTimeoutMs;
     if (wait_for_ping_echo_locked(*pipe, ack_timeout_ms)) {
-      BOOST_LOG(info) << "Display helper IPC: REVERT acknowledged by helper worker";
+      BOOST_LOG(info) << "Display helper IPC: REVERT accepted and restore scheduled by helper worker";
       return true;
     }
     BOOST_LOG(warning) << "Display helper IPC: REVERT written but helper worker did not acknowledge within "
