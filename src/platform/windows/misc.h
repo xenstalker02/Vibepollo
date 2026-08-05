@@ -21,7 +21,7 @@
 
 namespace platf {
   void print_status(const std::string_view &prefix, HRESULT status);
-  HDESK syncThreadDesktop();
+  bool syncThreadDesktop();
 
   int64_t qpc_counter();
 

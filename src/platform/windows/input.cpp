@@ -16,6 +16,7 @@
 #include <ViGEm/Client.h>
 
 // local includes
+#include "input_retry.h"
 #include "keylayout.h"
 #include "misc.h"
 #include "src/config.h"
@@ -31,8 +32,6 @@ WINUSERAPI VOID WINAPI DestroySyntheticPointerDevice(HSYNTHETICPOINTERDEVICE dev
 #endif
 namespace platf {
   using namespace std::literals;
-
-  thread_local HDESK _lastKnownInputDesktop = nullptr;
 
   constexpr touch_port_t target_touch_port {
     0,
@@ -500,14 +499,16 @@ namespace platf {
    * @param i The `INPUT` struct to send.
    */
   void send_input(INPUT &i) {
-  retry:
-    auto send = SendInput(1, &i, sizeof(INPUT));
-    if (send != 1) {
-      auto hDesk = syncThreadDesktop();
-      if (_lastKnownInputDesktop != hDesk) {
-        _lastKnownInputDesktop = hDesk;
-        goto retry;
+    const auto injected = win_input::inject_with_desktop_retry(
+      [&]() {
+        return SendInput(1, &i, sizeof(INPUT)) == 1;
+      },
+      []() {
+        return syncThreadDesktop();
       }
+    );
+
+    if (!injected) {
       BOOST_LOG(error) << "Couldn't send input"sv;
     }
   }
@@ -522,16 +523,14 @@ namespace platf {
    * @return true if input was successfully injected.
    */
   bool inject_synthetic_pointer_input(input_raw_t *input, HSYNTHETICPOINTERDEVICE device, const POINTER_TYPE_INFO *pointerInfo, UINT32 count) {
-  retry:
-    if (!input->fnInjectSyntheticPointerInput(device, pointerInfo, count)) {
-      auto hDesk = syncThreadDesktop();
-      if (_lastKnownInputDesktop != hDesk) {
-        _lastKnownInputDesktop = hDesk;
-        goto retry;
+    return win_input::inject_with_desktop_retry(
+      [&]() {
+        return input->fnInjectSyntheticPointerInput(device, pointerInfo, count);
+      },
+      []() {
+        return syncThreadDesktop();
       }
-      return false;
-    }
-    return true;
+    );
   }
 
   void abs_mouse(input_t &input, const touch_port_t &touch_port, float x, float y) {

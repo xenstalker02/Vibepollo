@@ -3,7 +3,7 @@
 ; from it (installer\output\Vibepollo-<MyAppVersion>-Setup.exe).
 
 #define MyAppName      "Vibepollo"
-#define MyAppVersion   "1.15.29"
+#define MyAppVersion   "1.15.30"
 #define MyAppPublisher "xenstalker02"
 #define MyAppURL       "https://github.com/xenstalker02/Vibepollo"
 #define MyAppExeName   "sunshine.exe"
@@ -92,7 +92,8 @@ Source: "C:\msys64\ucrt64\bin\zlib1.dll";     DestDir: "{app}";             Flag
 ; Sourced from the build machine's System32; shipped so clean machines don't need a DirectX SDK install
 Source: "C:\Windows\System32\D3DCOMPILER_47.dll"; DestDir: "{app}";         Flags: ignoreversion
 
-; Tools (sunshinesvc.exe removed — ApolloService deprecated, binary no longer shipped)
+; Tools
+Source: "..\build\tools\sunshinesvc.exe";             DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "..\build\tools\sunshine_display_helper.exe";  DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "..\build\tools\sunshine_wgc_capture.exe";     DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "..\build\tools\playnite-launcher.exe";        DestDir: "{app}\tools"; Flags: ignoreversion
@@ -126,9 +127,6 @@ Source: "..\src_assets\windows\drivers\sudovda\uninstall.bat";DestDir: "{app}\dr
 ; Playnite plugin
 Source: "..\plugins\playnite\SunshinePlaynite\*"; DestDir: "{app}\plugins\SunshinePlaynite"; Flags: ignoreversion recursesubdirs createallsubdirs
 
-; Task registration helper — deployed to {tmp} only (auto-cleaned after install, never stale in Program Files)
-Source: "setup-task.ps1";    DestDir: "{tmp}"; Flags: ignoreversion deleteafterinstall
-
 ; Default config (only install if no existing config)
 Source: "sunshine_default.conf"; DestDir: "{app}\config"; DestName: "sunshine.conf"; Flags: onlyifdoesntexist uninsneveruninstall
 
@@ -136,40 +134,40 @@ Source: "sunshine_default.conf"; DestDir: "{app}\config"; DestName: "sunshine.co
 Source: "..\src_assets\windows\assets\apps.json"; DestDir: "{app}\config"; DestName: "apps.json"; Flags: onlyifdoesntexist uninsneveruninstall
 
 [Icons]
-Name: "{group}\{#MyAppName}";              Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\sunshine.exe"
+Name: "{group}\{#MyAppName}";              Filename: "{app}\{#MyAppExeName}"; Parameters: "--shortcut"; WorkingDir: "{app}"; IconFilename: "{app}\sunshine.exe"
 Name: "{group}\{#MyAppName} Web UI";       Filename: "https://localhost:47990"; IconFilename: "{app}\sunshine.exe"
 Name: "{group}\Uninstall {#MyAppName}";    Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}";        Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\sunshine.exe"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}";        Filename: "{app}\{#MyAppExeName}"; Parameters: "--shortcut"; WorkingDir: "{app}"; IconFilename: "{app}\sunshine.exe"; Tasks: desktopicon
+
+[InstallDelete]
+; Removed watchdog.vbs left this legacy shortcut calling a missing script at login.
+Type: files; Name: "{userstartup}\Vibepollo.lnk"
 
 [Run]
-; Stop legacy ApolloService (running as SYSTEM — must kill before file copy completes)
-; These run under the installer's elevated context; -ErrorAction is irrelevant for sc/taskkill
-; Stop the service controller first so it can't restart sunshine.exe mid-install
+; Remove legacy launch paths before enabling the supported LocalSystem service.
 Filename: "sc.exe";      Parameters: "stop ApolloService";              Flags: runhidden; StatusMsg: "Stopping legacy service..."
 Filename: "sc.exe";      Parameters: "config ApolloService start= disabled"; Flags: runhidden; StatusMsg: "Disabling legacy service..."
-Filename: "taskkill.exe"; Parameters: "/f /im sunshinesvc.exe";         Flags: runhidden; StatusMsg: "Stopping service wrapper..."
-Filename: "taskkill.exe"; Parameters: "/f /im sunshine.exe";            Flags: runhidden; StatusMsg: "Stopping Vibepollo..."
+Filename: "schtasks.exe"; Parameters: "/delete /tn ""Vibepollo"" /f"; Flags: runhidden; StatusMsg: "Removing legacy autostart task..."
 
 ; Add firewall rules
 Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""Vibepollo TCP"" protocol=TCP dir=in localport=47984,47989,47990 action=allow"; Flags: runhidden; StatusMsg: "Configuring firewall (TCP)..."
 Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""Vibepollo UDP"" protocol=UDP dir=in localport=47998-48010 action=allow"; Flags: runhidden; StatusMsg: "Configuring firewall (UDP)..."
 
-; Register Task Scheduler autostart (30s delay, HIGHEST privilege)
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NonInteractive -File ""{tmp}\setup-task.ps1"" -AppPath ""{app}"""; Flags: runhidden; StatusMsg: "Registering autostart task..."
-
-; Launch via Task Scheduler task after install (interactive and silent/auto-update alike).
-; schtasks /run uses the task's HIGHEST RunLevel — no extra UAC prompt.
-; NOTE: postinstall intentionally absent from the schtasks step. postinstall entries only run
-; when the user clicks Finish on the wizard page — which never appears in /SILENT mode (used by
-; auto-updates). Without postinstall, the entry runs at end of install phase for ALL modes.
-; The browser-open step keeps postinstall + skipifsilent so it only fires on interactive installs.
-Filename: "schtasks.exe"; Parameters: "/run /tn ""Vibepollo"""; Flags: runhidden nowait
+; The wrapper runs as LocalSystem and launches Sunshine into the active console session.
+; That token can follow the input desktop onto Winlogon/PIN, unlike an elevated user task.
+Filename: "sc.exe"; Parameters: "create VibepollService binPath= ""{app}\tools\sunshinesvc.exe"" DisplayName= ""Vibepollo Service"" start= auto error= normal"; Flags: runhidden; StatusMsg: "Installing Vibepollo service..."
+Filename: "sc.exe"; Parameters: "config VibepollService binPath= ""{app}\tools\sunshinesvc.exe"" DisplayName= ""Vibepollo Service"" start= auto error= normal"; Flags: runhidden; StatusMsg: "Configuring Vibepollo service..."
+Filename: "sc.exe"; Parameters: "failure VibepollService reset= 86400 actions= restart/3000/restart/10000/none/0"; Flags: runhidden; StatusMsg: "Configuring service recovery..."
+Filename: "sc.exe"; Parameters: "failureflag VibepollService 1"; Flags: runhidden
+Filename: "sc.exe"; Parameters: "start VibepollService"; Flags: runhidden; StatusMsg: "Starting Vibepollo..."
 Filename: "https://localhost:47990"; Flags: shellexec nowait postinstall skipifsilent; Description: "Open {#MyAppName} Web UI"
 
 [UninstallRun]
-; Kill sunshine.exe if running
-Filename: "powershell.exe"; Parameters: "-Command ""Stop-Process -Name sunshine -Force -ErrorAction SilentlyContinue"""; Flags: runhidden; RunOnceId: "KillSunshine"
-Filename: "powershell.exe"; Parameters: "-Command ""Stop-Process -Name sunshinesvc -Force -ErrorAction SilentlyContinue"""; Flags: runhidden; RunOnceId: "KillSvc"
+; Stop and remove the service before deleting its binaries.
+Filename: "sc.exe"; Parameters: "stop VibepollService";   Flags: runhidden; RunOnceId: "StopVibepollSvc"
+Filename: "sc.exe"; Parameters: "delete VibepollService"; Flags: runhidden; RunOnceId: "DeleteVibepollSvc"
+Filename: "taskkill.exe"; Parameters: "/f /im sunshine.exe";    Flags: runhidden; RunOnceId: "KillSunshine"
+Filename: "taskkill.exe"; Parameters: "/f /im sunshinesvc.exe"; Flags: runhidden; RunOnceId: "KillSvc"
 
 ; Remove Task Scheduler task
 Filename: "powershell.exe"; Parameters: "-Command ""Unregister-ScheduledTask -TaskName Vibepollo -Confirm:$false -ErrorAction SilentlyContinue"""; Flags: runhidden; RunOnceId: "RemoveTask"
@@ -191,6 +189,9 @@ procedure StopVibepollo();
 var
   ResultCode: Integer;
 begin
+  Exec('sc.exe', 'stop VibepollService', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec('schtasks.exe', '/end /tn "Vibepollo"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec('taskkill.exe', '/f /im sunshinesvc.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Exec('taskkill.exe', '/f /im sunshine.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   // Brief pause so the OS releases the file handle before the copy starts.
   Sleep(1500);
