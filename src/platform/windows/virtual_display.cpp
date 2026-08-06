@@ -3928,9 +3928,17 @@ namespace VDISPLAY {
   }
 
   std::optional<std::string> resolveAnyVirtualDisplayDeviceId() {
+    const auto device_ids = resolveVirtualDisplayDeviceIds();
+    if (!device_ids.empty()) {
+      return device_ids.front();
+    }
+    return std::nullopt;
+  }
+
+  std::vector<std::string> resolveVirtualDisplayDeviceIds() {
     auto devices = platf::display_helper::Coordinator::instance().enumerate_devices(display_device::DeviceEnumerationDetail::Minimal);
-    std::optional<std::string> active_match;
-    std::optional<std::string> any_match;
+    std::vector<std::string> active;
+    std::vector<std::string> inactive;
 
     if (devices) {
       for (const auto &device : *devices) {
@@ -3938,23 +3946,16 @@ namespace VDISPLAY {
           continue;
         }
 
-        if (!any_match) {
-          any_match = device.m_device_id;
-        }
         if (device.m_info) {
-          active_match = device.m_device_id;
-          break;
+          active.push_back(device.m_device_id);
+        } else {
+          inactive.push_back(device.m_device_id);
         }
       }
     }
 
-    if (active_match) {
-      return active_match;
-    }
-    if (any_match) {
-      return any_match;
-    }
-    return std::nullopt;
+    active.insert(active.end(), inactive.begin(), inactive.end());
+    return active;
   }
 
   bool is_virtual_display_output(const std::string &output_identifier) {

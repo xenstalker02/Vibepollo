@@ -43,6 +43,7 @@
   #include "src/platform/windows/misc.h"
   #include "src/platform/windows/virtual_display.h"
   #include "src/process.h"
+  #include "src/state_storage.h"
 
   #include <display_device/noop_audio_context.h>
   #include <display_device/noop_settings_persistence.h>
@@ -288,9 +289,25 @@ namespace {
     return false;
   }
 
+  // User-configured exclusions plus virtual displays that are actually enumerated now.
+  // Historical IDs are deliberately not trusted here: a stale or reused ID must not cause a
+  // physical display to be removed from a restore baseline.
+  std::vector<std::string> effective_snapshot_exclude_devices() {
+    std::vector<std::string> ids = config::video.dd.snapshot_exclude_devices;
+    for (auto &vd : VDISPLAY::resolveVirtualDisplayDeviceIds()) {
+      const bool present = std::any_of(ids.begin(), ids.end(), [&](const std::string &existing) {
+        return boost::algorithm::iequals(existing, vd);
+      });
+      if (!present) {
+        ids.push_back(std::move(vd));
+      }
+    }
+    return ids;
+  }
+
   std::string build_snapshot_exclude_payload() {
     try {
-      nlohmann::json j = config::video.dd.snapshot_exclude_devices;
+      nlohmann::json j = effective_snapshot_exclude_devices();
       return j.dump();
     } catch (...) {
       return std::string {};
@@ -1075,6 +1092,11 @@ namespace {
       .gen1_framegen_fix = session.gen1_framegen_fix,
       .gen2_framegen_fix = session.gen2_framegen_fix,
     };
+    if (!g_active_session_dd->virtual_display_device_id.empty()) {
+      // Persist so the helper (including the boot-time restore task) can exclude this
+      // device from snapshots/baselines even when its EDID is not classifiable.
+      statefile::remember_virtual_display_device(g_active_session_dd->virtual_display_device_id);
+    }
   }
 
   static void clear_active_session() {
@@ -1140,6 +1162,13 @@ namespace {
     // Pass golden-first restore preference to helper
     if (config::video.dd.always_restore_from_golden) {
       j["sunshine_always_restore_from_golden"] = true;
+    }
+
+    // Always carry the exclusion list: a hard-restarted helper has no SNAPSHOT_CURRENT
+    // context and would otherwise capture virtual displays into its pre-apply baseline.
+    try {
+      j["sunshine_snapshot_exclude_devices"] = effective_snapshot_exclude_devices();
+    } catch (...) {
     }
 
     return j.dump();
@@ -1380,6 +1409,16 @@ namespace display_helper_integration {
   }  // namespace
 
   bool apply(const DisplayApplyRequest &request) {
+    // Remember the session's virtual display before the APPLY payload is built so the
+    // helper can exclude it from the pre-apply baseline it may capture.
+    if (request.session) {
+      const auto &vd_id = request.session_overrides.device_id_override ?
+                            *request.session_overrides.device_id_override :
+                            request.session->virtual_display_device_id;
+      if (!vd_id.empty()) {
+        statefile::remember_virtual_display_device(vd_id);
+      }
+    }
     return apply_internal(request, true);
   }
 

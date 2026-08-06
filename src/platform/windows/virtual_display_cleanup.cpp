@@ -96,6 +96,34 @@ namespace platf::virtual_display_cleanup {
     std::atomic<bool> g_async_restore_inflight {false};
   }  // namespace
 
+  void ensure_database_restore(
+    cleanup_result_t &result,
+    const bool enforce_db_restore,
+    const bool helper_revert_dispatched,
+    const bool helper_unavailable,
+    const std::function<bool()> &synchronous_restore,
+    const std::function<void()> &asynchronous_restore
+  ) {
+    if (!enforce_db_restore) {
+      return;
+    }
+
+    // The helper owns the complete restore transaction: it tries saved snapshots,
+    // falls back to the Windows display database, and confirms the resulting topology.
+    // A direct SDC_USE_DATABASE_CURRENT call here can race that separate process
+    // and merely reapply the session topology that disabled the physical monitors.
+    if (helper_revert_dispatched) {
+      return;
+    }
+
+    if (helper_unavailable) {
+      asynchronous_restore();
+      return;
+    }
+
+    result.database_restore_applied = synchronous_restore();
+  }
+
   cleanup_result_t run(
     const std::string_view reason,
     const bool enforce_db_restore,
@@ -120,9 +148,6 @@ namespace platf::virtual_display_cleanup {
       }
 
       result.helper_revert_dispatched = display_helper_integration::revert(prefer_golden_if_current_missing);
-      if (result.helper_revert_dispatched) {
-        result.database_restore_applied = true;
-      }
     };
 
     if (enforce_db_restore && revert_order == revert_order_t::restore_before_remove) {
@@ -154,8 +179,18 @@ namespace platf::virtual_display_cleanup {
         try_helper_revert();
       }
 
-      if (!result.helper_revert_dispatched) {
-        if (helper_unavailable) {
+      ensure_database_restore(
+        result,
+        enforce_db_restore,
+        result.helper_revert_dispatched,
+        helper_unavailable,
+        []() {
+          // Use the same mutation barrier as stream-start APPLY/snapshot work so
+          // a new session cannot modeset concurrently with the direct restore.
+          std::lock_guard<std::mutex> mutation_lock(display_helper_integration::display_mutation_mutex());
+          return restore_windows_display_database();
+        },
+        []() {
           // Skipping outright here left BOTH restore routes disabled for the whole
           // cooldown window (helper revert above + this database restore), which is
           // how the monitors stayed black on 07-31. Keep teardown fast, but run the
@@ -165,55 +200,54 @@ namespace platf::virtual_display_cleanup {
           if (g_async_restore_inflight.exchange(true, std::memory_order_acq_rel)) {
             BOOST_LOG(warning) << "Virtual display cleanup: helper unavailable (failure cooldown); "
                                   "asynchronous database restore already in flight.";
-          } else {
-            BOOST_LOG(warning) << "Virtual display cleanup: helper unavailable (failure cooldown); "
-                                  "dispatched asynchronous database restore.";
-            std::thread([]() {
-              // A stream that started while this thread was being scheduled must not
-              // get a modeset underneath it. apply_in_progress() flips at APPLY
-              // dispatch — before the RTSP session registers, on both the helper
-              // and in-process paths — and ms_since_last_apply() covers the gap
-              // between an apply completing and the session registering. Together
-              // with the settle-and-recheck this closes the check-then-restore
-              // window down to a sliver far smaller than the seconds a session
-              // start actually takes. Known accepted corner: a session that both
-              // started and ended within the last 5s of a cooldown window skips
-              // this restore (the recency term cannot tell it from a starting
-              // one); the restore hotkey and the next session start remain the
-              // recovery paths there.
-              auto stream_activity = []() {
-                return rtsp_stream::session_count() > 0 ||
-                       webrtc_stream::has_active_sessions() ||
-                       display_helper_integration::apply_in_progress() ||
-                       display_helper_integration::ms_since_last_apply() < 5000 ||
-                       display_helper_integration::ms_since_stream_display_start() < 30000;
-              };
-              bool clear = !stream_activity();
-              if (clear) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(250));
-                // Final check and restore run under the display-mutation mutex,
-                // so an APPLY or SNAPSHOT_CURRENT that wins the lock first makes
-                // this check see it, and one that arrives later blocks until the
-                // restore has finished — true mutual exclusion, not just a
-                // shrunken race window.
-                std::lock_guard<std::mutex> mutation_lock(display_helper_integration::display_mutation_mutex());
-                clear = !stream_activity();
-                if (clear) {
-                  const bool restored = restore_windows_display_database();
-                  BOOST_LOG(info) << "Virtual display cleanup: asynchronous database restore "
-                                  << (restored ? "succeeded." : "failed.");
-                }
-              }
-              if (!clear) {
-                BOOST_LOG(info) << "Virtual display cleanup: asynchronous database restore skipped (stream active).";
-              }
-              g_async_restore_inflight.store(false, std::memory_order_release);
-            }).detach();
+            return;
           }
-        } else {
-          result.database_restore_applied = restore_windows_display_database();
+
+          BOOST_LOG(warning) << "Virtual display cleanup: helper unavailable (failure cooldown); "
+                                "dispatched asynchronous database restore.";
+          std::thread([]() {
+            // A stream that started while this thread was being scheduled must not
+            // get a modeset underneath it. apply_in_progress() flips at APPLY
+            // dispatch — before the RTSP session registers, on both the helper
+            // and in-process paths — and ms_since_last_apply() covers the gap
+            // between an apply completing and the session registering. Together
+            // with the settle-and-recheck this closes the check-then-restore
+            // window down to a sliver far smaller than the seconds a session
+            // start actually takes. Known accepted corner: a session that both
+            // started and ended within the last 5s of a cooldown window skips
+            // this restore (the recency term cannot tell it from a starting
+            // one); the restore hotkey and the next session start remain the
+            // recovery paths there.
+            auto stream_activity = []() {
+              return rtsp_stream::session_count() > 0 ||
+                     webrtc_stream::has_active_sessions() ||
+                     display_helper_integration::apply_in_progress() ||
+                     display_helper_integration::ms_since_last_apply() < 5000 ||
+                     display_helper_integration::ms_since_stream_display_start() < 30000;
+            };
+            bool clear = !stream_activity();
+            if (clear) {
+              std::this_thread::sleep_for(std::chrono::milliseconds(250));
+              // Final check and restore run under the display-mutation mutex,
+              // so an APPLY or SNAPSHOT_CURRENT that wins the lock first makes
+              // this check see it, and one that arrives later blocks until the
+              // restore has finished — true mutual exclusion, not just a
+              // shrunken race window.
+              std::lock_guard<std::mutex> mutation_lock(display_helper_integration::display_mutation_mutex());
+              clear = !stream_activity();
+              if (clear) {
+                const bool restored = restore_windows_display_database();
+                BOOST_LOG(info) << "Virtual display cleanup: asynchronous database restore "
+                                << (restored ? "succeeded." : "failed.");
+              }
+            }
+            if (!clear) {
+              BOOST_LOG(info) << "Virtual display cleanup: asynchronous database restore skipped (stream active).";
+            }
+            g_async_restore_inflight.store(false, std::memory_order_release);
+          }).detach();
         }
-      }
+      );
     }
 
     BOOST_LOG(info) << "Virtual display cleanup: finished (reason=" << reason_text

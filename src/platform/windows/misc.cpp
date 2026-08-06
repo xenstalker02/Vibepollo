@@ -273,23 +273,24 @@ namespace platf {
     return true;
   }
 
-  HDESK syncThreadDesktop() {
+  bool syncThreadDesktop() {
     auto hDesk = OpenInputDesktop(DF_ALLOWOTHERACCOUNTHOOK, FALSE, GENERIC_ALL);
     if (!hDesk) {
       auto err = GetLastError();
       BOOST_LOG(error) << "Failed to Open Input Desktop [0x"sv << util::hex(err).to_string_view() << ']';
 
-      return nullptr;
+      return false;
     }
 
-    if (!SetThreadDesktop(hDesk)) {
+    const bool synced = SetThreadDesktop(hDesk);
+    if (!synced) {
       auto err = GetLastError();
       BOOST_LOG(error) << "Failed to sync desktop to thread [0x"sv << util::hex(err).to_string_view() << ']';
     }
 
     CloseDesktop(hDesk);
 
-    return hDesk;
+    return synced;
   }
 
   void print_status(const std::string_view &prefix, HRESULT status) {
@@ -1452,13 +1453,11 @@ namespace platf {
   }
 
   void restart() {
-    // Always register the atexit relaunch handler regardless of console state.
-    // The original GetConsoleWindow() guard was only meaningful when ApolloService
-    // was present (the service would respawn us on exit). ApolloService is gone;
-    // Vibepollo now runs via Task Scheduler which does NOT auto-respawn on exit.
-    // Without this fix, tray "Restart" exits the process and nothing relaunches it.
-    // CreateProcessW reuses the current elevated token — correct for Task Scheduler mode.
-    atexit(restart_on_exit);
+    // The service wrapper respawns SYSTEM-hosted instances. Interactive/manual
+    // instances still need to relaunch themselves on exit.
+    if (!is_running_as_system()) {
+      atexit(restart_on_exit);
+    }
 
     // We use an async exit call here because we can't block the HTTP thread or we'll hang shutdown.
     lifetime::exit_sunshine(0, true);

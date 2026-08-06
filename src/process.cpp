@@ -2275,10 +2275,14 @@ namespace proc {
 
 #ifdef _WIN32
     if (_virtual_display_active) {
-      if (!VDISPLAY::removeVirtualDisplay(_virtual_display_guid)) {
-        BOOST_LOG(warning) << "Failed to remove virtual display.";
+      if (VDISPLAY::is_virtual_display_guid_tracked(_virtual_display_guid)) {
+        if (!VDISPLAY::removeVirtualDisplay(_virtual_display_guid)) {
+          BOOST_LOG(warning) << "Failed to remove virtual display.";
+        } else {
+          BOOST_LOG(info) << "Virtual display removed.";
+        }
       } else {
-        BOOST_LOG(info) << "Virtual display removed.";
+        BOOST_LOG(debug) << "Virtual display was already removed by session cleanup.";
       }
       std::memset(&_virtual_display_guid, 0, sizeof(_virtual_display_guid));
       _virtual_display_active = false;

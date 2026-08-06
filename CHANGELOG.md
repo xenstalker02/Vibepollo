@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.15.30] — 2026-08-05
+
+### Fixed
+- **Controls now keep working when a stream crosses from the Windows clock screen to the PIN screen.** Vibepollo again runs through its LocalSystem service wrapper, which can follow the secure input desktop; the user-level delayed task could not. Input injection also closes desktop handles safely and retries exactly once after a successful desktop switch.
+- **Upgrades remove the obsolete startup shortcut that tried to run the deleted C:\Vibepollo\watchdog.vbs.** The supported service now owns startup and crash recovery, so login no longer shows a Windows Script Host error.
+- **Host availability no longer waits on the former 30-second login-task delay.** The service starts automatically, launches into the active console session, and restarts Vibepollo after an unexpected exit.
+- **Application teardown no longer tries to remove the same virtual display twice.** If stream cleanup already removed it, the later application cleanup skips the redundant helper launch and warning.
+
 ## [1.15.29] — 2026-08-04
 
 ### Fixed

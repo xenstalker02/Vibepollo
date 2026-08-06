@@ -36,6 +36,8 @@
 
 // third-party (libdisplaydevice)
   #include "src/logging.h"
+  #include "src/platform/windows/display_restore_transaction.h"
+  #include "src/platform/windows/display_snapshot_filter.h"
   #include "src/platform/windows/ipc/pipes.h"
 
   #include <display_device/json.h>
@@ -1134,10 +1136,9 @@ namespace {
       const auto origins_s = find_str_section(data, "origins");
       parse_origins_field(origins_s, snap);
 
-      // Filter snapshot using current exclusion list and currently enumerated devices.
-      // Note: `m_display_name` is only populated for active displays in libdisplaydevice, so
-      // using it here would incorrectly treat inactive-but-connected monitors as missing.
-      // For loading/restore, we only require a matching device id (display_name is not required).
+      // Remove explicit exclusions only. Device enumeration is transient during a
+      // topology teardown, so a disabled physical monitor must remain in the saved
+      // target topology for QueryDisplayConfig(All) to reactivate it.
       const auto join = [](const auto &items) {
         std::string out;
         bool first = true;
@@ -1150,14 +1151,8 @@ namespace {
         }
         return out;
       };
-      std::set<std::string> valid_devices_norm;
-      std::vector<std::string> filtered_out_excluded;
       std::vector<std::string> enumerated_devices;
       const auto exclusions = snapshot_exclusions_copy();
-      std::set<std::string> exclusions_norm;
-      for (auto id : exclusions) {
-        exclusions_norm.insert(normalize_device_id(std::move(id)));
-      }
 
       for (const auto &d : enumerate_devices(display_device::DeviceEnumerationDetail::Minimal)) {
         auto id = d.m_device_id.empty() ? d.m_display_name : d.m_device_id;
@@ -1165,106 +1160,31 @@ namespace {
           continue;
         }
         enumerated_devices.push_back(id);
-        auto norm = normalize_device_id(id);
-        if (!exclusions_norm.empty() && exclusions_norm.count(norm)) {
-          filtered_out_excluded.push_back(id);
-          continue;
-        }
-        valid_devices_norm.insert(std::move(norm));
       }
 
-      if (valid_devices_norm.empty()) {
-        BOOST_LOG(warning) << "Snapshot load rejected: no valid devices available for path=" << path.string();
-        BOOST_LOG(debug) << "Snapshot load rejected details: enumerated_devices=[" << join(enumerated_devices)
-                         << "], exclusions=[" << join(exclusions_norm) << "]";
+      const auto filter_result = platf::display_snapshot_filter::apply_explicit_exclusions(
+        snap,
+        layout_rotations,
+        exclusions,
+        enumerated_devices
+      );
+
+      if (snap.m_topology.empty()) {
+        BOOST_LOG(warning) << "Snapshot load rejected: all devices explicitly excluded for path=" << path.string();
         return std::nullopt;
       }
 
-      auto is_allowed = [&](const std::string &device_id) {
-        const auto norm = normalize_device_id(device_id);
-        if (!valid_devices_norm.count(norm)) {
-          return false;
-        }
-        return exclusions_norm.empty() || !exclusions_norm.count(norm);
-      };
-
-      display_device::ActiveTopology filtered_topology;
-      for (const auto &grp : snap.m_topology) {
-        std::vector<std::string> filtered_grp;
-        for (const auto &device_id : grp) {
-          if (is_allowed(device_id)) {
-            filtered_grp.push_back(device_id);
-          } else if (!exclusions_norm.empty() && exclusions_norm.count(normalize_device_id(device_id))) {
-            filtered_out_excluded.push_back(device_id);
-          }
-        }
-        if (!filtered_grp.empty()) {
-          filtered_topology.push_back(std::move(filtered_grp));
-        }
-      }
-
-      if (filtered_topology.empty()) {
-        BOOST_LOG(warning) << "Snapshot load rejected: all devices filtered for path=" << path.string();
-        std::vector<std::string> snapshot_devices;
-        for (const auto &grp : snap.m_topology) {
-          snapshot_devices.insert(snapshot_devices.end(), grp.begin(), grp.end());
-        }
-        std::sort(snapshot_devices.begin(), snapshot_devices.end());
-        snapshot_devices.erase(std::unique(snapshot_devices.begin(), snapshot_devices.end()), snapshot_devices.end());
-        BOOST_LOG(debug) << "Snapshot load rejected details: snapshot_devices=[" << join(snapshot_devices)
-                         << "], present_devices=[" << join(valid_devices_norm)
-                         << "], exclusions=[" << join(exclusions_norm) << "]";
-        return std::nullopt;
-      }
-
-      snap.m_topology = std::move(filtered_topology);
-
-      for (auto it = snap.m_modes.begin(); it != snap.m_modes.end();) {
-        if (!is_allowed(it->first)) {
-          it = snap.m_modes.erase(it);
-        } else {
-          ++it;
-        }
-      }
-      for (auto it = snap.m_hdr_states.begin(); it != snap.m_hdr_states.end();) {
-        if (!is_allowed(it->first)) {
-          it = snap.m_hdr_states.erase(it);
-        } else {
-          ++it;
-        }
-      }
-      for (auto it = snap.m_origins.begin(); it != snap.m_origins.end();) {
-        if (!is_allowed(it->first)) {
-          it = snap.m_origins.erase(it);
-        } else {
-          ++it;
-        }
-      }
-      for (auto it = layout_rotations.begin(); it != layout_rotations.end();) {
-        if (!is_allowed(it->first)) {
-          it = layout_rotations.erase(it);
-        } else {
-          ++it;
-        }
-      }
       if (layout_rotations.empty()) {
         has_layout_data = false;
       }
-      if (!snap.m_primary_device.empty() && !is_allowed(snap.m_primary_device)) {
-        snap.m_primary_device.clear();
-      }
 
-      if (!filtered_out_excluded.empty()) {
-        std::sort(filtered_out_excluded.begin(), filtered_out_excluded.end());
-        filtered_out_excluded.erase(std::unique(filtered_out_excluded.begin(), filtered_out_excluded.end()), filtered_out_excluded.end());
-        std::string joined;
-        for (size_t i = 0; i < filtered_out_excluded.size(); ++i) {
-          if (i > 0) {
-            joined += ", ";
-          }
-          joined += filtered_out_excluded[i];
-        }
-        BOOST_LOG(info) << "Snapshot load: excluded devices filtered from " << path.string() << ": [" << joined << "]";
+      if (!filter_result.excluded_device_ids.empty()) {
+        BOOST_LOG(info) << "Snapshot load: excluded devices filtered from " << path.string()
+                        << ": [" << join(filter_result.excluded_device_ids) << "]";
+      }
+      if (!filter_result.temporarily_missing_device_ids.empty()) {
+        BOOST_LOG(info) << "Snapshot load: preserving temporarily unavailable devices for restore retry from "
+                        << path.string() << ": [" << join(filter_result.temporarily_missing_device_ids) << "]";
       }
 
       LoadedSnapshot loaded;
@@ -1326,6 +1246,20 @@ namespace {
 
     std::vector<std::string> snapshot_exclusions_copy_public() const {
       return snapshot_exclusions_copy();
+    }
+
+    bool restore_monitor_settings() const {
+      if (!ensure_initialized()) {
+        return false;
+      }
+      try {
+        return m_dd->restoreMonitorSettings();
+      } catch (const std::exception &e) {
+        BOOST_LOG(warning) << "Display database restore threw exception: " << e.what();
+      } catch (...) {
+        BOOST_LOG(warning) << "Display database restore threw an unknown exception.";
+      }
+      return false;
     }
 
   private:
@@ -3058,18 +2992,11 @@ namespace {
       }
       attempted = true;
       if (auto missing = controller.missing_devices_for_topology(base.m_topology); !missing.empty()) {
-        std::string joined;
-        for (size_t i = 0; i < missing.size(); ++i) {
-          if (i > 0) {
-            joined += ", ";
-          }
-          joined += missing[i];
-        }
-        BOOST_LOG(info) << (label ? label : "session") << " snapshot skipped (missing devices): [" << joined << "]";
-        return false;
+        BOOST_LOG(info) << (label ? label : "session")
+                        << " snapshot contains temporarily unavailable devices; attempting the saved topology via QueryDisplayConfig(All).";
       }
-      if (!controller.is_topology_valid(base)) {
-        BOOST_LOG(info) << (label ? label : "session") << " snapshot rejected due to invalid topology.";
+      if (!controller.validate_topology_with_os(base.m_topology)) {
+        BOOST_LOG(info) << (label ? label : "session") << " snapshot rejected by OS topology validation.";
         return false;
       }
 
@@ -3176,7 +3103,7 @@ namespace {
     // session snapshot may be applied as a temporary fallback, but the helper
     // keeps polling until golden restore succeeds or the restore window ends.
     // Otherwise, prefers session baseline chain, then golden.
-    bool try_restore_once_if_valid(std::stop_token st, uint64_t guard_generation) {
+    bool try_snapshot_restore_once_if_valid(std::stop_token st, uint64_t guard_generation) {
       const auto cancelled = [&]() {
         if (restore_cancel_generation.load(std::memory_order_acquire) != guard_generation) {
           return true;
@@ -3206,15 +3133,7 @@ namespace {
             return false;
           }
           if (auto missing = controller.missing_devices_for_topology(golden->m_topology); !missing.empty()) {
-            std::string joined;
-            for (size_t i = 0; i < missing.size(); ++i) {
-              if (i > 0) {
-                joined += ", ";
-              }
-              joined += missing[i];
-            }
-            BOOST_LOG(info) << "Golden snapshot skipped (missing devices): [" << joined << "]";
-            return false;
+            BOOST_LOG(info) << "Golden snapshot contains temporarily unavailable devices; attempting the saved topology via QueryDisplayConfig(All).";
           }
           if (controller.validate_topology_with_os(golden->m_topology)) {
             if (apply_golden_and_confirm(st, guard_generation)) {
@@ -3321,6 +3240,89 @@ namespace {
         reset_pending_golden_session_fallbacks();
         return restored_golden;
       }
+    }
+
+    bool restore_database_and_confirm(std::stop_token st, uint64_t guard_generation) {
+      const auto cancelled = [&]() {
+        if (restore_cancel_generation.load(std::memory_order_acquire) != guard_generation) {
+          return true;
+        }
+        if (!restore_requested.load(std::memory_order_acquire)) {
+          return true;
+        }
+        return st.stop_possible() && st.stop_requested();
+      };
+
+      if (cancelled()) {
+        return false;
+      }
+
+      BOOST_LOG(warning) << "Restore: saved snapshots were not confirmed; helper is applying the display database fallback.";
+      if (!controller.restore_monitor_settings()) {
+        BOOST_LOG(warning) << "Restore: display database fallback returned failure; restore remains pending.";
+        return false;
+      }
+
+      display_device::DisplaySettingsSnapshot current;
+      const bool got_stable = read_stable_snapshot(current, 2000ms, 150ms, st);
+      if (cancelled()) {
+        return false;
+      }
+
+      std::set<std::string> topology_devices;
+      for (const auto &group : current.m_topology) {
+        for (const auto &device_id : group) {
+          topology_devices.insert(platf::display_snapshot_filter::normalize_device_id(device_id));
+        }
+      }
+
+      const auto primary = platf::display_snapshot_filter::normalize_device_id(current.m_primary_device);
+      bool excludes_restored_device = false;
+      for (const auto &excluded : controller.snapshot_exclusions_copy_public()) {
+        if (topology_devices.contains(platf::display_snapshot_filter::normalize_device_id(excluded))) {
+          excludes_restored_device = true;
+          break;
+        }
+      }
+
+      bool primary_at_origin = false;
+      if (!current.m_primary_device.empty()) {
+        const auto origin = current.m_origins.find(current.m_primary_device);
+        primary_at_origin = origin != current.m_origins.end() && origin->second.m_x == 0 && origin->second.m_y == 0;
+      }
+
+      const bool coherent = got_stable && !topology_devices.empty() && !primary.empty() &&
+                            topology_devices.contains(primary) && primary_at_origin && !excludes_restored_device &&
+                            controller.validate_topology_with_os(current.m_topology) && quiet_period(750ms, 150ms, st);
+      BOOST_LOG(info) << "Restore: display database fallback current_sig=" << controller.signature(current)
+                      << ", coherent=" << (coherent ? "true" : "false");
+      if (!coherent) {
+        BOOST_LOG(warning) << "Restore: display database fallback was not confirmed; restore remains pending.";
+        return false;
+      }
+
+      if (!save_snapshot_with_retry(session_current_path, "confirmed database fallback")) {
+        BOOST_LOG(warning) << "Restore: confirmed database fallback could not refresh the current session snapshot.";
+      }
+      if (auto golden = controller.load_display_settings_snapshot(golden_path);
+          golden && !controller.validate_topology_with_os(golden->m_topology)) {
+        BOOST_LOG(warning) << "Restore: replacing an OS-invalid golden snapshot with the confirmed database state.";
+        if (!save_snapshot_with_retry(golden_path, "replace invalid golden after database fallback")) {
+          BOOST_LOG(warning) << "Restore: failed to replace the OS-invalid golden snapshot.";
+        }
+      }
+      return true;
+    }
+
+    bool try_restore_once_if_valid(std::stop_token st, uint64_t guard_generation) {
+      return platf::display_restore_transaction::run(
+        [&]() {
+          return try_snapshot_restore_once_if_valid(st, guard_generation);
+        },
+        [&]() {
+          return restore_database_and_confirm(st, guard_generation);
+        }
+      );
     }
 
     // Start a background polling loop that checks every ~3s whether the
@@ -4646,13 +4648,22 @@ namespace {
       if (j.is_discarded()) {
         return false;
       }
-      // vibeshine_state.json format: { "root": { "snapshot_exclude_devices": [...] } }
+      // vibeshine_state.json format:
+      // { "root": { "snapshot_exclude_devices": [...], "virtual_display_devices": [...] } }
+      // Only explicit exclusions are trusted from disk. Live virtual display IDs arrive over
+      // IPC after Sunshine verifies them against the current device enumeration; remembered
+      // IDs may be stale or reused by Windows.
       if (j.is_object() && j.contains("root")) {
         const auto &root = j["root"];
-        if (root.is_object() && root.contains("snapshot_exclude_devices")) {
-          ids_out = parse_snapshot_exclude_json_node(root["snapshot_exclude_devices"]);
-          return !ids_out.empty() || root["snapshot_exclude_devices"].is_array();
+        if (!root.is_object()) {
+          return false;
         }
+        bool found = false;
+        if (root.contains("snapshot_exclude_devices")) {
+          ids_out = parse_snapshot_exclude_json_node(root["snapshot_exclude_devices"]);
+          found = !ids_out.empty() || root["snapshot_exclude_devices"].is_array();
+        }
+        return found;
       }
     } catch (const std::exception &e) {
       BOOST_LOG(warning) << "Failed to parse vibeshine_state.json for snapshot exclusions: " << e.what();
@@ -4773,8 +4784,19 @@ namespace {
       std::memory_order_release
     );
     state.last_cfg = cfg;
-    // Snapshot is taken earlier via SnapshotCurrent before any display enumeration
-    // that might activate external dummy plugs.
+    // The session baseline is normally captured earlier via SnapshotCurrent, before any
+    // display enumeration that might activate external dummy plugs. That request is
+    // fire-and-forget and can be lost (helper hard-restart races, helper not yet running),
+    // which used to leave REVERT with nothing to restore and strand the user on the
+    // session-only display layout (vibeshine#223). Capture the pre-apply state here as a
+    // fallback whenever no baseline exists yet; the snapshot exclusions set above keep
+    // virtual displays out of it.
+    if (!ServiceState::path_exists(state.session_current_path)) {
+      BOOST_LOG(warning) << "Display helper: no session baseline present at APPLY; capturing pre-apply baseline now.";
+      if (!state.capture_current_snapshot("pre-apply baseline")) {
+        BOOST_LOG(warning) << "Display helper: pre-apply baseline capture failed; REVERT may have nothing to restore.";
+      }
+    }
     state.retry_revert_on_topology.store(false, std::memory_order_release);
     state.exit_after_revert.store(false, std::memory_order_release);
 
