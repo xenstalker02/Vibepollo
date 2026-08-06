@@ -103,6 +103,7 @@ namespace VDISPLAY {
     const std::string &client_name
   );
   std::optional<std::string> resolveAnyVirtualDisplayDeviceId();
+  std::vector<std::string> resolveVirtualDisplayDeviceIds();
   bool is_virtual_display_output(const std::string &output_identifier);
 
   std::vector<std::wstring> matchDisplay(std::wstring sMatch);

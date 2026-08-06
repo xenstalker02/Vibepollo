@@ -289,12 +289,12 @@ namespace {
     return false;
   }
 
-  // User-configured exclusions plus every Sunshine-managed virtual display device id we have
-  // seen. Virtual displays must never end up in restore baselines: a baseline captured while
-  // one was active "restores" the physical monitors away (vibeshine#223).
+  // User-configured exclusions plus virtual displays that are actually enumerated now.
+  // Historical IDs are deliberately not trusted here: a stale or reused ID must not cause a
+  // physical display to be removed from a restore baseline.
   std::vector<std::string> effective_snapshot_exclude_devices() {
     std::vector<std::string> ids = config::video.dd.snapshot_exclude_devices;
-    for (auto &vd : statefile::load_virtual_display_devices()) {
+    for (auto &vd : VDISPLAY::resolveVirtualDisplayDeviceIds()) {
       const bool present = std::any_of(ids.begin(), ids.end(), [&](const std::string &existing) {
         return boost::algorithm::iequals(existing, vd);
       });

@@ -108,7 +108,8 @@ namespace platf::virtual_display_cleanup {
       return;
     }
 
-    // The helper owns snapshot-based restore and verifies the resulting topology.
+    // The helper owns the complete restore transaction: it tries saved snapshots,
+    // falls back to the Windows display database, and confirms the resulting topology.
     // A direct SDC_USE_DATABASE_CURRENT call here can race that separate process
     // and merely reapply the session topology that disabled the physical monitors.
     if (helper_revert_dispatched) {

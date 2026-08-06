@@ -36,6 +36,7 @@
 
 // third-party (libdisplaydevice)
   #include "src/logging.h"
+  #include "src/platform/windows/display_restore_transaction.h"
   #include "src/platform/windows/display_snapshot_filter.h"
   #include "src/platform/windows/ipc/pipes.h"
 
@@ -1245,6 +1246,20 @@ namespace {
 
     std::vector<std::string> snapshot_exclusions_copy_public() const {
       return snapshot_exclusions_copy();
+    }
+
+    bool restore_monitor_settings() const {
+      if (!ensure_initialized()) {
+        return false;
+      }
+      try {
+        return m_dd->restoreMonitorSettings();
+      } catch (const std::exception &e) {
+        BOOST_LOG(warning) << "Display database restore threw exception: " << e.what();
+      } catch (...) {
+        BOOST_LOG(warning) << "Display database restore threw an unknown exception.";
+      }
+      return false;
     }
 
   private:
@@ -2980,8 +2995,8 @@ namespace {
         BOOST_LOG(info) << (label ? label : "session")
                         << " snapshot contains temporarily unavailable devices; attempting the saved topology via QueryDisplayConfig(All).";
       }
-      if (!controller.is_topology_valid(base)) {
-        BOOST_LOG(info) << (label ? label : "session") << " snapshot rejected due to invalid topology.";
+      if (!controller.validate_topology_with_os(base.m_topology)) {
+        BOOST_LOG(info) << (label ? label : "session") << " snapshot rejected by OS topology validation.";
         return false;
       }
 
@@ -3088,7 +3103,7 @@ namespace {
     // session snapshot may be applied as a temporary fallback, but the helper
     // keeps polling until golden restore succeeds or the restore window ends.
     // Otherwise, prefers session baseline chain, then golden.
-    bool try_restore_once_if_valid(std::stop_token st, uint64_t guard_generation) {
+    bool try_snapshot_restore_once_if_valid(std::stop_token st, uint64_t guard_generation) {
       const auto cancelled = [&]() {
         if (restore_cancel_generation.load(std::memory_order_acquire) != guard_generation) {
           return true;
@@ -3225,6 +3240,89 @@ namespace {
         reset_pending_golden_session_fallbacks();
         return restored_golden;
       }
+    }
+
+    bool restore_database_and_confirm(std::stop_token st, uint64_t guard_generation) {
+      const auto cancelled = [&]() {
+        if (restore_cancel_generation.load(std::memory_order_acquire) != guard_generation) {
+          return true;
+        }
+        if (!restore_requested.load(std::memory_order_acquire)) {
+          return true;
+        }
+        return st.stop_possible() && st.stop_requested();
+      };
+
+      if (cancelled()) {
+        return false;
+      }
+
+      BOOST_LOG(warning) << "Restore: saved snapshots were not confirmed; helper is applying the display database fallback.";
+      if (!controller.restore_monitor_settings()) {
+        BOOST_LOG(warning) << "Restore: display database fallback returned failure; restore remains pending.";
+        return false;
+      }
+
+      display_device::DisplaySettingsSnapshot current;
+      const bool got_stable = read_stable_snapshot(current, 2000ms, 150ms, st);
+      if (cancelled()) {
+        return false;
+      }
+
+      std::set<std::string> topology_devices;
+      for (const auto &group : current.m_topology) {
+        for (const auto &device_id : group) {
+          topology_devices.insert(platf::display_snapshot_filter::normalize_device_id(device_id));
+        }
+      }
+
+      const auto primary = platf::display_snapshot_filter::normalize_device_id(current.m_primary_device);
+      bool excludes_restored_device = false;
+      for (const auto &excluded : controller.snapshot_exclusions_copy_public()) {
+        if (topology_devices.contains(platf::display_snapshot_filter::normalize_device_id(excluded))) {
+          excludes_restored_device = true;
+          break;
+        }
+      }
+
+      bool primary_at_origin = false;
+      if (!current.m_primary_device.empty()) {
+        const auto origin = current.m_origins.find(current.m_primary_device);
+        primary_at_origin = origin != current.m_origins.end() && origin->second.m_x == 0 && origin->second.m_y == 0;
+      }
+
+      const bool coherent = got_stable && !topology_devices.empty() && !primary.empty() &&
+                            topology_devices.contains(primary) && primary_at_origin && !excludes_restored_device &&
+                            controller.validate_topology_with_os(current.m_topology) && quiet_period(750ms, 150ms, st);
+      BOOST_LOG(info) << "Restore: display database fallback current_sig=" << controller.signature(current)
+                      << ", coherent=" << (coherent ? "true" : "false");
+      if (!coherent) {
+        BOOST_LOG(warning) << "Restore: display database fallback was not confirmed; restore remains pending.";
+        return false;
+      }
+
+      if (!save_snapshot_with_retry(session_current_path, "confirmed database fallback")) {
+        BOOST_LOG(warning) << "Restore: confirmed database fallback could not refresh the current session snapshot.";
+      }
+      if (auto golden = controller.load_display_settings_snapshot(golden_path);
+          golden && !controller.validate_topology_with_os(golden->m_topology)) {
+        BOOST_LOG(warning) << "Restore: replacing an OS-invalid golden snapshot with the confirmed database state.";
+        if (!save_snapshot_with_retry(golden_path, "replace invalid golden after database fallback")) {
+          BOOST_LOG(warning) << "Restore: failed to replace the OS-invalid golden snapshot.";
+        }
+      }
+      return true;
+    }
+
+    bool try_restore_once_if_valid(std::stop_token st, uint64_t guard_generation) {
+      return platf::display_restore_transaction::run(
+        [&]() {
+          return try_snapshot_restore_once_if_valid(st, guard_generation);
+        },
+        [&]() {
+          return restore_database_and_confirm(st, guard_generation);
+        }
+      );
     }
 
     // Start a background polling loop that checks every ~3s whether the
@@ -4552,8 +4650,9 @@ namespace {
       }
       // vibeshine_state.json format:
       // { "root": { "snapshot_exclude_devices": [...], "virtual_display_devices": [...] } }
-      // Sunshine-managed virtual display ids are merged into the exclusions so they are
-      // never captured into (or restored from) display baselines.
+      // Only explicit exclusions are trusted from disk. Live virtual display IDs arrive over
+      // IPC after Sunshine verifies them against the current device enumeration; remembered
+      // IDs may be stale or reused by Windows.
       if (j.is_object() && j.contains("root")) {
         const auto &root = j["root"];
         if (!root.is_object()) {
@@ -4563,15 +4662,6 @@ namespace {
         if (root.contains("snapshot_exclude_devices")) {
           ids_out = parse_snapshot_exclude_json_node(root["snapshot_exclude_devices"]);
           found = !ids_out.empty() || root["snapshot_exclude_devices"].is_array();
-        }
-        if (root.contains("virtual_display_devices")) {
-          auto virtual_ids = parse_snapshot_exclude_json_node(root["virtual_display_devices"]);
-          for (auto &id : virtual_ids) {
-            if (std::find(ids_out.begin(), ids_out.end(), id) == ids_out.end()) {
-              ids_out.push_back(std::move(id));
-            }
-          }
-          found = found || !ids_out.empty();
         }
         return found;
       }

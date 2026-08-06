@@ -88,8 +88,34 @@ namespace platf::display_snapshot_filter {
     remove_excluded(snapshot.m_origins);
     remove_excluded(layout_rotations);
 
-    if (!snapshot.m_primary_device.empty() && is_excluded(snapshot.m_primary_device)) {
+    const auto topology_contains = [&](const std::string &device_id) {
+      return std::any_of(snapshot.m_topology.begin(), snapshot.m_topology.end(), [&](const auto &group) {
+        return std::any_of(group.begin(), group.end(), [&](const auto &candidate) {
+          return normalize_device_id(candidate) == normalize_device_id(device_id);
+        });
+      });
+    };
+
+    if (snapshot.m_primary_device.empty() || !topology_contains(snapshot.m_primary_device)) {
       snapshot.m_primary_device.clear();
+      for (const auto &group : snapshot.m_topology) {
+        if (!group.empty()) {
+          snapshot.m_primary_device = group.front();
+          break;
+        }
+      }
+
+      if (!snapshot.m_primary_device.empty()) {
+        const auto primary_origin = snapshot.m_origins.find(snapshot.m_primary_device);
+        if (primary_origin != snapshot.m_origins.end()) {
+          const auto offset = primary_origin->second;
+          for (auto &[device_id, origin] : snapshot.m_origins) {
+            (void) device_id;
+            origin.m_x -= offset.m_x;
+            origin.m_y -= offset.m_y;
+          }
+        }
+      }
     }
 
     const auto unique_sorted = [](auto &ids) {
