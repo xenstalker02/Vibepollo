@@ -99,11 +99,19 @@ namespace platf::virtual_display_cleanup {
   void ensure_database_restore(
     cleanup_result_t &result,
     const bool enforce_db_restore,
+    const bool helper_revert_dispatched,
     const bool helper_unavailable,
     const std::function<bool()> &synchronous_restore,
     const std::function<void()> &asynchronous_restore
   ) {
     if (!enforce_db_restore) {
+      return;
+    }
+
+    // The helper owns snapshot-based restore and verifies the resulting topology.
+    // A direct SDC_USE_DATABASE_CURRENT call here can race that separate process
+    // and merely reapply the session topology that disabled the physical monitors.
+    if (helper_revert_dispatched) {
       return;
     }
 
@@ -173,6 +181,7 @@ namespace platf::virtual_display_cleanup {
       ensure_database_restore(
         result,
         enforce_db_restore,
+        result.helper_revert_dispatched,
         helper_unavailable,
         []() {
           // Use the same mutation barrier as stream-start APPLY/snapshot work so

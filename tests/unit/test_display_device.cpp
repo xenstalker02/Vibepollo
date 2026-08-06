@@ -7,6 +7,7 @@
 #include <format>
 #include <src/config.h>
 #include <src/display_device.h>
+#include <src/platform/windows/display_snapshot_filter.h>
 #include <src/platform/windows/virtual_display_cleanup.h>
 #include <src/rtsp.h>
 
@@ -48,7 +49,7 @@ namespace {
 }  // namespace
 
 #ifdef _WIN32
-TEST(VirtualDisplayCleanup, HelperDispatchDoesNotSuppressVerifiedDatabaseRestore) {
+TEST(VirtualDisplayCleanup, HelperDispatchOwnsRestoreWithoutRacingDatabaseFallback) {
   platf::virtual_display_cleanup::cleanup_result_t result;
   result.helper_revert_dispatched = true;
 
@@ -56,6 +57,7 @@ TEST(VirtualDisplayCleanup, HelperDispatchDoesNotSuppressVerifiedDatabaseRestore
   int asynchronous_restore_calls = 0;
   platf::virtual_display_cleanup::ensure_database_restore(
     result,
+    true,
     true,
     false,
     [&]() {
@@ -67,9 +69,9 @@ TEST(VirtualDisplayCleanup, HelperDispatchDoesNotSuppressVerifiedDatabaseRestore
     }
   );
 
-  EXPECT_EQ(synchronous_restore_calls, 1);
+  EXPECT_EQ(synchronous_restore_calls, 0);
   EXPECT_EQ(asynchronous_restore_calls, 0);
-  EXPECT_TRUE(result.database_restore_applied);
+  EXPECT_FALSE(result.database_restore_applied);
 }
 
 TEST(VirtualDisplayCleanup, HelperFailureCooldownUsesAsynchronousRestore) {
@@ -80,6 +82,7 @@ TEST(VirtualDisplayCleanup, HelperFailureCooldownUsesAsynchronousRestore) {
   platf::virtual_display_cleanup::ensure_database_restore(
     result,
     true,
+    false,
     true,
     [&]() {
       ++synchronous_restore_calls;
@@ -103,6 +106,7 @@ TEST(VirtualDisplayCleanup, FailedSynchronousRestoreIsNotReportedAsApplied) {
     result,
     true,
     false,
+    false,
     []() {
       return false;
     },
@@ -121,6 +125,7 @@ TEST(VirtualDisplayCleanup, RestoreDisabledInvokesNoRestorePath) {
     result,
     false,
     false,
+    false,
     [&]() {
       ++synchronous_restore_calls;
       return true;
@@ -133,6 +138,52 @@ TEST(VirtualDisplayCleanup, RestoreDisabledInvokesNoRestorePath) {
   EXPECT_EQ(synchronous_restore_calls, 0);
   EXPECT_EQ(asynchronous_restore_calls, 0);
   EXPECT_FALSE(result.database_restore_applied);
+}
+
+TEST(DisplaySnapshotFilter, PreservesTemporarilyMissingPhysicalMonitorForRestoreRetry) {
+  display_device::DisplaySettingsSnapshot snapshot;
+  snapshot.m_topology = {{"physical-a"}, {"physical-b"}};
+  snapshot.m_primary_device = "physical-b";
+  snapshot.m_modes.emplace("physical-a", display_device::DisplayMode {});
+  snapshot.m_modes.emplace("physical-b", display_device::DisplayMode {});
+  std::map<std::string, int> layouts {{"physical-a", 0}, {"physical-b", 0}};
+
+  const auto result = platf::display_snapshot_filter::apply_explicit_exclusions(
+    snapshot,
+    layouts,
+    {},
+    {"physical-a"}
+  );
+
+  EXPECT_EQ(snapshot.m_topology, (display_device::ActiveTopology {{"physical-a"}, {"physical-b"}}));
+  EXPECT_EQ(snapshot.m_primary_device, "physical-b");
+  EXPECT_TRUE(snapshot.m_modes.contains("physical-b"));
+  EXPECT_TRUE(layouts.contains("physical-b"));
+  EXPECT_EQ(result.temporarily_missing_device_ids, std::vector<std::string> {"physical-b"});
+  EXPECT_TRUE(result.excluded_device_ids.empty());
+}
+
+TEST(DisplaySnapshotFilter, RemovesOnlyExplicitlyExcludedVirtualDisplay) {
+  display_device::DisplaySettingsSnapshot snapshot;
+  snapshot.m_topology = {{"physical-a"}, {"virtual-vdd"}};
+  snapshot.m_primary_device = "virtual-vdd";
+  snapshot.m_modes.emplace("physical-a", display_device::DisplayMode {});
+  snapshot.m_modes.emplace("virtual-vdd", display_device::DisplayMode {});
+  std::map<std::string, int> layouts {{"physical-a", 0}, {"virtual-vdd", 0}};
+
+  const auto result = platf::display_snapshot_filter::apply_explicit_exclusions(
+    snapshot,
+    layouts,
+    {"VIRTUAL-VDD"},
+    {"physical-a", "virtual-vdd"}
+  );
+
+  EXPECT_EQ(snapshot.m_topology, (display_device::ActiveTopology {{"physical-a"}}));
+  EXPECT_TRUE(snapshot.m_primary_device.empty());
+  EXPECT_FALSE(snapshot.m_modes.contains("virtual-vdd"));
+  EXPECT_FALSE(layouts.contains("virtual-vdd"));
+  EXPECT_EQ(result.excluded_device_ids, std::vector<std::string> {"virtual-vdd"});
+  EXPECT_TRUE(result.temporarily_missing_device_ids.empty());
 }
 #endif
 

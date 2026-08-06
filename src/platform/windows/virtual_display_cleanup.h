@@ -20,6 +20,7 @@ namespace platf::virtual_display_cleanup {
   void ensure_database_restore(
     cleanup_result_t &result,
     bool enforce_db_restore,
+    bool helper_revert_dispatched,
     bool helper_unavailable,
     const std::function<bool()> &synchronous_restore,
     const std::function<void()> &asynchronous_restore
