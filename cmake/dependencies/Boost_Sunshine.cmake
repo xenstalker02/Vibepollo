@@ -83,6 +83,13 @@ if(NOT Boost_FOUND)
     endif()
 
     FetchContent_MakeAvailable(Boost)
+    # Some bundled dependencies still use Boost's legacy header-only target.
+    # Boost's CMake build exposes component targets, so provide the compatibility
+    # target expected by Simple-Web-Server when a system package did not create it.
+    if(TARGET Boost::headers AND TARGET Boost::asio AND NOT TARGET Boost::boost)
+        add_library(Boost::boost INTERFACE IMPORTED)
+        target_link_libraries(Boost::boost INTERFACE Boost::headers Boost::asio)
+    endif()
     set(FETCH_CONTENT_BOOST_USED TRUE)
 
     set(Boost_FOUND TRUE)  # cmake-lint: disable=C0103
