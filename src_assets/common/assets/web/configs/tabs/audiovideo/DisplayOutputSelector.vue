@@ -151,27 +151,7 @@ function toOptions() {
           clearable
           filterable
           :placeholder="outputNameLabel"
-        >
-          <!-- Render each option with the friendly/display name on top and the id underneath in monospace -->
-          <template #option="{ option }">
-            <div class="leading-tight">
-              <div class="">{{ option?.displayName || option?.label }}</div>
-              <div class="text-[12px] opacity-60 font-mono">
-                {{ option?.id || option?.value }}
-              </div>
-            </div>
-          </template>
-
-          <!-- Show the selected value similarly: name then id -->
-          <template #value="{ option }">
-            <div class="leading-tight">
-              <div class="">{{ option?.displayName || option?.label }}</div>
-              <div class="text-[12px] opacity-60 font-mono">
-                {{ option?.id || option?.value }}
-              </div>
-            </div>
-          </template>
-        </n-select>
+        />
       </template>
       <template #freebsd>
         <n-input

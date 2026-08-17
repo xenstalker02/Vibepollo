@@ -108,11 +108,12 @@
                 </header>
                 <div class="p-3 space-y-2">
                   <n-input
-                    v-model:value="form.detached[index]"
+                    :value="value"
                     type="textarea"
                     class="font-mono"
                     :autosize="{ minRows: 2, maxRows: 6 }"
                     placeholder="Command to execute before the stream"
+                    @update:value="updateDetached(index, $event)"
                   />
                   <p class="text-[11px] opacity-60">
                     Runs before the primary command. Vibepollo continues even if this command exits.
@@ -203,5 +204,10 @@ function addDetached() {
 
 function removeDetached(index: number) {
   form.value.detached.splice(index, 1);
+}
+
+function updateDetached(index: number, value: string) {
+  if (form.value.detached[index] === undefined) return;
+  form.value.detached[index] = value;
 }
 </script>

@@ -622,24 +622,7 @@ function clearSnapshotHotkey(): void {
                     }
                   }
                 "
-              >
-                <template #option="{ option }">
-                  <div class="leading-tight">
-                    <div class="">{{ option?.displayName || option?.label }}</div>
-                    <div class="text-[12px] opacity-60 font-mono">
-                      {{ option?.id || option?.value }}
-                    </div>
-                  </div>
-                </template>
-                <template #value="{ option }">
-                  <div class="leading-tight">
-                    <div class="">{{ option?.displayName || option?.label }}</div>
-                    <div class="text-[12px] opacity-60 font-mono">
-                      {{ option?.id || option?.value }}
-                    </div>
-                  </div>
-                </template>
-              </n-select>
+              />
               <p v-if="excludeAllWarning" class="text-[11px] text-red-500">
                 {{ $t('config.dd_snapshot_exclude_warning') }}
               </p>

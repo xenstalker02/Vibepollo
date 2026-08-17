@@ -63,6 +63,15 @@ function inferDurationUnit(key: string): ConfigFieldDefinition['durationUnit'] |
   return undefined;
 }
 
+function withNumberMetadata(key: string): ConfigFieldDefinition {
+  const field: ConfigFieldDefinition = { kind: 'number' };
+  const overrides = NUMBER_FIELD_OVERRIDES[key];
+  if (overrides !== undefined) Object.assign(field, overrides);
+  const durationUnit = inferDurationUnit(key);
+  if (durationUnit !== undefined) field.durationUnit = durationUnit;
+  return field;
+}
+
 function kindSampleValue(ctx: ConfigFieldSchemaContext): unknown {
   // Anchor known config fields to their default type so the rendered control
   // does not change while the user edits the value.
@@ -123,12 +132,7 @@ export function getConfigFieldDefinition(
         : ctx.kind === 'select'
           ? { filterable: true }
           : {}),
-      ...(ctx.kind === 'number'
-        ? {
-            ...(NUMBER_FIELD_OVERRIDES[key] ?? {}),
-            ...(inferDurationUnit(key) ? { durationUnit: inferDurationUnit(key) } : {}),
-          }
-        : {}),
+      ...(ctx.kind === 'number' ? withNumberMetadata(key) : {}),
       localePrefix: 'config',
     };
   }
@@ -162,11 +166,7 @@ export function getConfigFieldDefinition(
     Object.prototype.hasOwnProperty.call(NUMBER_FIELD_OVERRIDES, key) ||
     isFiniteNumber(sampleValue)
   ) {
-    return {
-      kind: 'number',
-      ...(NUMBER_FIELD_OVERRIDES[key] ?? {}),
-      ...(inferDurationUnit(key) ? { durationUnit: inferDurationUnit(key) } : {}),
-    };
+    return withNumberMetadata(key);
   }
 
   if (isBooleanLike(sampleValue)) {

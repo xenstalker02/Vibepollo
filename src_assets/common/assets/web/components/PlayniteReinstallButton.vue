@@ -57,7 +57,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'done', payload: { ok: boolean; data?: any; error?: string }): void;
+  (e: 'done', payload: { ok: boolean; data?: unknown; error?: string }): void;
 }>();
 
 const show = ref(false);
@@ -85,22 +85,32 @@ async function confirm() {
   loading.value = true;
   show.value = false;
   let ok = false;
-  let body: any = null;
+  let body: unknown = null;
   let error = '';
   try {
     const r = await http.post('/api/playnite/install', { restart }, { validateStatus: () => true });
     try {
       body = r.data;
     } catch {}
-    ok = r.status >= 200 && r.status < 300 && body && body.status === true;
+    ok =
+      r.status >= 200 &&
+      r.status < 300 &&
+      typeof body === 'object' &&
+      body !== null &&
+      'status' in body &&
+      body.status === true;
     if (!ok) {
-      error = (body && (body.error || body.message)) || `HTTP ${r.status}`;
+      error =
+        typeof body === 'object' && body !== null
+          ? String(('error' in body && body.error) || ('message' in body && body.message) || '') ||
+            `HTTP ${r.status}`
+          : `HTTP ${r.status}`;
     }
-  } catch (e: any) {
-    error = e?.message || 'Request failed';
+  } catch (caught) {
+    error = caught instanceof Error ? caught.message : 'Request failed';
   }
   loading.value = false;
-  emit('done', { ok, data: body, error: ok ? undefined : error });
+  emit('done', { ok, ...(body !== null ? { data: body } : {}), ...(!ok ? { error } : {}) });
 }
 </script>
 

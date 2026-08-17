@@ -58,8 +58,6 @@ export interface AppForm {
   excludeGlobalPrepCmd: boolean;
   excludeGlobalStateCmd: boolean;
   configOverrides: Record<string, unknown>;
-  excludeGlobalStateCmd: boolean;
-  configOverrides: Record<string, unknown>;
   elevated: boolean;
   autoDetach: boolean;
   waitAll: boolean;
@@ -88,9 +86,9 @@ export interface AppForm {
   losslessScalingProfile: LosslessProfileKey;
   losslessScalingProfiles: Record<LosslessProfileKey, LosslessProfileOverrides>;
   losslessScalingLaunchDelay: number | null;
-  playniteId?: string | undefined;
-  playniteManaged?: 'manual' | string | undefined;
-  ddConfigurationOption?:
+  playniteId?: string;
+  playniteManaged?: string;
+  ddConfigurationOption:
     'disabled' | 'verify_only' | 'ensure_active' | 'ensure_primary' | 'ensure_only_display' | null;
 }
 

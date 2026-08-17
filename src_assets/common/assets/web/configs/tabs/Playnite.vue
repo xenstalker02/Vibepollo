@@ -843,7 +843,10 @@ const excludedIds = computed<string[]>({
 const excludedDisplayList = computed<Array<{ id: string; name: string }>>(() => {
   const arr = normalizeIdNameEntries(config.value?.playnite_exclude_games);
   const nameById = new Map(gamesList.value.map((g) => [g.id, g.name] as const));
-  return (arr || []).map(({ id, name }) => ({ id, name: name || nameById.get(id) || '' }));
+  return (arr || []).map(({ id, name }) => {
+    const resolvedId = id ?? '';
+    return { id: resolvedId, name: name || nameById.get(resolvedId) || '' };
+  });
 });
 
 // Connectivity indicator helpers for transfer UI
@@ -956,8 +959,9 @@ function ensurePluginOptionsIncludeSelection() {
     if (!value || value === NULL_GUID) continue;
     const label = entry?.name || entry?.id || value;
     if (!byValue.has(value)) {
-      current.push({ value, label });
-      byValue.set(value, current[current.length - 1]);
+      const option = { value, label };
+      current.push(option);
+      byValue.set(value, option);
       changed = true;
     } else {
       const existing = byValue.get(value);
@@ -1293,8 +1297,10 @@ function cmpSemver(a?: string, b?: string): number {
     .map((x) => parseInt(x, 10));
   const len = Math.max(na.length, nb.length);
   for (let i = 0; i < len; i++) {
-    const va = Number.isFinite(na[i]) ? na[i] : 0;
-    const vb = Number.isFinite(nb[i]) ? nb[i] : 0;
+    const parsedA = na[i];
+    const parsedB = nb[i];
+    const va = typeof parsedA === 'number' && Number.isFinite(parsedA) ? parsedA : 0;
+    const vb = typeof parsedB === 'number' && Number.isFinite(parsedB) ? parsedB : 0;
     if (va < vb) return -1;
     if (va > vb) return 1;
   }

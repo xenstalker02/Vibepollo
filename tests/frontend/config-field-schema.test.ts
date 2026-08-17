@@ -28,4 +28,14 @@ describe('configFieldSchema', () => {
 
     expect(field.kind).toBe('checkbox');
   });
+
+  test('omits optional metadata when a plain input has none', () => {
+    const field = getConfigFieldDefinition('custom_text', {
+      ...baseContext,
+      currentValue: 'value',
+    });
+
+    expect('placeholder' in field).toBe(false);
+    expect('durationUnit' in field).toBe(false);
+  });
 });

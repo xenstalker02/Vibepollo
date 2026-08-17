@@ -123,6 +123,11 @@ const mergedNumberAttrs = computed(() => ({
   ...resolvedNumberProps.value,
   ...attrs,
 }));
+const mergedDurationAttrs = computed(() => ({
+  ...(resolvedMin.value !== undefined ? { min: resolvedMin.value } : {}),
+  ...(resolvedMax.value !== undefined ? { max: resolvedMax.value } : {}),
+  ...attrs,
+}));
 
 const stringModel = computed<string>({
   get() {
@@ -230,9 +235,7 @@ const switchModel = computed<boolean>({
     :label="resolvedLabel"
     :desc="resolvedDesc"
     :size="resolvedSize"
-    :min="resolvedMin"
-    :max="resolvedMax"
-    v-bind="attrs"
+    v-bind="mergedDurationAttrs"
   >
     <template #actions><slot name="actions" /></template>
     <template #meta><slot name="meta" /></template>

@@ -221,13 +221,13 @@ function selectVirtualDisplayLayout(v: unknown) {
 
         <ConfigFieldRenderer
           setting-key="mic_buffer_ms"
-          v-model="config.mic_buffer_ms"
+          v-model="config['mic_buffer_ms']"
           class="mb-3"
         />
 
         <ConfigFieldRenderer
           setting-key="mic_buffer_packets"
-          v-model="config.mic_buffer_packets"
+          v-model="config['mic_buffer_packets']"
           class="mb-6"
         />
       </template>

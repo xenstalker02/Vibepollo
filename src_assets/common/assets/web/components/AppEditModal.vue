@@ -191,42 +191,7 @@
                 filterable
                 clearable
                 @focus="onDisplaySelectFocus"
-              >
-                <template #option="{ option }">
-                  <div class="leading-tight">
-                    <div class="">{{ option?.displayName || option?.label }}</div>
-                    <div class="text-[12px] opacity-60 font-mono">
-                      {{ option?.id || option?.value }}
-                      <span
-                        v-if="option?.active === true"
-                        class="ml-1 text-green-600 dark:text-green-400"
-                      >
-                        ({{ t('config.app_display_status_active') }})
-                      </span>
-                      <span v-else-if="option?.active === false" class="ml-1 opacity-70">
-                        ({{ t('config.app_display_status_inactive') }})
-                      </span>
-                    </div>
-                  </div>
-                </template>
-                <template #value="{ option }">
-                  <div class="leading-tight">
-                    <div class="">{{ option?.displayName || option?.label }}</div>
-                    <div class="text-[12px] opacity-60 font-mono">
-                      {{ option?.id || option?.value }}
-                      <span
-                        v-if="option?.active === true"
-                        class="ml-1 text-green-600 dark:text-green-400"
-                      >
-                        ({{ t('config.app_display_status_active') }})
-                      </span>
-                      <span v-else-if="option?.active === false" class="ml-1 opacity-70">
-                        ({{ t('config.app_display_status_inactive') }})
-                      </span>
-                    </div>
-                  </div>
-                </template>
-              </n-select>
+              />
               <div class="text-[11px] opacity-70">
                 <span v-if="displayDevicesError" class="text-red-500">{{
                   displayDevicesError
@@ -574,7 +539,6 @@ const { t } = useI18n();
 function fresh(): AppForm {
   return {
     index: -1,
-    uuid: undefined,
     name: '',
     cmd: '',
     workingDir: '',
@@ -787,7 +751,7 @@ function fromServerApp(src?: ServerApp | null, idx: number = -1): AppForm {
   );
   return {
     index: idx,
-    uuid: typeof src.uuid === 'string' ? src.uuid : undefined,
+    ...(typeof src.uuid === 'string' ? { uuid: src.uuid } : {}),
     name: String(src.name ?? ''),
     output: rawOutput,
     cmd: String(cmdStr ?? ''),
@@ -828,8 +792,12 @@ function fromServerApp(src?: ServerApp | null, idx: number = -1): AppForm {
     virtualScreen,
     gen1FramegenFix: captureFixEnabled,
     gen2FramegenFix: false,
-    playniteId: src['playnite-id'] || undefined,
-    playniteManaged: src['playnite-managed'] || undefined,
+    ...(typeof src['playnite-id'] === 'string' && src['playnite-id']
+      ? { playniteId: src['playnite-id'] }
+      : {}),
+    ...(typeof src['playnite-managed'] === 'string' && src['playnite-managed']
+      ? { playniteManaged: src['playnite-managed'] }
+      : {}),
     frameGenerationProvider,
     frameGenerationMode,
     losslessScalingEnabled: lsEnabled,
@@ -1792,7 +1760,7 @@ const displayDeviceOptions = computed(() => {
     value: string;
     displayName?: string;
     id?: string;
-    active?: boolean;
+    active: boolean | null;
   }> = [];
   const seen = new Set<string>();
   for (const d of displayDevices.value) {
@@ -2176,7 +2144,7 @@ async function refreshFrameGenHealth(options: FrameGenHealthOptions = {}): Promi
                 (target as any)?.supported_refresh_rates ?? (target as any)?.supportedRefreshRates;
               const supportedRates = parseRefreshList(supportedRatesRaw);
               const highestSupportedDxgi =
-                supportedRates.length > 0 ? supportedRates[supportedRates.length - 1] : null;
+                supportedRates.length > 0 ? (supportedRates[supportedRates.length - 1] ?? null) : null;
 
               try {
                 const deviceHint = displayId || displayLabel;
@@ -2269,7 +2237,7 @@ async function refreshFrameGenHealth(options: FrameGenHealthOptions = {}): Promi
               const hasActive = activeRefresh !== null;
               const deltaSupported =
                 highestSupported !== null &&
-                hasActive &&
+                activeRefresh !== null &&
                 Math.abs(highestSupported - activeRefresh) > tolerance;
               if (!displayError && edidFetchError) {
                 displayError = edidFetchError;
@@ -2380,9 +2348,8 @@ async function refreshFrameGenHealth(options: FrameGenHealthOptions = {}): Promi
           targets: displayTargets,
           virtualActive: usingVirtual,
           message: displayMessage,
-          error: displayError,
+          ...(displayError !== null ? { error: displayError } : {}),
         },
-        suggestion: undefined,
       };
 
       if (highestFailUnder144 !== null) {
@@ -2530,8 +2497,8 @@ function unlockPlaynite() {
 // When switching to custom source, clear Playnite-specific markers
 watch(newAppSource, (v) => {
   if (v === 'custom') {
-    form.value.playniteId = undefined;
-    form.value.playniteManaged = undefined;
+    delete form.value.playniteId;
+    delete form.value.playniteManaged;
     lockPlaynite.value = false;
     selectedPlayniteId.value = '';
   }
@@ -2734,15 +2701,15 @@ function onNamePicked(val: string | null) {
   if (!v) {
     nameSelectValue.value = '';
     form.value.name = '';
-    form.value.playniteId = undefined;
-    form.value.playniteManaged = undefined;
+    delete form.value.playniteId;
+    delete form.value.playniteManaged;
     return;
   }
   if (v.startsWith('__custom__:')) {
     const name = v.substring('__custom__:'.length).trim();
     form.value.name = name;
-    form.value.playniteId = undefined;
-    form.value.playniteManaged = undefined;
+    delete form.value.playniteId;
+    delete form.value.playniteManaged;
     return;
   }
   const opt = playniteOptions.value.find((o) => o.value === v);
