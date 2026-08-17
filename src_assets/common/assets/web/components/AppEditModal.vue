@@ -480,6 +480,7 @@ import {
   NRadio,
   NSelect,
   type SelectOption,
+  type SelectRenderOption,
 } from 'naive-ui';
 import { useConfigStore } from '@/stores/config';
 import { useI18n } from 'vue-i18n';
@@ -1833,7 +1834,7 @@ function renderDisplayDeviceLabel(option: SelectOption) {
   return h('span', device.displayName || String(device.label || device.value || 'Display'));
 }
 
-function renderDisplayDeviceOption(option: SelectOption) {
+const renderDisplayDeviceOption: SelectRenderOption = ({ option }) => {
   const device = option as DisplayDeviceOption;
   const label = device.displayName || String(device.label || device.value || 'Display');
   const status = device.active === null ? '' : device.active ? 'Active' : 'Inactive';
@@ -1845,7 +1846,7 @@ function renderDisplayDeviceOption(option: SelectOption) {
       [device.id || '', status].filter(Boolean).join(' · '),
     ),
   ]);
-}
+};
 
 function onDisplaySelectFocus() {
   if (!displayDevicesLoading.value && displayDevices.value.length === 0) {
