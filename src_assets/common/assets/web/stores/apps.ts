@@ -18,8 +18,6 @@ export interface App {
   'exclude-global-prep-cmd'?: boolean;
   'exclude-global-state-cmd'?: boolean;
   'config-overrides'?: Record<string, unknown>;
-  'exclude-global-state-cmd'?: boolean;
-  'config-overrides'?: Record<string, unknown>;
   elevated?: boolean;
   'auto-detach'?: boolean;
   'wait-all'?: boolean;
@@ -46,12 +44,15 @@ export interface App {
   'lossless-scaling-custom'?: Record<string, unknown>;
   'lossless-scaling-launch-delay'?: number;
   // Fallback for any other server fields we don't model yet
-  [key: string]: any;
+  [key: string]: unknown;
 }
+
+const NULL_VALUE = null;
+type NullValue = typeof NULL_VALUE;
 
 interface AppsResponse {
   apps?: App[];
-  current_app?: string | null;
+  current_app?: string | NullValue;
   host_uuid?: string;
   host_name?: string;
 }
@@ -59,7 +60,7 @@ interface AppsResponse {
 // Centralized store for applications list
 export const useAppsStore = defineStore('apps', () => {
   const apps: Ref<App[]> = ref([]);
-  const currentAppUuid: Ref<string | null> = ref(null);
+  const currentAppUuid: Ref<string | NullValue> = ref(null);
 
   function setApps(list: App[]): void {
     apps.value = Array.isArray(list) ? list : [];
@@ -142,7 +143,10 @@ export const useAppsStore = defineStore('apps', () => {
         error: reason || `Request failed (${response.status})`,
       };
     } catch (err) {
-      const code = (err as { code?: string } | null)?.code;
+      const code =
+        typeof err === 'object' && err !== null && 'code' in err && typeof err.code === 'string'
+          ? err.code
+          : undefined;
       if (code === 'ERR_CANCELED') {
         return { ok: false, canceled: true };
       }

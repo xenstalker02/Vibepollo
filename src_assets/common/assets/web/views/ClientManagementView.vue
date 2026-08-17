@@ -345,10 +345,10 @@
                   <div class="space-y-2">
                     <n-radio-group
                       :value="client.editDisplaySelection"
+                      class="grid gap-3 sm:grid-cols-2"
                       @update:value="
                         (v) => applyClientDisplaySelection(client, v as ClientDisplaySelection)
                       "
-                      class="grid gap-3 sm:grid-cols-2"
                     >
                       <n-radio value="virtual" class="app-radio-card cursor-pointer">
                         <span class="app-radio-card-title">{{
@@ -396,34 +396,10 @@
                           active: null,
                         })
                       "
+                      :render-label="renderDisplayLabel"
+                      :render-option="renderDisplayOption"
                       @focus="ensureDisplayDevicesLoaded"
-                    >
-                      <template #option="{ option }">
-                        <div class="leading-tight">
-                          <div class="">{{ option?.displayName || option?.label }}</div>
-                          <div class="text-[12px] opacity-60 font-mono">
-                            {{ option?.id || option?.value }}
-                            <span
-                              v-if="option?.active === true"
-                              class="ml-1 text-green-600 dark:text-green-400"
-                            >
-                              ({{ t('config.app_display_status_active') }})
-                            </span>
-                            <span v-else-if="option?.active === false" class="ml-1 opacity-70">
-                              ({{ t('config.app_display_status_inactive') }})
-                            </span>
-                          </div>
-                        </div>
-                      </template>
-                      <template #value="{ option }">
-                        <div class="leading-tight">
-                          <div class="">{{ option?.displayName || option?.label }}</div>
-                          <div class="text-[12px] opacity-60 font-mono">
-                            {{ option?.id || option?.value }}
-                          </div>
-                        </div>
-                      </template>
-                    </n-select>
+                    />
                     <div class="text-[11px] opacity-70">
                       <span v-if="displayDevicesError" class="text-red-500">{{
                         displayDevicesError
@@ -486,17 +462,14 @@
                           globalVirtualDisplayLayout ??
                           'exclusive'
                         "
-                        @update:value="
-                          (v) =>
-                            (client.editVirtualDisplayLayout =
-                              v === globalVirtualDisplayLayout ? null : (v as any))
-                        "
                         class="space-y-4"
+                        @update:value="(value) => updateVirtualDisplayLayout(client, value)"
                       >
                         <div
                           v-for="option in virtualDisplayLayoutOptions"
                           :key="option.value"
                           class="flex flex-col cursor-pointer py-2 px-2 rounded-md hover:bg-surface/10"
+                          tabindex="0"
                           @click="
                             client.editVirtualDisplayLayout =
                               option.value === globalVirtualDisplayLayout ? null : option.value
@@ -509,7 +482,6 @@
                             client.editVirtualDisplayLayout =
                               option.value === globalVirtualDisplayLayout ? null : option.value
                           "
-                          tabindex="0"
                         >
                           <div class="flex items-center gap-3">
                             <n-radio :value="option.value" />
@@ -638,7 +610,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, h, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { http } from '@/http';
 import {
@@ -654,6 +626,8 @@ import {
   NRadioGroup,
   NSelect,
   NTag,
+  type SelectRenderLabel,
+  type SelectRenderOption,
   useMessage,
 } from 'naive-ui';
 import ApiTokenManager from '@/ApiTokenManager.vue';
@@ -662,16 +636,18 @@ import AppEditConfigOverridesSection from '@/components/app-edit/AppEditConfigOv
 import { useAuthStore } from '@/stores/auth';
 import { useConfigStore } from '@/stores/config';
 
+const NULL_VALUE = null;
+type NullValue = typeof NULL_VALUE;
 type ClientDisplaySelection = 'physical' | 'virtual';
-type ClientVirtualDisplayMode = 'disabled' | 'per_client' | 'shared' | 'global' | null;
+type ClientVirtualDisplayMode = 'disabled' | 'per_client' | 'shared' | 'global' | NullValue;
 type ClientVirtualDisplayLayout =
   | 'exclusive'
   | 'extended'
   | 'extended_primary'
   | 'extended_isolated'
   | 'extended_primary_isolated'
-  | null;
-type ClientPrefer10BitSdrOverride = 'enabled' | 'disabled' | null;
+  | NullValue;
+type ClientPrefer10BitSdrOverride = 'enabled' | 'disabled' | NullValue;
 type ClientSortMode = 'recent' | 'name';
 
 type PermissionToggleKey =
@@ -754,7 +730,7 @@ interface ClientApiEntry {
   uuid?: string;
   name?: string;
   connected?: boolean;
-  last_seen?: number | string | null;
+  last_seen?: number | string | NullValue;
   perm?: number | string;
   hdr_profile?: string;
   display_mode?: string;
@@ -762,8 +738,8 @@ interface ClientApiEntry {
   always_use_virtual_display?: boolean | string | number;
   virtual_display_mode?: string;
   virtual_display_layout?: string;
-  prefer_10bit_sdr?: boolean | string | number | null;
-  config_overrides?: Record<string, unknown> | null;
+  prefer_10bit_sdr?: boolean | string | number | NullValue;
+  config_overrides?: Record<string, unknown> | NullValue;
   allow_client_commands?: boolean | string | number;
   do?: unknown;
   undo?: unknown;
@@ -773,6 +749,27 @@ interface ClientsListResponse {
   status: boolean;
   named_certs: ClientApiEntry[];
   platform?: string;
+}
+
+interface StatusResponse {
+  status?: boolean | string | number;
+}
+
+interface ClientUpdatePayload {
+  uuid: string;
+  name: string;
+  hdr_profile: string;
+  display_mode: string;
+  perm: number;
+  allow_client_commands: boolean;
+  do: ClientCommandEntry[];
+  undo: ClientCommandEntry[];
+  output_name_override: string;
+  always_use_virtual_display: boolean;
+  virtual_display_mode: string;
+  virtual_display_layout: string;
+  config_overrides: Record<string, unknown>;
+  prefer_10bit_sdr?: boolean;
 }
 
 interface HdrProfileEntry {
@@ -790,7 +787,7 @@ interface ClientViewModel {
   uuid: string;
   name: string;
   connected: boolean;
-  lastSeen: number | null;
+  lastSeen: number | NullValue;
   perm: number;
   hdrProfile: string;
   displayMode: string;
@@ -805,13 +802,13 @@ interface ClientViewModel {
   undoCommands: ClientCommandEntry[];
 
   editing: boolean;
-  editHdrProfile: string | null;
+  editHdrProfile: string;
   editName: string;
   editDisplayMode: string;
   editPerm: number;
   editDisplayOverrideEnabled: boolean;
   editDisplaySelection: ClientDisplaySelection;
-  editPhysicalOutputOverride: string | null;
+  editPhysicalOutputOverride: string | NullValue;
   editVirtualDisplayMode: ClientVirtualDisplayMode;
   editVirtualDisplayLayout: ClientVirtualDisplayLayout;
   editPrefer10BitSdr: ClientPrefer10BitSdrOverride;
@@ -837,7 +834,7 @@ const { t } = useI18n();
 const message = useMessage();
 const configStore = useConfigStore();
 const globalPrefer10BitSdr = computed<boolean>(() =>
-  toBool((configStore.config as any)?.prefer_10bit_sdr, false),
+  toBool(configStore.config['prefer_10bit_sdr'], false),
 );
 const prefer10BitSdrOptions = computed(() => [
   { label: t('_common.enabled'), value: 'enabled' },
@@ -851,14 +848,14 @@ const clientSortMode = ref<ClientSortMode>('recent');
 const pin = ref<string>('');
 const deviceName = ref<string>('');
 const pairing = ref<boolean>(false);
-const pairStatus = ref<boolean | null>(null);
+const pairStatus = ref<boolean | NullValue>(null);
 
 const unpairAllPressed = ref<boolean>(false);
-const unpairAllStatus = ref<boolean | null>(null);
+const unpairAllStatus = ref<boolean | NullValue>(null);
 const removing = ref<Record<string, boolean>>({});
 const saving = ref<Record<string, boolean>>({});
 const disconnecting = ref<Record<string, boolean>>({});
-let refreshIntervalId: ReturnType<typeof setInterval> | null = null;
+let refreshIntervalId: ReturnType<typeof setInterval> | NullValue = null;
 
 const showConfirmRemove = ref<boolean>(false);
 const pendingRemoveUuid = ref<string>('');
@@ -868,7 +865,7 @@ const showConfirmUnpairAll = ref<boolean>(false);
 const isWindows = computed(() => {
   const p = (platform.value || '').toLowerCase();
   if (p) return p.startsWith('win') || p === 'windows';
-  const meta = String((configStore.metadata as any)?.platform || '').toLowerCase();
+  const meta = String(configStore.metadata?.platform || '').toLowerCase();
   return meta === 'windows' || meta.startsWith('win');
 });
 
@@ -882,6 +879,43 @@ function toBool(value: unknown, fallback = false): boolean {
   }
   return fallback;
 }
+
+type RenderSelectOption = Parameters<SelectRenderLabel>[0];
+
+function displaySelectOption(option: RenderSelectOption) {
+  const value = 'value' in option ? option.value : '';
+  const displayName =
+    typeof option['displayName'] === 'string'
+      ? option['displayName']
+      : typeof option.label === 'string'
+        ? option.label
+        : String(value);
+  const id = typeof option['id'] === 'string' ? option['id'] : String(value);
+  const active = typeof option['active'] === 'boolean' ? option['active'] : null;
+  return { displayName, id, active };
+}
+
+const renderDisplayLabel: SelectRenderLabel = (option) => {
+  const display = displaySelectOption(option);
+  return h('div', { class: 'leading-tight' }, [
+    h('div', display.displayName),
+    h('div', { class: 'text-[12px] opacity-60 font-mono' }, display.id),
+  ]);
+};
+
+const renderDisplayOption: SelectRenderOption = ({ option }) => {
+  const display = displaySelectOption(option);
+  const status =
+    display.active === null
+      ? ''
+      : display.active
+        ? ` (${t('config.app_display_status_active')})`
+        : ` (${t('config.app_display_status_inactive')})`;
+  return h('div', { class: 'leading-tight' }, [
+    h('div', display.displayName),
+    h('div', { class: 'text-[12px] opacity-60 font-mono' }, [display.id, status]),
+  ]);
+};
 
 function permToStr(perm: number): string {
   const segments = [];
@@ -912,8 +946,7 @@ function parseClientVirtualDisplayMode(value: unknown): ClientVirtualDisplayMode
     .trim()
     .toLowerCase();
   if (!v) return null;
-  if (v === 'disabled' || v === 'per_client' || v === 'shared' || v === 'global')
-    return v as ClientVirtualDisplayMode;
+  if (v === 'disabled' || v === 'per_client' || v === 'shared' || v === 'global') return v;
   return null;
 }
 
@@ -929,11 +962,16 @@ function parseClientVirtualDisplayLayout(value: unknown): ClientVirtualDisplayLa
     v === 'extended_isolated' ||
     v === 'extended_primary_isolated'
   )
-    return v as ClientVirtualDisplayLayout;
+    return v;
   return null;
 }
 
-function parseLastSeen(value: unknown): number | null {
+function updateVirtualDisplayLayout(client: ClientViewModel, value: unknown): void {
+  const layout = parseClientVirtualDisplayLayout(value);
+  client.editVirtualDisplayLayout = layout === globalVirtualDisplayLayout.value ? null : layout;
+}
+
+function parseLastSeen(value: unknown): number | NullValue {
   if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value;
   if (typeof value === 'string') {
     const n = Number(value);
@@ -942,17 +980,17 @@ function parseLastSeen(value: unknown): number | null {
   return null;
 }
 
-function normalizeClientCommandEntry(value: unknown): ClientCommandEntry | null {
+function normalizeClientCommandEntry(value: unknown): ClientCommandEntry | NullValue {
   if (typeof value === 'string') {
     return { cmd: value, elevated: false };
   }
   if (!value || typeof value !== 'object') return null;
   const obj = value as Record<string, unknown>;
-  const cmd = String(obj.cmd ?? '').trim();
+  const cmd = String(obj['cmd'] ?? '').trim();
   if (!cmd) return null;
   return {
     cmd,
-    elevated: toBool(obj.elevated, false),
+    elevated: toBool(obj['elevated'], false),
   };
 }
 
@@ -961,6 +999,11 @@ function normalizeClientCommandList(value: unknown): ClientCommandEntry[] {
   return value
     .map((entry) => normalizeClientCommandEntry(entry))
     .filter((entry): entry is ClientCommandEntry => !!entry);
+}
+
+function cloneJson<T>(value: T): T {
+  const parsed: unknown = JSON.parse(JSON.stringify(value));
+  return parsed as T;
 }
 
 function createClientViewModel(entry: ClientApiEntry): ClientViewModel {
@@ -978,7 +1021,7 @@ function createClientViewModel(entry: ClientApiEntry): ClientViewModel {
     entry.config_overrides &&
     typeof entry.config_overrides === 'object' &&
     !Array.isArray(entry.config_overrides)
-      ? JSON.parse(JSON.stringify(entry.config_overrides))
+      ? cloneJson(entry.config_overrides)
       : {};
   const prefer10: ClientPrefer10BitSdrOverride =
     entry.prefer_10bit_sdr === undefined || entry.prefer_10bit_sdr === null
@@ -1013,7 +1056,7 @@ function createClientViewModel(entry: ClientApiEntry): ClientViewModel {
     doCommands,
     undoCommands,
     editing: false,
-    editHdrProfile: hdrProfile || null,
+    editHdrProfile: hdrProfile,
     editName: name,
     editDisplayMode: displayMode,
     editPerm: perm,
@@ -1023,10 +1066,10 @@ function createClientViewModel(entry: ClientApiEntry): ClientViewModel {
     editVirtualDisplayMode: virtualMode,
     editVirtualDisplayLayout: virtualLayout,
     editPrefer10BitSdr: prefer10,
-    editConfigOverrides: JSON.parse(JSON.stringify(configOverrides)),
+    editConfigOverrides: cloneJson(configOverrides),
     editAllowClientCommands: allowClientCommands,
-    editDoCommands: JSON.parse(JSON.stringify(doCommands)),
-    editUndoCommands: JSON.parse(JSON.stringify(undoCommands)),
+    editDoCommands: cloneJson(doCommands),
+    editUndoCommands: cloneJson(undoCommands),
   };
 
   if (client.editDisplayOverrideEnabled) {
@@ -1038,7 +1081,7 @@ function createClientViewModel(entry: ClientApiEntry): ClientViewModel {
 
 function resetClientEdits(client: ClientViewModel): void {
   client.editName = client.name;
-  client.editHdrProfile = (client.hdrProfile || '').trim() || null;
+  client.editHdrProfile = (client.hdrProfile || '').trim();
   client.editDisplayMode = client.displayMode;
   client.editPerm = client.perm;
   client.editDisplayOverrideEnabled =
@@ -1055,10 +1098,10 @@ function resetClientEdits(client: ClientViewModel): void {
   client.editVirtualDisplayMode = client.virtualDisplayMode;
   client.editVirtualDisplayLayout = client.virtualDisplayLayout;
   client.editPrefer10BitSdr = client.prefer10BitSdr;
-  client.editConfigOverrides = JSON.parse(JSON.stringify(client.configOverrides || {}));
+  client.editConfigOverrides = cloneJson(client.configOverrides || {});
   client.editAllowClientCommands = client.allowClientCommands;
-  client.editDoCommands = JSON.parse(JSON.stringify(client.doCommands || []));
-  client.editUndoCommands = JSON.parse(JSON.stringify(client.undoCommands || []));
+  client.editDoCommands = cloneJson(client.doCommands || []);
+  client.editUndoCommands = cloneJson(client.undoCommands || []);
 
   if (client.editDisplayOverrideEnabled) {
     applyClientDisplaySelection(client, client.editDisplaySelection);
@@ -1089,11 +1132,11 @@ const virtualDisplayModeOptions = computed(() => [
 ]);
 
 const globalVirtualDisplayLayout = computed<ClientVirtualDisplayLayout>(() =>
-  parseClientVirtualDisplayLayout((configStore.config as any)?.virtual_display_layout),
+  parseClientVirtualDisplayLayout(configStore.config['virtual_display_layout']),
 );
 
 const virtualDisplayLayoutOptions = computed(() => {
-  const values: Array<Exclude<ClientVirtualDisplayLayout, null>> = [
+  const values: Array<NonNullable<ClientVirtualDisplayLayout>> = [
     'exclusive',
     'extended',
     'extended_primary',
@@ -1110,8 +1153,8 @@ const hdrProfilesError = ref('');
 const hdrProfileOptions = computed(() => {
   const list = Array.isArray(hdrProfiles.value) ? [...hdrProfiles.value] : [];
   list.sort((a, b) => (Number(b.added_ms || 0) || 0) - (Number(a.added_ms || 0) || 0));
-  const options: Array<{ label: string; value: string | null }> = [
-    { label: t('clients.hdr_profile_auto'), value: null },
+  const options: Array<{ label: string; value: string }> = [
+    { label: t('clients.hdr_profile_auto'), value: '' },
   ];
   for (const p of list) {
     const filename = String(p?.filename || '').trim();
@@ -1129,7 +1172,7 @@ async function loadHdrProfiles(): Promise<void> {
     const r = await http.get<HdrProfilesResponse>('./api/clients/hdr-profiles', {
       validateStatus: () => true,
     });
-    const response = r.data || ({} as HdrProfilesResponse);
+    const response: HdrProfilesResponse = r.data ?? {};
     const ok =
       r.status >= 200 &&
       r.status < 300 &&
@@ -1141,9 +1184,10 @@ async function loadHdrProfiles(): Promise<void> {
       return;
     }
     hdrProfiles.value = response.profiles || [];
-  } catch (e: any) {
+  } catch (error: unknown) {
     hdrProfiles.value = [];
-    hdrProfilesError.value = e?.message || t('clients.hdr_profile_load_failed');
+    hdrProfilesError.value =
+      (error instanceof Error ? error.message : '') || t('clients.hdr_profile_load_failed');
   } finally {
     hdrProfilesLoading.value = false;
   }
@@ -1211,7 +1255,7 @@ async function refreshClients(): Promise<void> {
     const r = await http.get<ClientsListResponse>('./api/clients/list', {
       validateStatus: () => true,
     });
-    const response = r.data || ({} as ClientsListResponse);
+    const response: ClientsListResponse = r.data ?? { status: false, named_certs: [] };
     if (typeof response.platform === 'string') {
       platform.value = response.platform;
     }
@@ -1290,7 +1334,9 @@ async function registerDevice(): Promise<void> {
   try {
     const trimmedName = deviceName.value.trim();
     const body = { pin: pin.value.trim(), name: trimmedName };
-    const r = await http.post('./api/pin', body, { validateStatus: () => true });
+    const r = await http.post<StatusResponse>('./api/pin', body, {
+      validateStatus: () => true,
+    });
     const ok =
       r &&
       r.status >= 200 &&
@@ -1342,10 +1388,11 @@ async function unpairSingle(uuid: string): Promise<void> {
   try {
     await http.post('./api/clients/unpair', { uuid }, { validateStatus: () => true });
   } catch {
+    // Refresh below reconciles the current server state.
   } finally {
     delete removing.value[uuid];
     removing.value = { ...removing.value };
-    refreshClients();
+    void refreshClients();
   }
 }
 
@@ -1361,7 +1408,13 @@ async function confirmUnpairAll(): Promise<void> {
 async function unpairAll(): Promise<void> {
   unpairAllPressed.value = true;
   try {
-    const r = await http.post('./api/clients/unpair-all', {}, { validateStatus: () => true });
+    const r = await http.post<StatusResponse>(
+      './api/clients/unpair-all',
+      {},
+      {
+        validateStatus: () => true,
+      },
+    );
     unpairAllStatus.value = r.data?.status === true;
   } catch {
     unpairAllStatus.value = false;
@@ -1370,7 +1423,7 @@ async function unpairAll(): Promise<void> {
     setTimeout(() => {
       unpairAllStatus.value = null;
     }, 5000);
-    refreshClients();
+    void refreshClients();
   }
 }
 
@@ -1396,7 +1449,7 @@ async function saveClient(client: ClientViewModel): Promise<void> {
   if (saving.value[client.uuid]) return;
   saving.value = { ...saving.value, [client.uuid]: true };
   try {
-    const payload: any = {
+    const payload: ClientUpdatePayload = {
       uuid: client.uuid,
       name: (client.editName || '').trim(),
       hdr_profile: String(client.editHdrProfile ?? '').trim(),
@@ -1421,6 +1474,11 @@ async function saveClient(client: ClientViewModel): Promise<void> {
         });
         return result;
       }, []),
+      output_name_override: '',
+      always_use_virtual_display: false,
+      virtual_display_mode: '',
+      virtual_display_layout: '',
+      config_overrides: {},
     };
 
     if (!client.editDisplayOverrideEnabled) {
@@ -1465,7 +1523,9 @@ async function saveClient(client: ClientViewModel): Promise<void> {
     }
     payload.hdr_profile = String(client.editHdrProfile ?? '').trim();
 
-    const r = await http.post('./api/clients/update', payload, { validateStatus: () => true });
+    const r = await http.post<StatusResponse>('./api/clients/update', payload, {
+      validateStatus: () => true,
+    });
     const ok = r && r.status >= 200 && r.status < 300 && r.data?.status === true;
     if (!ok) {
       message.error(t('clients.update_failed'));
@@ -1482,8 +1542,8 @@ async function saveClient(client: ClientViewModel): Promise<void> {
     client.virtualDisplayLayout = parseClientVirtualDisplayLayout(payload.virtual_display_layout);
     client.hdrProfile = payload.hdr_profile || '';
     client.allowClientCommands = payload.allow_client_commands;
-    client.doCommands = JSON.parse(JSON.stringify(payload.do || []));
-    client.undoCommands = JSON.parse(JSON.stringify(payload.undo || []));
+    client.doCommands = cloneJson(payload.do || []);
+    client.undoCommands = cloneJson(payload.undo || []);
     client.prefer10BitSdr =
       payload.prefer_10bit_sdr === undefined
         ? null
@@ -1494,18 +1554,18 @@ async function saveClient(client: ClientViewModel): Promise<void> {
       payload.config_overrides &&
       typeof payload.config_overrides === 'object' &&
       !Array.isArray(payload.config_overrides)
-        ? JSON.parse(JSON.stringify(payload.config_overrides))
+        ? cloneJson(payload.config_overrides)
         : {};
 
     resetClientEdits(client);
     client.editing = false;
     message.success(t('clients.update_success'));
-  } catch (e: any) {
-    message.error(e?.message || t('clients.update_failed'));
+  } catch (error: unknown) {
+    message.error((error instanceof Error ? error.message : '') || t('clients.update_failed'));
   } finally {
     delete saving.value[client.uuid];
     saving.value = { ...saving.value };
-    refreshClients();
+    void refreshClients();
   }
 }
 
@@ -1513,7 +1573,7 @@ async function disconnectClient(client: ClientViewModel): Promise<void> {
   if (disconnecting.value[client.uuid]) return;
   disconnecting.value = { ...disconnecting.value, [client.uuid]: true };
   try {
-    const r = await http.post(
+    const r = await http.post<StatusResponse>(
       './api/clients/disconnect',
       { uuid: client.uuid },
       { validateStatus: () => true },
@@ -1524,12 +1584,12 @@ async function disconnectClient(client: ClientViewModel): Promise<void> {
       return;
     }
     message.success(t('clients.disconnect_success'));
-  } catch (e: any) {
-    message.error(e?.message || t('clients.disconnect_failed'));
+  } catch (error: unknown) {
+    message.error((error instanceof Error ? error.message : '') || t('clients.disconnect_failed'));
   } finally {
     delete disconnecting.value[client.uuid];
     disconnecting.value = { ...disconnecting.value };
-    refreshClients();
+    void refreshClients();
   }
 }
 
@@ -1546,8 +1606,9 @@ async function loadDisplayDevices(): Promise<void> {
       params: { detail: 'full' },
     });
     displayDevices.value = Array.isArray(res.data) ? res.data : [];
-  } catch (e: any) {
-    displayDevicesError.value = e?.message || 'Failed to load display devices';
+  } catch (error: unknown) {
+    displayDevicesError.value =
+      (error instanceof Error ? error.message : '') || 'Failed to load display devices';
     displayDevices.value = [];
   } finally {
     displayDevicesLoading.value = false;
@@ -1567,17 +1628,17 @@ const displayDeviceOptions = computed(() => {
     value: string;
     displayName: string;
     id: string;
-    active: boolean | null;
+    active: boolean | NullValue;
   }> = [];
   const seen = new Set<string>();
   for (const d of displayDevices.value) {
     const value = d.device_id || d.display_name || '';
     if (!value || seen.has(value)) continue;
     const displayName = d.friendly_name || d.display_name || 'Display';
-    const info = d.info as any;
-    let active: boolean | null = null;
+    const info = d.info;
+    let active: boolean | NullValue = null;
     if (info && typeof info === 'object' && 'active' in info) {
-      active = !!(info as any).active;
+      active = Boolean(info.active);
     } else if (info) {
       active = true;
     }

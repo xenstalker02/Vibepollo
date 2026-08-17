@@ -13,29 +13,23 @@ export interface InputCaptureMetrics {
 }
 
 interface InputCaptureOptions {
-  video?: HTMLVideoElement | null;
+  video?: HTMLVideoElement | NullValue;
   onMetrics?: (metrics: InputCaptureMetrics) => void;
   gamepad?: boolean;
   shouldDrop?: (payload: InputMessage) => boolean;
 }
 
-const WHEEL_STEP_PIXELS = 120;
-const SYSTEM_KEY_CODES = [
-  'AltLeft',
-  'AltRight',
-  'ControlLeft',
-  'ControlRight',
-  'Escape',
-  'MetaLeft',
-  'MetaRight',
-  'Space',
-  'Tab',
-];
+const NULL_VALUE = null;
+type NullValue = typeof NULL_VALUE;
+type UndefinedValue = typeof undefined;
 
-function getKeyboardLockApi(): {
-  lock?: (keys?: string[]) => Promise<void>;
-  unlock?: () => void;
-} | null {
+const WHEEL_STEP_PIXELS = 120;
+function getKeyboardLockApi():
+  | {
+      lock?: (keys?: string[]) => Promise<void>;
+      unlock?: () => void;
+    }
+  | NullValue {
   if (typeof navigator === 'undefined') return null;
   const anyNavigator = navigator as Navigator & {
     keyboard?: { lock?: (keys?: string[]) => Promise<void>; unlock?: () => void };
@@ -43,7 +37,7 @@ function getKeyboardLockApi(): {
   return anyNavigator.keyboard ?? null;
 }
 
-let keyboardLockPending: Promise<boolean> | null = null;
+let keyboardLockPending: Promise<boolean> | NullValue = null;
 let keyboardLockActive = false;
 let keyboardLockHolders = 0;
 let keyboardLockPendingRequests = 0;
@@ -51,11 +45,7 @@ let keyboardLockPendingRequests = 0;
 export function requestKeyboardLock(keys?: string[]): Promise<boolean> {
   const keyboardLockApi = getKeyboardLockApi();
   if (!keyboardLockApi?.lock) return Promise.resolve(false);
-  if (
-    typeof window !== 'undefined' &&
-    'isSecureContext' in window &&
-    !(window as any).isSecureContext
-  ) {
+  if (typeof window !== 'undefined' && 'isSecureContext' in window && !window.isSecureContext) {
     return Promise.resolve(false);
   }
   if (keyboardLockActive) {
@@ -88,7 +78,7 @@ export function requestKeyboardLock(keys?: string[]): Promise<boolean> {
     },
   );
   keyboardLockPending = pending;
-  pending.finally(() => {
+  void pending.finally(() => {
     if (keyboardLockPending === pending) {
       keyboardLockPending = null;
     }
@@ -125,20 +115,20 @@ function modifiersFromEvent(event: KeyboardEvent | MouseEvent | WheelEvent | Poi
   };
 }
 
-function isEditableTarget(target: EventTarget | null): boolean {
-  if (!target || typeof target !== 'object') return false;
-  if (!(target as any).tagName) return false;
-  const el = target as HTMLElement;
+function isEditableTarget(target: EventTarget | NullValue): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const el = target;
   const tag = (el.tagName || '').toLowerCase();
   if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
-  if ((el as any).isContentEditable) return true;
+  if (el.isContentEditable) return true;
   return false;
 }
 
 function isFullscreenElement(element: HTMLElement): boolean {
   try {
+    const webkitDocument = document as Document & { webkitFullscreenElement?: Element };
     const fullscreenEl =
-      document.fullscreenElement ?? (document as any).webkitFullscreenElement ?? null;
+      document.fullscreenElement ?? webkitDocument.webkitFullscreenElement ?? null;
     return fullscreenEl === element;
   } catch {
     return false;
@@ -171,7 +161,7 @@ function isModifierCode(code: string): boolean {
 
 function resolveInputRect(
   element: HTMLElement,
-  video?: HTMLVideoElement | null,
+  video?: HTMLVideoElement | NullValue,
 ): { rect: DOMRect; contentRect: DOMRect } {
   const rect = element.getBoundingClientRect();
   if (!video || !video.videoWidth || !video.videoHeight || rect.width <= 0 || rect.height <= 0) {
@@ -205,7 +195,7 @@ function resolveInputRect(
 function normalizePoint(
   event: MouseEvent | WheelEvent | PointerEvent,
   element: HTMLElement,
-  video?: HTMLVideoElement | null,
+  video?: HTMLVideoElement | NullValue,
 ) {
   const { contentRect } = resolveInputRect(element, video);
   const x = contentRect.width ? (event.clientX - contentRect.left) / contentRect.width : 0;
@@ -405,7 +395,7 @@ function readGamepadState(gamepad: Gamepad, buttonMap: Map<number, number>): Gam
   };
 }
 
-function readMotionVector(value: unknown): GamepadVector | undefined {
+function readMotionVector(value: unknown) {
   if (!value || typeof value !== 'object') return undefined;
   const array = Array.isArray(value)
     ? value
@@ -415,12 +405,13 @@ function readMotionVector(value: unknown): GamepadVector | undefined {
   const y = Number(array[1]);
   const z = Number(array[2]);
   if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return undefined;
-  return [x, y, z];
+  const vector: GamepadVector = [x, y, z];
+  return vector;
 }
 
 function readGamepadMotion(gamepad: Gamepad): { gyro?: GamepadVector; accel?: GamepadVector } {
   const pose = (
-    gamepad as { pose?: { angularVelocity?: unknown; linearAcceleration?: unknown } | null }
+    gamepad as { pose?: { angularVelocity?: unknown; linearAcceleration?: unknown } | NullValue }
   ).pose;
   const motion = (
     gamepad as { motion?: { angularVelocity?: unknown; linearAcceleration?: unknown } }
@@ -432,10 +423,13 @@ function readGamepadMotion(gamepad: Gamepad): { gyro?: GamepadVector; accel?: Ga
   if (!source) return {};
   const gyro = readMotionVector(source.angularVelocity);
   const accel = readMotionVector(source.linearAcceleration);
-  return { gyro, accel };
+  return {
+    ...(gyro === undefined ? {} : { gyro }),
+    ...(accel === undefined ? {} : { accel }),
+  };
 }
 
-function motionChanged(previous: GamepadVector | undefined, next: GamepadVector): boolean {
+function motionChanged(previous: GamepadVector | UndefinedValue, next: GamepadVector): boolean {
   if (!previous) return true;
   return (
     Math.abs(previous[0] - next[0]) > MOTION_DIFF_THRESHOLD ||
@@ -444,7 +438,7 @@ function motionChanged(previous: GamepadVector | undefined, next: GamepadVector)
   );
 }
 
-function getHapticActuator(gamepad: Gamepad): GamepadHapticActuator | null {
+function getHapticActuator(gamepad: Gamepad) {
   const direct = (gamepad as { vibrationActuator?: GamepadHapticActuator }).vibrationActuator;
   if (direct?.playEffect) {
     return direct;
@@ -471,10 +465,11 @@ function setMotionRequest(id: number, motionType: number, enabled: boolean): voi
   motionRequestState.set(id, state);
 }
 
-function getGamepads(): (Gamepad | null)[] {
+function getGamepads(): Array<Gamepad | NullValue> {
   if (typeof navigator === 'undefined') return [];
-  const fallback = (navigator as Navigator & { webkitGetGamepads?: () => (Gamepad | null)[] })
-    .webkitGetGamepads;
+  const fallback = (
+    navigator as Navigator & { webkitGetGamepads?: () => Array<Gamepad | NullValue> }
+  ).webkitGetGamepads;
   const pads = navigator.getGamepads?.() ?? fallback?.() ?? [];
   return Array.isArray(pads) ? pads : Array.from(pads);
 }
@@ -484,7 +479,7 @@ function isGamepadConnected(gamepad: Gamepad): boolean {
   return true;
 }
 
-export function applyGamepadFeedback(message: GamepadFeedbackMessage | unknown): void {
+export function applyGamepadFeedback(message: unknown): void {
   if (!message || typeof message !== 'object') return;
   const payload = message as GamepadFeedbackMessage;
   if (payload.type !== 'gamepad_feedback') return;
@@ -536,7 +531,7 @@ export function attachInputCapture(
   const onMetrics = options.onMetrics;
   const gamepadEnabled = options.gamepad ?? true;
   const shouldDrop = options.shouldDrop;
-  let queuedMove: InputMessage | null = null;
+  let queuedMove: InputMessage | NullValue = null;
   let queuedMoveAt = 0;
   let rafId = 0;
   let mouseMoveSeq = 0;
@@ -550,7 +545,7 @@ export function attachInputCapture(
     gamepadEnabled &&
     typeof navigator !== 'undefined' &&
     (typeof navigator.getGamepads === 'function' ||
-      typeof (navigator as Navigator & { webkitGetGamepads?: () => (Gamepad | null)[] })
+      typeof (navigator as Navigator & { webkitGetGamepads?: () => Array<Gamepad | NullValue> })
         .webkitGetGamepads === 'function');
   const metrics: InputCaptureMetrics = {};
   let moveDelaySum = 0;
@@ -606,7 +601,11 @@ export function attachInputCapture(
     if (rateWindowMs >= 1000) {
       metrics.moveRateHz = Math.round((moveRateCount / rateWindowMs) * 1000);
       metrics.moveSendRateHz = Math.round((moveSendRateCount / rateWindowMs) * 1000);
-      metrics.moveCoalesceRatio = moveRateCount ? moveSendRateCount / moveRateCount : undefined;
+      if (moveRateCount) {
+        metrics.moveCoalesceRatio = moveSendRateCount / moveRateCount;
+      } else {
+        delete metrics.moveCoalesceRatio;
+      }
       moveRateWindowStart = now;
       moveRateCount = 0;
       moveSendRateCount = 0;

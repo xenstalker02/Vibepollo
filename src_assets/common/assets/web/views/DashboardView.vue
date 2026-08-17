@@ -14,7 +14,7 @@
           </p>
         </div>
         <div class="grid gap-2 sm:flex sm:flex-wrap sm:items-center shrink-0">
-          <RouterLink to="/settings" custom v-slot="{ navigate, href }">
+          <RouterLink v-slot="{ navigate, href }" to="/settings" custom>
             <a :href="href" @click="navigate">
               <n-button tag="span" type="primary" strong class="w-full justify-center sm:w-auto">
                 <i class="fas fa-sliders" />
@@ -22,7 +22,7 @@
               </n-button>
             </a>
           </RouterLink>
-          <RouterLink to="/applications" custom v-slot="{ navigate, href }">
+          <RouterLink v-slot="{ navigate, href }" to="/applications" custom>
             <a :href="href" @click="navigate">
               <n-button tag="span" type="default" strong class="w-full justify-center sm:w-auto">
                 <i class="fas fa-th" />
@@ -258,12 +258,12 @@
                 </div>
                 <div class="grid gap-2 sm:flex sm:flex-wrap sm:items-center shrink-0">
                   <RouterLink
+                    v-slot="{ navigate, href }"
                     :to="{
                       path: '/settings',
                       query: { sec: 'av', jump: 'dd_always_restore_from_golden' },
                     }"
                     custom
-                    v-slot="{ navigate, href }"
                   >
                     <a :href="href" @click="navigate">
                       <n-button
@@ -290,7 +290,12 @@
               :show-icon="true"
             >
               <div class="space-y-3">
-                <p class="text-sm leading-relaxed" v-html="$t('index.startup_errors')"></p>
+                <p class="text-sm leading-relaxed">
+                  <template v-for="(segment, index) in startupErrorSegments" :key="index">
+                    <strong v-if="segment.bold">{{ segment.text }}</strong>
+                    <template v-else>{{ segment.text }}</template>
+                  </template>
+                </p>
                 <ul class="list-disc pl-5 space-y-1 text-xs">
                   <li v-for="(v, i) in fancyLogs.filter((x) => x.level === 'Fatal')" :key="i">
                     {{ v.value }}
@@ -489,13 +494,17 @@ import VibepolloVersion, { GitHubRelease } from '@/sunshine_version';
 import { useConfigStore } from '@/stores/config';
 import { useAuthStore } from '@/stores/auth';
 import { useAppsStore } from '@/stores/apps';
+import type { App } from '@/stores/apps';
 import { http } from '@/http';
 import type { CrashDumpStatus } from '@/utils/crashDump';
 import { isCrashDumpEligible, sanitizeCrashDumpStatus } from '@/utils/crashDump';
 
 const installedVersion = ref<VibepolloVersion>(new VibepolloVersion('0.0.0'));
-const githubRelease = ref<GitHubRelease | null>(null);
-const preReleaseRelease = ref<GitHubRelease | null>(null);
+const NULL_VALUE = null;
+type NullValue = typeof NULL_VALUE;
+type DashboardRelease = GitHubRelease & { draft?: boolean };
+const githubRelease = ref<DashboardRelease | NullValue>(null);
+const preReleaseRelease = ref<DashboardRelease | NullValue>(null);
 
 const githubVersion = computed(() =>
   githubRelease.value
@@ -516,11 +525,11 @@ const branch = ref('');
 const commit = ref('');
 const installedIsPrerelease = ref(false);
 // ViGEm health
-const vigemInstalled = ref<boolean | null>(null);
+const vigemInstalled = ref<boolean | NullValue>(null);
 const vigemVersion = ref('');
 // Playnite extension status
 type PlayniteStatus = {
-  installed: boolean | null;
+  installed: boolean | NullValue;
   active: boolean;
   extensions_dir?: string;
   installed_version?: string;
@@ -529,16 +538,21 @@ type PlayniteStatus = {
 };
 type GoldenStatus = {
   exists?: boolean;
-  snapshot_version?: number | null;
+  snapshot_version?: number | NullValue;
   latest_snapshot_version?: number;
   has_layout?: boolean;
   needs_layout_upgrade?: boolean;
 };
-const playnite = ref<PlayniteStatus | null>(null);
+type PlayniteOperationResponse = {
+  status?: boolean;
+  error?: string;
+  message?: string;
+};
+const playnite = ref<PlayniteStatus | NullValue>(null);
 
-const crashDump = ref<CrashDumpStatus | null>(null);
+const crashDump = ref<CrashDumpStatus | NullValue>(null);
 const exportCrashPending = ref(false);
-const goldenStatus = ref<GoldenStatus | null>(null);
+const goldenStatus = ref<GoldenStatus | NullValue>(null);
 const resolvingPlaynitePluginIssue = ref(false);
 const purgingPlayniteApps = ref(false);
 
@@ -555,18 +569,60 @@ const translate = (key: string, fallback: string) => {
   return value === key ? fallback : value;
 };
 
+const startupErrorSegments = computed(() => {
+  const parts = String($t('index.startup_errors')).split(/(<\/?b>)/i);
+  let bold = false;
+  return parts.flatMap((part) => {
+    if (/^<b>$/i.test(part)) {
+      bold = true;
+      return [];
+    }
+    if (/^<\/b>$/i.test(part)) {
+      bold = false;
+      return [];
+    }
+    return part ? [{ text: part, bold }] : [];
+  });
+});
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object';
+}
+
+function parseGitHubRelease(value: unknown): DashboardRelease | NullValue {
+  if (!isRecord(value)) return null;
+  if (
+    typeof value['tag_name'] !== 'string' ||
+    typeof value['name'] !== 'string' ||
+    typeof value['html_url'] !== 'string' ||
+    typeof value['body'] !== 'string'
+  ) {
+    return null;
+  }
+  return {
+    tag_name: value['tag_name'],
+    name: value['name'],
+    html_url: value['html_url'],
+    body: value['body'],
+    ...(typeof value['prerelease'] === 'boolean' ? { prerelease: value['prerelease'] } : {}),
+    ...(typeof value['draft'] === 'boolean' ? { draft: value['draft'] } : {}),
+  };
+}
+
+async function fetchJson(url: string): Promise<unknown> {
+  const response = await fetch(url);
+  const value: unknown = await response.json();
+  return value;
 }
 
 function isPlayniteFullscreenEntry(app: Record<string, unknown>): boolean {
   if (app['playnite-fullscreen'] === true) {
     return true;
   }
-  if (typeof app.name === 'string' && app.name === 'Playnite (Fullscreen)') {
+  if (typeof app['name'] === 'string' && app['name'] === 'Playnite (Fullscreen)') {
     return true;
   }
-  const cmdValue = app.cmd;
+  const cmdValue = app['cmd'];
   const cmdText = Array.isArray(cmdValue)
     ? cmdValue.filter((v): v is string => typeof v === 'string').join(' ')
     : typeof cmdValue === 'string'
@@ -596,8 +652,10 @@ async function refreshAppsSnapshot() {
 }
 
 async function refreshAppsSnapshotStrict() {
-  const r = await http.get('/api/apps', { validateStatus: () => true });
-  const apps = Array.isArray((r.data as any)?.apps) ? (r.data as any).apps : null;
+  const r = await http.get<{ apps?: unknown }>('/api/apps', { validateStatus: () => true });
+  const apps = Array.isArray(r.data?.apps)
+    ? r.data.apps.filter((app): app is App => isRecord(app))
+    : null;
   if (r.status !== 200 || !apps) {
     throw new Error(`HTTP ${r.status}`);
   }
@@ -606,9 +664,11 @@ async function refreshAppsSnapshotStrict() {
 
 async function refreshPlayniteStatus() {
   try {
-    const r = await http.get('/api/playnite/status', { validateStatus: () => true });
+    const r = await http.get<PlayniteStatus>('/api/playnite/status', {
+      validateStatus: () => true,
+    });
     if (r.status === 200 && r.data) {
-      playnite.value = r.data as PlayniteStatus;
+      playnite.value = r.data;
     } else {
       playnite.value = null;
     }
@@ -635,12 +695,15 @@ async function runVersionChecks() {
       return;
     }
     // Normalize notify pre-release flag to boolean
+    const notifyPreReleaseSetting: unknown = cfg['notify_pre_releases'];
     notifyPreReleases.value =
-      cfg.notify_pre_releases === true || cfg.notify_pre_releases === 'enabled';
-    const serverVersion = configStore.metadata?.version || cfg.version;
+      notifyPreReleaseSetting === true || notifyPreReleaseSetting === 'enabled';
+    const cfgVersion: unknown = cfg['version'];
+    const serverVersion =
+      configStore.metadata?.version || (typeof cfgVersion === 'string' ? cfgVersion : '');
     installedVersion.value = new VibepolloVersion(serverVersion || '0.0.0');
-    branch.value = cfg.branch || '';
-    commit.value = cfg.commit || '';
+    branch.value = typeof cfg['branch'] === 'string' ? cfg['branch'] : '';
+    commit.value = typeof cfg['commit'] === 'string' ? cfg['commit'] : '';
 
     // Remote release checks (GitHub)
     try {
@@ -648,33 +711,37 @@ async function runVersionChecks() {
       // Upstream hardcoded Nonary here — that banner offered Nonary installers,
       // which would overwrite this fork. Fork updates come from the weekly
       // upstream-sync pipeline, surfaced via xenstalker02/Vibepollo releases.
-      githubRelease.value = await fetch(
-        'https://api.github.com/repos/xenstalker02/Vibepollo/releases/latest',
-      ).then((r) => r.json());
+      githubRelease.value = parseGitHubRelease(
+        await fetchJson('https://api.github.com/repos/xenstalker02/Vibepollo/releases/latest'),
+      );
     } catch (e) {
-      // eslint-disable-next-line no-console
       console.warn('[Dashboard] latest release fetch failed', e);
     }
     // Fetch list of releases to locate prereleases and determine installed stability
     try {
-      const releases = await fetch(
+      const releaseResponse = await fetchJson(
         'https://api.github.com/repos/xenstalker02/Vibepollo/releases',
-      ).then((r) => r.json());
-      if (Array.isArray(releases)) {
+      );
+      if (Array.isArray(releaseResponse)) {
+        const releases = releaseResponse
+          .map(parseGitHubRelease)
+          .filter((release): release is DashboardRelease => release !== null);
         // Pick the latest prerelease by semver (not just the first one)
-        const prereleases = releases.filter((r: any) => r && r.prerelease && !r.draft);
-        if (prereleases.length > 0) {
-          let best = prereleases[0];
+        const prereleases = releases.filter((release) => release.prerelease && !release.draft);
+        const initialBest = prereleases[0];
+        if (initialBest !== undefined) {
+          let best = initialBest;
           let bestV = VibepolloVersion.fromRelease(best);
           for (let i = 1; i < prereleases.length; i++) {
             const cand = prereleases[i];
+            if (cand === undefined) continue;
             const candV = VibepolloVersion.fromRelease(cand);
             if (candV.isGreater(bestV)) {
               best = cand;
               bestV = candV;
             }
           }
-          preReleaseRelease.value = best as GitHubRelease;
+          preReleaseRelease.value = best;
         }
         // Determine if installed tag corresponds to a prerelease on GitHub
         const installedTag = installedVersion.value?.version || '';
@@ -682,16 +749,13 @@ async function runVersionChecks() {
           ? installedTag
           : 'v' + installedTag;
         const match = releases.find(
-          (r: any) =>
-            r &&
-            !r.draft &&
-            typeof r.tag_name === 'string' &&
-            (r.tag_name === installedTag || r.tag_name === installedTagV),
+          (release) =>
+            !release.draft &&
+            (release.tag_name === installedTag || release.tag_name === installedTagV),
         );
         installedIsPrerelease.value = !!(match && match.prerelease === true);
       }
     } catch (e) {
-      // eslint-disable-next-line no-console
       console.warn('[Dashboard] releases list fetch failed', e);
     }
     // Tag-based comparison handled below via VibepolloVersion
@@ -699,9 +763,11 @@ async function runVersionChecks() {
     const plat = (configStore.metadata?.platform || '').toLowerCase();
     // ViGEm health (Windows only)
     try {
-      const controllerEnabled = cfg.controller === 'enabled';
+      const controllerEnabled = cfg['controller'] === 'enabled';
       if (plat === 'windows' && controllerEnabled) {
-        const r = await http.get('/api/health/vigem', { validateStatus: () => true });
+        const r = await http.get<{ installed?: boolean; version?: string }>('/api/health/vigem', {
+          validateStatus: () => true,
+        });
         if (r.status === 200 && r.data) {
           vigemInstalled.value = !!r.data.installed;
           vigemVersion.value = r.data.version || '';
@@ -724,20 +790,18 @@ async function runVersionChecks() {
       appsStore.setApps([]);
     }
   } catch (e) {
-    // eslint-disable-next-line no-console
     console.error('[Dashboard] version checks failed', e);
   }
   try {
     // logs only after auth
     const r = await http.get('./api/logs', {
       responseType: 'text',
-      transformResponse: [(v) => v],
+      transformResponse: [(value: unknown) => value],
     });
     if (r.status === 200 && typeof r.data === 'string') {
       logs.value = r.data;
     }
   } catch (e) {
-    // eslint-disable-next-line no-console
     console.error('[Dashboard] logs fetch failed', e);
   }
   loading.value = false;
@@ -752,7 +816,7 @@ function exportCrashBundle() {
   return void exportCrashBundleAsync();
 }
 
-function parseContentDispositionFilename(header?: string): string | null {
+function parseContentDispositionFilename(header?: string): string | NullValue {
   if (!header) return null;
   const filenameStar = /filename\*=UTF-8''([^;]+)/i.exec(header);
   if (filenameStar?.[1]) {
@@ -762,7 +826,7 @@ function parseContentDispositionFilename(header?: string): string | null {
       return filenameStar[1];
     }
   }
-  const filenameMatch = /filename="?([^\";]+)"?/i.exec(header);
+  const filenameMatch = /filename="?([^";]+)"?/i.exec(header);
   return filenameMatch?.[1] || null;
 }
 
@@ -776,16 +840,28 @@ function triggerDownload(blob: Blob, filename: string) {
 }
 
 async function downloadCrashBundlePart(partIndex: number, filenameHint?: string) {
-  const r = await http.get(`/api/logs/export_crash?part=${partIndex}`, {
+  const r = await http.get<Blob>(`/api/logs/export_crash?part=${partIndex}`, {
     responseType: 'blob',
     validateStatus: () => true,
   });
   if (r.status !== 200) {
     throw new Error('crash bundle download failed');
   }
-  const headerName = parseContentDispositionFilename(r.headers?.['content-disposition']);
+  const disposition: unknown = r.headers?.['content-disposition'];
+  const headerName = parseContentDispositionFilename(
+    typeof disposition === 'string' ? disposition : undefined,
+  );
   const filename = filenameHint || headerName || `sunshine_crashbundle-part${partIndex}.zip`;
-  triggerDownload(r.data as Blob, filename);
+  triggerDownload(r.data, filename);
+}
+
+interface CrashBundlePart {
+  index: number;
+  filename?: string;
+}
+
+interface CrashBundleManifest {
+  parts?: CrashBundlePart[];
 }
 
 async function exportCrashBundleAsync() {
@@ -793,7 +869,7 @@ async function exportCrashBundleAsync() {
   exportCrashPending.value = true;
   try {
     if (typeof window === 'undefined') return;
-    const manifest = await http.get('/api/logs/export_crash/manifest', {
+    const manifest = await http.get<CrashBundleManifest>('/api/logs/export_crash/manifest', {
       validateStatus: () => true,
     });
     const parts = Array.isArray(manifest.data?.parts) ? manifest.data.parts : [];
@@ -821,9 +897,11 @@ async function refreshCrashDumpStatus(platformOverride?: string) {
     return;
   }
   try {
-    const r = await http.get('/api/health/crashdump', { validateStatus: () => true });
+    const r = await http.get<CrashDumpStatus>('/api/health/crashdump', {
+      validateStatus: () => true,
+    });
     if (r.status === 200 && r.data) {
-      const sanitized = sanitizeCrashDumpStatus(r.data as CrashDumpStatus);
+      const sanitized = sanitizeCrashDumpStatus(r.data);
       crashDump.value = sanitized ?? { available: false };
     } else {
       crashDump.value = { available: false };
@@ -840,9 +918,11 @@ async function refreshGoldenStatus(platformOverride?: string) {
     return;
   }
   try {
-    const r = await http.get('/api/display/golden_status', { validateStatus: () => true });
+    const r = await http.get<GoldenStatus>('/api/display/golden_status', {
+      validateStatus: () => true,
+    });
     if (r.status === 200 && r.data) {
-      goldenStatus.value = r.data as GoldenStatus;
+      goldenStatus.value = r.data;
     } else {
       goldenStatus.value = null;
     }
@@ -862,7 +942,12 @@ async function dismissCrashBundle() {
     return;
   }
   try {
-    const r = await http.post('/api/health/crashdump/dismiss', payload, {
+    const r = await http.post<{
+      status?: boolean;
+      dismissed_at?: string;
+      error?: string;
+      message?: string;
+    }>('/api/health/crashdump/dismiss', payload, {
       validateStatus: () => true,
     });
     if (r.status === 200 && r.data?.status === true) {
@@ -897,7 +982,7 @@ async function dismissCrashBundle() {
   }
 }
 
-function humanFileSize(bytes?: number | null) {
+function humanFileSize(bytes?: number | NullValue) {
   if (typeof bytes !== 'number' || !Number.isFinite(bytes) || bytes <= 0) {
     return '';
   }
@@ -911,7 +996,7 @@ function humanFileSize(bytes?: number | null) {
   const formatter = new Intl.NumberFormat(undefined, {
     maximumFractionDigits: value >= 10 ? 0 : 1,
   });
-  return `${formatter.format(value)} ${units[unit]}`;
+  return `${formatter.format(value)} ${units[unit] ?? ''}`.trim();
 }
 
 function formatRelativeTime(date: Date) {
@@ -1004,10 +1089,13 @@ const fancyLogs = computed(() => {
   const rawLogLines = logs.value.split(regex).splice(1);
   const logLines = [];
   for (let i = 0; i < rawLogLines.length; i += 2) {
+    const timestamp = rawLogLines[i];
+    const value = rawLogLines[i + 1];
+    if (timestamp === undefined || value === undefined) continue;
     logLines.push({
-      timestamp: rawLogLines[i],
-      level: rawLogLines[i + 1].split(':')[0],
-      value: rawLogLines[i + 1],
+      timestamp,
+      level: value.split(':')[0] ?? '',
+      value,
     });
   }
   return logLines;
@@ -1022,7 +1110,7 @@ const showCrashDumpBanner = computed(() => {
 
 const showVigemBanner = computed(() => {
   const plat = (configStore.metadata?.platform || '').toLowerCase();
-  const controllerEnabled = (configStore.config as any)?.controller === 'enabled';
+  const controllerEnabled = configStore.config['controller'] === 'enabled';
   return plat === 'windows' && controllerEnabled && vigemInstalled.value === false;
 });
 
@@ -1059,8 +1147,9 @@ const playniteMissingPluginBannerText = computed(() => {
   if (hasPlayniteFullscreenApp.value) {
     details.push('a Playnite (Fullscreen) launcher entry');
   }
-  const detected =
-    details.length > 1 ? `${details[0]} and ${details[1]}` : (details[0] ?? 'Playnite entries');
+  const firstDetail = details[0] ?? 'Playnite entries';
+  const secondDetail = details[1];
+  const detected = secondDetail === undefined ? firstDetail : `${firstDetail} and ${secondDetail}`;
   return `Detected ${detected}, but the Playnite plugin is no longer installed. Reinstall the plugin to restore integration, or purge Playnite games to remove all Playnite entries from Vibeshine.`;
 });
 
@@ -1068,22 +1157,23 @@ async function resolvePlaynitePluginIssue() {
   if (resolvingPlaynitePluginIssue.value || purgingPlayniteApps.value) return;
   resolvingPlaynitePluginIssue.value = true;
   try {
-    const r = await http.post(
+    const r = await http.post<PlayniteOperationResponse>(
       '/api/playnite/install',
       { restart: true },
       { validateStatus: () => true },
     );
-    const body = r.data as any;
-    const ok = r.status >= 200 && r.status < 300 && body && body.status === true;
+    const body = r.data;
+    const ok = r.status >= 200 && r.status < 300 && body.status === true;
     if (ok) {
       message.success('Playnite plugin reinstalled.');
       await refreshPlayniteAndApps();
     } else {
-      const err = (body && (body.error || body.message)) || `HTTP ${r.status}`;
+      const err = body.error || body.message || `HTTP ${r.status}`;
       message.error(`Failed to reinstall Playnite plugin: ${err}`);
     }
-  } catch (e: any) {
-    message.error(`Failed to reinstall Playnite plugin: ${e?.message || 'Request failed'}`);
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : 'Request failed';
+    message.error(`Failed to reinstall Playnite plugin: ${errorMessage}`);
   } finally {
     resolvingPlaynitePluginIssue.value = false;
   }
@@ -1106,22 +1196,27 @@ async function purgePlayniteGames() {
       return;
     }
     for (const index of indexes) {
-      const r = await http.delete(`./api/apps/${index}`, { validateStatus: () => true });
-      const body = r.data as any;
-      const ok = r.status >= 200 && r.status < 300 && body && body.status === true;
+      const r = await http.delete<PlayniteOperationResponse>(`./api/apps/${index}`, {
+        validateStatus: () => true,
+      });
+      const body = r.data;
+      const ok = r.status >= 200 && r.status < 300 && body.status === true;
       if (!ok) {
-        const err = (body && (body.error || body.message)) || `HTTP ${r.status}`;
+        const err = body.error || body.message || `HTTP ${r.status}`;
         throw new Error(err);
       }
     }
     try {
       await configStore.fetchConfig(true);
-    } catch {}
+    } catch {
+      // The apps/status refresh below is still useful if the config refresh fails.
+    }
     await refreshPlayniteAndApps();
     const removed = indexes.length;
     message.success(`Removed ${removed} Playnite app${removed === 1 ? '' : 's'}.`);
-  } catch (e: any) {
-    message.error(`Failed to purge Playnite apps: ${e?.message || 'Request failed'}`);
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : 'Request failed';
+    message.error(`Failed to purge Playnite apps: ${errorMessage}`);
     await refreshPlayniteAndApps();
   } finally {
     purgingPlayniteApps.value = false;

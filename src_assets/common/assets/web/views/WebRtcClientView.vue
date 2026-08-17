@@ -23,8 +23,8 @@
         <div class="header-right">
           <button
             class="settings-btn"
-            @click="showSettings = !showSettings"
             :class="{ active: showSettings }"
+            @click="showSettings = !showSettings"
           >
             <i class="fas fa-sliders-h"></i>
             <span>Settings</span>
@@ -40,7 +40,7 @@
             <span v-if="selectedAppId" class="selection-badge">
               <i class="fas fa-check-circle"></i>
               {{ selectedAppLabel }}
-              <button @click="clearSelection" class="clear-btn">
+              <button class="clear-btn" @click="clearSelection">
                 <i class="fas fa-times"></i>
               </button>
             </span>
@@ -53,7 +53,7 @@
               :placeholder="$t('webrtc.search_placeholder') || 'Search applications...'"
               class="search-input"
             />
-            <button v-if="searchQuery" @click="searchQuery = ''" class="search-clear">
+            <button v-if="searchQuery" class="search-clear" @click="searchQuery = ''">
               <i class="fas fa-times"></i>
             </button>
           </div>
@@ -79,14 +79,14 @@
             <button
               v-for="app in appsWithCovers"
               :key="appKey(app)"
-              @click="selectApp(app)"
-              @dblclick="onAppDoubleClick(app)"
               class="game-card"
               :class="{ selected: appNumericId(app) === selectedAppId }"
+              @click="selectApp(app)"
+              @dblclick="onAppDoubleClick(app)"
             >
               <div class="game-cover">
                 <img
-                  :src="coverUrl(app) || undefined"
+                  :src="coverUrl(app)"
                   :alt="app.name || 'Application'"
                   loading="lazy"
                   @load="onCoverLoad(app)"
@@ -117,10 +117,10 @@
               <button
                 v-for="app in appsWithoutCovers"
                 :key="appKey(app)"
-                @click="selectApp(app)"
-                @dblclick="onAppDoubleClick(app)"
                 class="app-list-item"
                 :class="{ selected: appNumericId(app) === selectedAppId }"
+                @click="selectApp(app)"
+                @dblclick="onAppDoubleClick(app)"
               >
                 <div class="app-icon">
                   <i class="fas fa-window-maximize"></i>
@@ -146,7 +146,7 @@
         class="stream-preview"
         :class="{ expanded: isFullscreen, minimized: streamMinimized && !isFullscreen }"
       >
-        <div class="preview-header" v-if="!isFullscreen">
+        <div v-if="!isFullscreen" class="preview-header">
           <div class="preview-title">
             <i class="fas fa-tv"></i>
             <span>Stream</span>
@@ -157,13 +157,13 @@
           </div>
           <div class="preview-controls">
             <button
-              @click="streamMinimized = !streamMinimized"
-              class="control-btn"
               v-if="!isFullscreen"
+              class="control-btn"
+              @click="streamMinimized = !streamMinimized"
             >
               <i :class="streamMinimized ? 'fas fa-chevron-up' : 'fas fa-chevron-down'"></i>
             </button>
-            <button @click="toggleFullscreen" class="control-btn">
+            <button class="control-btn" @click="toggleFullscreen">
               <i :class="isFullscreen ? 'fas fa-compress' : 'fas fa-expand'"></i>
             </button>
           </div>
@@ -227,12 +227,12 @@
         </div>
 
         <!-- Quick Actions Bar -->
-        <div class="quick-actions" v-if="!isFullscreen && !streamMinimized">
+        <div v-if="!isFullscreen && !streamMinimized" class="quick-actions">
           <button
-            @click="isConnected ? disconnect() : connect()"
             class="action-btn primary"
             :class="{ connected: isConnected, connecting: isConnecting }"
             :disabled="isConnecting"
+            @click="isConnected ? disconnect() : connect()"
           >
             <i
               :class="
@@ -248,9 +248,9 @@
 
           <button
             v-if="isConnected"
-            @click="terminateSession"
             class="action-btn danger"
             :disabled="terminatePending"
+            @click="terminateSession"
           >
             <i :class="terminatePending ? 'fas fa-circle-notch fa-spin' : 'fas fa-power-off'"></i>
           </button>
@@ -268,7 +268,7 @@
         </div>
 
         <!-- Compact Metrics -->
-        <div class="compact-metrics" v-if="isConnected && !isFullscreen && !streamMinimized">
+        <div v-if="isConnected && !isFullscreen && !streamMinimized" class="compact-metrics">
           <div class="metric">
             <span class="label">Bitrate</span
             ><span class="value">{{ formatKbps(stats.videoBitrateKbps) }}</span>
@@ -294,7 +294,7 @@
       <aside v-if="showSettings" class="settings-drawer">
         <div class="drawer-header">
           <h2><i class="fas fa-sliders-h"></i> {{ $t('webrtc.session_settings') }}</h2>
-          <button @click="showSettings = false" class="close-btn">
+          <button class="close-btn" @click="showSettings = false">
             <i class="fas fa-times"></i>
           </button>
         </div>
@@ -310,23 +310,23 @@
             </div>
             <div class="preset-chips">
               <button
-                @click="setResolution(1920, 1080)"
                 class="chip"
                 :class="{ active: config.width === 1920 && config.height === 1080 }"
+                @click="setResolution(1920, 1080)"
               >
                 1080p
               </button>
               <button
-                @click="setResolution(2560, 1440)"
                 class="chip"
                 :class="{ active: config.width === 2560 && config.height === 1440 }"
+                @click="setResolution(2560, 1440)"
               >
                 1440p
               </button>
               <button
-                @click="setResolution(3840, 2160)"
                 class="chip"
                 :class="{ active: config.width === 3840 && config.height === 2160 }"
+                @click="setResolution(3840, 2160)"
               >
                 4K
               </button>
@@ -337,23 +337,23 @@
           <div class="setting-group">
             <label class="group-label">{{ $t('webrtc.framerate') }}</label>
             <div class="preset-chips">
-              <button @click="config.fps = 30" class="chip" :class="{ active: config.fps === 30 }">
+              <button class="chip" :class="{ active: config.fps === 30 }" @click="config.fps = 30">
                 30
               </button>
-              <button @click="config.fps = 60" class="chip" :class="{ active: config.fps === 60 }">
+              <button class="chip" :class="{ active: config.fps === 60 }" @click="config.fps = 60">
                 60
               </button>
               <button
-                @click="config.fps = 120"
                 class="chip"
                 :class="{ active: config.fps === 120 }"
+                @click="config.fps = 120"
               >
                 120
               </button>
               <button
-                @click="config.fps = 144"
                 class="chip"
                 :class="{ active: config.fps === 144 }"
+                @click="config.fps = 144"
               >
                 144
               </button>
@@ -367,10 +367,10 @@
               <button
                 v-for="opt in encodingOptions"
                 :key="opt.value"
-                @click="config.encoding = opt.value"
                 class="chip"
                 :class="{ active: config.encoding === opt.value, unsupported: !opt.supported }"
-                :title="opt.supported ? undefined : opt.hint"
+                :title="opt.supported ? '' : opt.hint"
+                @click="config.encoding = opt.value"
               >
                 {{ opt.label }}
               </button>
@@ -381,7 +381,7 @@
           <div class="setting-group">
             <label class="group-label">{{ $t('webrtc.bitrate') }}</label>
             <n-input-number
-              v-model:value="config.bitrateKbps"
+              v-model:value="bitrateKbps"
               :min="500"
               :max="200000"
               size="small"
@@ -389,23 +389,23 @@
             />
             <div class="preset-chips">
               <button
-                @click="config.bitrateKbps = 10000"
                 class="chip"
                 :class="{ active: config.bitrateKbps === 10000 }"
+                @click="config.bitrateKbps = 10000"
               >
                 10 Mbps
               </button>
               <button
-                @click="config.bitrateKbps = 30000"
                 class="chip"
                 :class="{ active: config.bitrateKbps === 30000 }"
+                @click="config.bitrateKbps = 30000"
               >
                 30 Mbps
               </button>
               <button
-                @click="config.bitrateKbps = 60000"
                 class="chip"
                 :class="{ active: config.bitrateKbps === 60000 }"
+                @click="config.bitrateKbps = 60000"
               >
                 60 Mbps
               </button>
@@ -441,10 +441,10 @@
               <button
                 v-for="opt in pacingOptions"
                 :key="opt.value"
-                @click="applyPacingPreset(opt.value)"
                 class="chip"
                 :class="{ active: config.videoPacingMode === opt.value }"
                 :disabled="isConnected"
+                @click="applyPacingPreset(opt.value)"
               >
                 {{ opt.label }}
               </button>
@@ -452,7 +452,7 @@
             <div class="setting-group">
               <label class="group-label">{{ $t('webrtc.frame_pacing_slack') }}</label>
               <n-input-number
-                v-model:value="config.videoPacingSlackMs"
+                v-model:value="videoPacingSlackMs"
                 :min="0"
                 :max="10"
                 size="small"
@@ -508,7 +508,7 @@
 <script setup lang="ts">
 import { ref, reactive, onBeforeUnmount, onMounted, watch, computed, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { NTag, NSwitch, NInputNumber, NAlert, useDialog, useMessage } from 'naive-ui';
+import { NSwitch, NInputNumber, NAlert, useDialog } from 'naive-ui';
 import { WebRtcHttpApi } from '@/services/webrtcApi';
 import { WebRtcClient } from '@/utils/webrtc/client';
 import {
@@ -532,7 +532,39 @@ import type { App } from '@/stores/apps';
 
 const { t } = useI18n();
 const dialog = useDialog();
-const message = useMessage();
+const NULL_VALUE = null;
+const UNDEFINED_VALUE = undefined;
+type NullValue = typeof NULL_VALUE;
+type UndefinedValue = typeof UNDEFINED_VALUE;
+type SessionStatus = { activeSessions: number; appRunning: boolean; paused: boolean };
+type WebkitDocument = Document & {
+  webkitFullscreenElement?: Element | NullValue;
+  webkitExitFullscreen?: () => void | Promise<void>;
+};
+type WebkitFullscreenTarget = HTMLElement & {
+  webkitRequestFullscreen?: () => void | Promise<void>;
+};
+type WebkitVideoElement = HTMLVideoElement & {
+  webkitDisplayingFullscreen?: boolean;
+  webkitEnterFullscreen?: () => void;
+  webkitEnterFullScreen?: () => void;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object';
+}
+
+function readNumber(
+  value: Record<string, unknown> | UndefinedValue,
+  key: string,
+): number | UndefinedValue {
+  const field = value?.[key];
+  return typeof field === 'number' ? field : undefined;
+}
+
+function errorName(error: unknown): string {
+  return isRecord(error) && typeof error['name'] === 'string' ? error['name'] : '';
+}
 
 // UI State
 const showSettings = ref(false);
@@ -550,9 +582,9 @@ interface Notification {
   message?: string;
 }
 
-const activeNotification = ref<Notification | null>(null);
+const activeNotification = ref<Notification | NullValue>(null);
 let notificationId = 0;
-let notificationTimeout: number | null = null;
+let notificationTimeout: number | NullValue = null;
 
 const notificationIcon = computed(() => {
   if (!activeNotification.value) return 'fas fa-info-circle';
@@ -574,7 +606,12 @@ function showNotification(type: NotificationType, title: string, msg?: string, d
     notificationTimeout = null;
   }
   notificationId++;
-  activeNotification.value = { id: notificationId, type, title, message: msg };
+  activeNotification.value = {
+    id: notificationId,
+    type,
+    title,
+    ...(msg === undefined ? {} : { message: msg }),
+  };
   if (duration > 0) {
     notificationTimeout = window.setTimeout(() => dismissNotification(), duration);
   }
@@ -594,13 +631,6 @@ function notifyError(title: string, msg?: string) {
 function notifyWarning(title: string, msg?: string) {
   showNotification('warning', title, msg, 6000);
 }
-function notifySuccess(title: string, msg?: string) {
-  showNotification('success', title, msg, 4000);
-}
-function notifyInfo(title: string, msg?: string) {
-  showNotification('info', title, msg, 5000);
-}
-
 // Helper function for resolution presets
 function setResolution(width: number, height: number) {
   config.width = width;
@@ -682,7 +712,7 @@ function maxAllowedFramesForFps(fps: number): number {
 }
 
 function clampMaxAgeFrames(
-  value: number | null | undefined,
+  value: number | NullValue | UndefinedValue,
   fps: number,
   mode?: PacingMode,
 ): number {
@@ -702,7 +732,7 @@ function applyPacingPreset(mode: PacingMode) {
   const preset = pacingPresets[mode];
   config.videoPacingMode = mode;
   config.videoPacingSlackMs = preset.slackMs;
-  config.videoMaxFrameAgeMs = undefined;
+  delete config.videoMaxFrameAgeMs;
   config.videoMaxFrameAgeFrames = clampMaxAgeFrames(preset.maxAgeFrames, config.fps, mode);
 }
 
@@ -737,8 +767,23 @@ const config = reactive<StreamConfig>({
   videoMaxFrameAgeFrames: pacingPresets.balanced.maxAgeFrames,
 });
 
-const negotiatedEncoding = ref<EncodingType | null>(null);
-const hdrRuntimeWarning = ref<string | null>(null);
+const bitrateKbps = computed<number | NullValue>({
+  get: () => config.bitrateKbps ?? null,
+  set: (value) => {
+    if (value === null) delete config.bitrateKbps;
+    else config.bitrateKbps = value;
+  },
+});
+const videoPacingSlackMs = computed<number | NullValue>({
+  get: () => config.videoPacingSlackMs ?? null,
+  set: (value) => {
+    if (value === null) delete config.videoPacingSlackMs;
+    else config.videoPacingSlackMs = value;
+  },
+});
+
+const negotiatedEncoding = ref<EncodingType | NullValue>(null);
+const hdrRuntimeWarning = ref<string | NullValue>(null);
 
 const CLIENT_CONFIG_STORAGE_KEY = 'sunshine.webrtc.session_config';
 
@@ -792,7 +837,7 @@ function loadCachedConfig(): void {
   try {
     const raw = window.localStorage.getItem(CLIENT_CONFIG_STORAGE_KEY);
     if (!raw) return;
-    const parsed = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') return;
     Object.assign(config, normalizeProfileConfig(parsed as StreamConfig));
   } catch {
@@ -814,15 +859,15 @@ const maxFrameAgeFrames = computed({
     return clampMaxAgeFrames(
       config.videoMaxFrameAgeFrames ?? null,
       config.fps,
-      (config.videoPacingMode as PacingMode | undefined) ?? 'balanced',
+      config.videoPacingMode ?? 'balanced',
     );
   },
-  set(value: number | null) {
-    config.videoMaxFrameAgeMs = undefined;
+  set(value: number | NullValue) {
+    delete config.videoMaxFrameAgeMs;
     config.videoMaxFrameAgeFrames = clampMaxAgeFrames(
       value,
       config.fps,
-      (config.videoPacingMode as PacingMode | undefined) ?? 'balanced',
+      config.videoPacingMode ?? 'balanced',
     );
   },
 });
@@ -898,13 +943,11 @@ const filteredApps = computed(() => {
 const appsWithCovers = computed(() => filteredApps.value.filter((app) => appHasCover(app)));
 const appsWithoutCovers = computed(() => filteredApps.value.filter((app) => !appHasCover(app)));
 
-const selectedAppId = ref<number | null>(null);
+const selectedAppId = ref<number | NullValue>(null);
 const resumeOnConnect = ref(true);
 const terminatePending = ref(false);
-const sessionStatus = ref<{ activeSessions: number; appRunning: boolean; paused: boolean } | null>(
-  null,
-);
-let sessionStatusTimer: number | null = null;
+const sessionStatus = ref<SessionStatus | NullValue>(null);
+let sessionStatusTimer: number | NullValue = null;
 
 function appKey(app: App): string {
   return `${app.uuid || ''}-${app.name || 'app'}`;
@@ -921,8 +964,8 @@ function appSubtitle(app: App): string {
   return 'Custom';
 }
 
-function appNumericId(app: App): number | null {
-  const raw = (app as any).id ?? (app as any).index;
+function appNumericId(app: App): number | NullValue {
+  const raw = app['id'] ?? app['index'];
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -976,7 +1019,8 @@ const isConnected = ref(false);
 
 function setWebRtcActive(active: boolean): void {
   try {
-    (window as any).__sunshine_webrtc_active = active;
+    const windowState = window as Window & { __sunshine_webrtc_active?: boolean };
+    windowState.__sunshine_webrtc_active = active;
   } catch {
     /* ignore */
   }
@@ -1003,25 +1047,27 @@ const showStartingOverlay = computed(() => {
   return isConnecting.value || connectionState.value === 'connecting';
 });
 
-const connectionState = ref<RTCPeerConnectionState | null>(null);
-const iceState = ref<RTCIceConnectionState | null>(null);
-const inputChannelState = ref<RTCDataChannelState | null>(null);
+const connectionState = ref<RTCPeerConnectionState | NullValue>(null);
+const iceState = ref<RTCIceConnectionState | NullValue>(null);
+const inputChannelState = ref<RTCDataChannelState | NullValue>(null);
 const stats = ref<WebRtcStatsSnapshot>({});
 const inputEnabled = ref(true);
 const showOverlay = ref(false);
-const inputTarget = ref<HTMLElement | null>(null);
-const videoEl = ref<HTMLVideoElement | null>(null);
-const audioEl = ref<HTMLAudioElement | null>(null);
+const inputTarget = ref<HTMLElement | NullValue>(null);
+const videoEl = ref<HTMLVideoElement | NullValue>(null);
+const audioEl = ref<HTMLAudioElement | NullValue>(null);
 const isFullscreen = ref(false);
 const pseudoFullscreen = ref(false);
 const nativeVideoFullscreen = ref(false);
 const autoFullscreen = ref(true);
-const sessionId = ref<string | null>(null);
-const serverSession = ref<WebRtcSessionState | null>(null);
-const serverVideoFps = ref<number | undefined>(undefined);
+const sessionId = ref<string | NullValue>(null);
+const serverSession = ref<WebRtcSessionState | NullValue>(null);
+const serverVideoFps = ref<number | UndefinedValue>(undefined);
 
-let lastServerSample: { ts: number; videoPackets?: number } | null = null;
-const remoteStreamInfo = ref<{ id: string; videoTracks: number; audioTracks: number } | null>(null);
+let lastServerSample: { ts: number; videoPackets?: number } | NullValue = null;
+const remoteStreamInfo = ref<{ id: string; videoTracks: number; audioTracks: number } | NullValue>(
+  null,
+);
 const videoEvents = ref<string[]>([]);
 const videoStateTick = ref(0);
 
@@ -1045,7 +1091,7 @@ const videoSizeLabel = computed(() => {
 });
 
 const inputMetrics = ref<InputCaptureMetrics>({});
-const inputBufferedAmount = ref<number | null>(null);
+const inputBufferedAmount = ref<number | NullValue>(null);
 const INPUT_BUFFER_DROP_THRESHOLD_BYTES = 1024;
 
 const shouldDropInput = (payload: InputMessage) => {
@@ -1071,8 +1117,8 @@ const videoFrameMetrics = ref<{
 }>({});
 
 const videoPacingMetrics = ref<{
-  dtMs?: number | null;
-  presentedDelta?: number | null;
+  dtMs?: number | NullValue;
+  presentedDelta?: number | NullValue;
   now?: number;
   expectedDisplayTime?: number;
   mediaTime?: number;
@@ -1085,23 +1131,23 @@ const inboundVideoStats = ref<{
   fpsReceived?: number;
   fpsDecoded?: number;
   framesDropped?: number;
-  avgJitterBufferMs?: number | null;
-  avgDecodeMsPerFrame?: number | null;
+  avgJitterBufferMs?: number | NullValue;
+  avgDecodeMsPerFrame?: number | NullValue;
   packetsLostDelta?: number;
   jitter?: number;
 }>({});
 
 type DiagnosticsSample = {
   ts: number;
-  pacingDtMs?: number | null;
-  presentedDelta?: number | null;
+  pacingDtMs?: number | NullValue;
+  presentedDelta?: number | NullValue;
   renderIntervalMs?: number;
   renderDelayMs?: number;
   fpsReceived?: number;
   fpsDecoded?: number;
   framesDropped?: number;
-  avgJitterBufferMs?: number | null;
-  avgDecodeMsPerFrame?: number | null;
+  avgJitterBufferMs?: number | NullValue;
+  avgDecodeMsPerFrame?: number | NullValue;
   packetsLostDelta?: number;
   jitter?: number;
   serverQueue?: number;
@@ -1112,7 +1158,7 @@ type DiagnosticsSample = {
 
 const DIAGNOSTICS_WINDOW_MS = 30000;
 const diagnosticsSamples = ref<DiagnosticsSample[]>([]);
-let diagnosticsSampleTimer: number | null = null;
+let diagnosticsSampleTimer: number | NullValue = null;
 
 const renderFps = computed(() => {
   const intervalMs =
@@ -1152,17 +1198,16 @@ const LATENCY_FAST_TRIGGER_MS = 12;
 const LATENCY_FAST_TRIGGER_RATIO = 1.15;
 const VIDEO_FPS_SMOOTH_TAU_MS = 1500;
 const latencySamples = ref<{ ts: number; value: number }[]>([]);
-const smoothedLatencyMs = ref<number | undefined>(undefined);
-let lastLatencySampleAt: number | null = null;
-const videoJitterBufferMs = computed(() => stats.value.videoJitterBufferMs);
+const smoothedLatencyMs = ref<number | UndefinedValue>(undefined);
+let lastLatencySampleAt: number | NullValue = null;
 const oneWayRttMs = computed(() =>
   stats.value.roundTripTimeMs ? stats.value.roundTripTimeMs / 2 : undefined,
 );
 const videoPlayoutDelayMs = computed(
   () => stats.value.videoPlayoutDelayMs ?? stats.value.videoJitterBufferMs,
 );
-const smoothedVideoFps = ref<number | undefined>(undefined);
-let lastVideoFpsSampleAt: number | null = null;
+const smoothedVideoFps = ref<number | UndefinedValue>(undefined);
+let lastVideoFpsSampleAt: number | NullValue = null;
 
 const displayVideoFps = computed(
   () =>
@@ -1176,7 +1221,7 @@ const displayVideoFps = computed(
 const estimatedLatencyMs = computed(() => {
   const parts = [oneWayRttMs.value, videoPlayoutDelayMs.value, stats.value.videoDecodeMs].filter(
     (value) => typeof value === 'number',
-  ) as number[];
+  );
   if (!parts.length) return undefined;
   return parts.reduce((total, value) => total + value, 0);
 });
@@ -1209,7 +1254,7 @@ watch(
     lastLatencySampleAt = now;
     latencySamples.value.push({ ts: now, value });
     const cutoff = now - LATENCY_SAMPLE_WINDOW_MS;
-    while (latencySamples.value.length && latencySamples.value[0].ts < cutoff) {
+    while ((latencySamples.value[0]?.ts ?? cutoff) < cutoff) {
       latencySamples.value.shift();
     }
   },
@@ -1246,21 +1291,20 @@ const overlayLines = computed(() => {
 });
 
 // Video/Audio stream handling
-let videoStream: MediaStream | null = null;
-let audioStream: MediaStream | null = null;
+let videoStream: MediaStream | NullValue = null;
+let audioStream: MediaStream | NullValue = null;
 let audioAutoplayRequested = false;
 let audioPlaybackUnlocked = false;
 let lastAudioPlayAttemptAtMs = 0;
 let lastAudioPlayErrorAtMs = 0;
-let audioPlayRetryTimer: number | null = null;
-let audioPlayRetryUntilMs: number | null = null;
-let detachInput: (() => void) | null = null;
-let detachVideoEvents: (() => void) | null = null;
-let detachVideoFrames: (() => void) | null = null;
-let detachVideoPacing: (() => void) | null = null;
-let detachVideoFullscreenEvents: (() => void) | null = null;
-let stopInboundVideoStatsTimer: (() => void) | null = null;
-let lastTrackSnapshot: { videoReady?: string; audioReady?: string } | null = null;
+let audioPlayRetryTimer: number | NullValue = null;
+let audioPlayRetryUntilMs: number | NullValue = null;
+let detachInput: (() => void) | NullValue = null;
+let detachVideoEvents: (() => void) | NullValue = null;
+let detachVideoFrames: (() => void) | NullValue = null;
+let detachVideoPacing: (() => void) | NullValue = null;
+let detachVideoFullscreenEvents: (() => void) | NullValue = null;
+let stopInboundVideoStatsTimer: (() => void) | NullValue = null;
 
 const AUDIO_TARGET_BUFFER_MS = 20;
 const AUDIO_TARGET_PLAYOUT_MS = 20;
@@ -1359,28 +1403,28 @@ const safariLatencyTuningEnabled = isSafariBrowser();
 const videoLatencyProfile: VideoLatencyProfile = safariLatencyTuningEnabled
   ? SAFARI_VIDEO_LATENCY_PROFILE
   : DEFAULT_VIDEO_LATENCY_PROFILE;
-let audioDrainOverloadedSince: number | null = null;
-let audioDrainReleaseSince: number | null = null;
+let audioDrainOverloadedSince: number | NullValue = null;
+let audioDrainReleaseSince: number | NullValue = null;
 let audioDrainActive = false;
-let audioBufferOverloadedSince: number | null = null;
-let lastAudioBufferResetAt: number | null = null;
-let videoDrainOverloadedSince: number | null = null;
-let videoDrainReleaseSince: number | null = null;
+let audioBufferOverloadedSince: number | NullValue = null;
+let lastAudioBufferResetAt: number | NullValue = null;
+let videoDrainOverloadedSince: number | NullValue = null;
+let videoDrainReleaseSince: number | NullValue = null;
 let videoDrainMode: 'off' | 'adaptive' | 'startup' = 'off';
-let videoBufferOverloadedSince: number | null = null;
-let lastVideoBufferResetAt: number | null = null;
-let lastVideoTargetMs: number | undefined = undefined;
-let desiredVideoTargetMs: number | undefined = undefined;
-let effectiveVideoTargetMs: number | undefined = undefined;
-let lastVideoTargetAdjustAt: number | null = null;
-let videoStartupDrainUntil: number | null = null;
-let videoStartupDrainReleaseSince: number | null = null;
-let lastVideoPlayoutSample: { ts: number; value: number } | null = null;
-let lastPlaybackRateUpdateAt: number | null = null;
-let modeSwitchDrainUntil: number | null = null;
-let safariRunawayDrainSince: number | null = null;
+let videoBufferOverloadedSince: number | NullValue = null;
+let lastVideoBufferResetAt: number | NullValue = null;
+let lastVideoTargetMs: number | UndefinedValue = undefined;
+let desiredVideoTargetMs: number | UndefinedValue = undefined;
+let effectiveVideoTargetMs: number | UndefinedValue = undefined;
+let lastVideoTargetAdjustAt: number | NullValue = null;
+let videoStartupDrainUntil: number | NullValue = null;
+let videoStartupDrainReleaseSince: number | NullValue = null;
+let lastVideoPlayoutSample: { ts: number; value: number } | NullValue = null;
+let lastPlaybackRateUpdateAt: number | NullValue = null;
+let modeSwitchDrainUntil: number | NullValue = null;
+let safariRunawayDrainSince: number | NullValue = null;
 let safariRunawayDrainLatched = false;
-let safariRunawayResetSince: number | null = null;
+let safariRunawayResetSince: number | NullValue = null;
 
 function setAudioDrainActive(active: boolean): void {
   if (audioDrainActive === active) return;
@@ -1405,7 +1449,7 @@ function resolveVideoBaseTargetMs(): number {
   const frames = clampMaxAgeFrames(
     config.videoMaxFrameAgeFrames ?? null,
     fps,
-    (config.videoPacingMode as PacingMode | undefined) ?? 'balanced',
+    config.videoPacingMode ?? 'balanced',
   );
   const fromFrames = maxFrameAgeMsFromFrames(fps, frames);
   const explicit =
@@ -1806,7 +1850,23 @@ function resetServerRates(): void {
   serverVideoFps.value = undefined;
 }
 
-let serverSessionTimer: number | null = null;
+function resetAudioElement(): void {
+  const element = audioEl.value;
+  if (!element || !audioStream) return;
+  element.srcObject = null;
+  element.srcObject = audioStream;
+  ensureAudioPlayback('buffer-reset');
+}
+
+function resetVideoElement(): void {
+  const element = videoEl.value;
+  if (!element || !videoStream) return;
+  element.srcObject = null;
+  element.srcObject = videoStream;
+  void element.play().catch(() => {});
+}
+
+let serverSessionTimer: number | NullValue = null;
 
 function stopServerSessionPolling(): void {
   if (serverSessionTimer) {
@@ -1830,17 +1890,22 @@ function startServerSessionPolling(): void {
           const packets = result.session.video_packets - (lastServerSample.videoPackets ?? 0);
           if (dt > 0) serverVideoFps.value = packets / dt;
         }
-        lastServerSample = { ts: now, videoPackets: result.session.video_packets };
+        lastServerSample = {
+          ts: now,
+          ...(result.session.video_packets === undefined
+            ? {}
+            : { videoPackets: result.session.video_packets }),
+        };
       }
     } catch {
       /* ignore */
     }
   };
   void poll();
-  serverSessionTimer = window.setInterval(poll, 1000);
+  serverSessionTimer = window.setInterval(() => void poll(), 1000);
 }
 
-let webrtcDiagTimer: number | null = null;
+let webrtcDiagTimer: number | NullValue = null;
 const WEBRTC_DIAG_LOG_INTERVAL_MS = 5000;
 
 function startWebrtcDiagnostics(): void {
@@ -1870,27 +1935,42 @@ function startDiagnosticsSampling(): void {
   diagnosticsSampleTimer = window.setInterval(() => {
     if (!isConnected.value) return;
     const now = Date.now();
+    const serverVideoAgeMs = serverSession.value?.last_video_age_ms;
     const sample: DiagnosticsSample = {
       ts: now,
       pacingDtMs: videoPacingMetrics.value.dtMs ?? null,
       presentedDelta: videoPacingMetrics.value.presentedDelta ?? null,
-      renderIntervalMs: renderIntervalMs.value,
-      renderDelayMs: renderDelayMs.value,
-      fpsReceived: inboundVideoStats.value.fpsReceived,
-      fpsDecoded: inboundVideoStats.value.fpsDecoded,
-      framesDropped: inboundVideoStats.value.framesDropped,
+      ...(renderIntervalMs.value === undefined ? {} : { renderIntervalMs: renderIntervalMs.value }),
+      ...(renderDelayMs.value === undefined ? {} : { renderDelayMs: renderDelayMs.value }),
+      ...(inboundVideoStats.value.fpsReceived === undefined
+        ? {}
+        : { fpsReceived: inboundVideoStats.value.fpsReceived }),
+      ...(inboundVideoStats.value.fpsDecoded === undefined
+        ? {}
+        : { fpsDecoded: inboundVideoStats.value.fpsDecoded }),
+      ...(inboundVideoStats.value.framesDropped === undefined
+        ? {}
+        : { framesDropped: inboundVideoStats.value.framesDropped }),
       avgJitterBufferMs: inboundVideoStats.value.avgJitterBufferMs ?? null,
       avgDecodeMsPerFrame: inboundVideoStats.value.avgDecodeMsPerFrame ?? null,
-      packetsLostDelta: inboundVideoStats.value.packetsLostDelta,
-      jitter: inboundVideoStats.value.jitter,
-      serverQueue: serverSession.value?.video_queue_frames,
-      serverInflight: serverSession.value?.video_inflight_frames,
-      serverVideoAgeMs: serverSession.value?.last_video_age_ms,
-      serverFps: serverVideoFps.value,
+      ...(inboundVideoStats.value.packetsLostDelta === undefined
+        ? {}
+        : { packetsLostDelta: inboundVideoStats.value.packetsLostDelta }),
+      ...(inboundVideoStats.value.jitter === undefined
+        ? {}
+        : { jitter: inboundVideoStats.value.jitter }),
+      ...(serverSession.value?.video_queue_frames === undefined
+        ? {}
+        : { serverQueue: serverSession.value.video_queue_frames }),
+      ...(serverSession.value?.video_inflight_frames === undefined
+        ? {}
+        : { serverInflight: serverSession.value.video_inflight_frames }),
+      ...(serverVideoAgeMs == null ? {} : { serverVideoAgeMs }),
+      ...(serverVideoFps.value === undefined ? {} : { serverFps: serverVideoFps.value }),
     };
     diagnosticsSamples.value.push(sample);
     const cutoff = now - DIAGNOSTICS_WINDOW_MS;
-    while (diagnosticsSamples.value.length && diagnosticsSamples.value[0].ts < cutoff) {
+    while ((diagnosticsSamples.value[0]?.ts ?? cutoff) < cutoff) {
       diagnosticsSamples.value.shift();
     }
   }, 1000);
@@ -1919,7 +1999,7 @@ function ensureAudioPlayback(reason: string): void {
     try {
       return audioEl.value.play();
     } catch (error) {
-      const name = error && typeof error === 'object' ? (error as any).name : '';
+      const name = errorName(error);
       if (now - lastAudioPlayErrorAtMs > 1500) {
         lastAudioPlayErrorAtMs = now;
         pushVideoEvent(`audio-play-throw${name ? `:${name}` : ''}:${reason}`);
@@ -1927,7 +2007,7 @@ function ensureAudioPlayback(reason: string): void {
       return null;
     }
   })();
-  if (!playPromise || typeof (playPromise as any).then !== 'function') return;
+  if (!playPromise) return;
   playPromise
     .then(() => {
       if (!audioEl.value) return;
@@ -1936,8 +2016,8 @@ function ensureAudioPlayback(reason: string): void {
         if (hasTrack) stopAudioPlayRetry();
       }
     })
-    .catch((error) => {
-      const name = error && typeof error === 'object' ? (error as any).name : '';
+    .catch((error: unknown) => {
+      const name = errorName(error);
       if (now - lastAudioPlayErrorAtMs > 1500) {
         lastAudioPlayErrorAtMs = now;
         pushVideoEvent(`audio-play-error${name ? `:${name}` : ''}:${reason}`);
@@ -1978,7 +2058,9 @@ function stopSessionStatusPolling(): void {
 async function fetchSessionStatus(): Promise<void> {
   if (isConnected.value) return;
   try {
-    const result = await http.get('/api/session/status', { validateStatus: () => true });
+    const result = await http.get<SessionStatus & { status?: boolean }>('/api/session/status', {
+      validateStatus: () => true,
+    });
     if (result.status === 200 && result.data?.status) {
       sessionStatus.value = {
         activeSessions: Number(result.data.activeSessions ?? 0),
@@ -1997,15 +2079,16 @@ function startSessionStatusPolling(): void {
   stopSessionStatusPolling();
   if (isConnected.value) return;
   void fetchSessionStatus();
-  sessionStatusTimer = window.setInterval(fetchSessionStatus, 5000);
+  sessionStatusTimer = window.setInterval(() => void fetchSessionStatus(), 5000);
 }
 
 const ESC_HOLD_MS = 2000;
-let escHoldTimer: number | null = null;
+let escHoldTimer: number | NullValue = null;
 let fullscreenKeyboardLockRequested = false;
 
-function getFullscreenElement(): Element | null {
-  return document.fullscreenElement ?? (document as any).webkitFullscreenElement ?? null;
+function getFullscreenElement(): Element | NullValue {
+  const webkitDocument = document as WebkitDocument;
+  return document.fullscreenElement ?? webkitDocument.webkitFullscreenElement ?? null;
 }
 
 function isIosPhone(): boolean {
@@ -2020,15 +2103,15 @@ function isIosPhone(): boolean {
 function isNativeVideoFullscreenActive(): boolean {
   if (nativeVideoFullscreen.value) return true;
   try {
-    const anyVideo = videoEl.value as any;
-    return Boolean(anyVideo?.webkitDisplayingFullscreen);
+    const webkitVideo = videoEl.value as WebkitVideoElement | NullValue;
+    return Boolean(webkitVideo?.webkitDisplayingFullscreen);
   } catch {
     return false;
   }
 }
 
 async function requestFullscreen(target: HTMLElement): Promise<boolean> {
-  const anyTarget = target as any;
+  const webkitTarget = target as WebkitFullscreenTarget;
   if (typeof target.requestFullscreen === 'function') {
     try {
       await target.requestFullscreen();
@@ -2037,10 +2120,9 @@ async function requestFullscreen(target: HTMLElement): Promise<boolean> {
       /* try fallback */
     }
   }
-  if (typeof anyTarget.webkitRequestFullscreen === 'function') {
+  if (typeof webkitTarget.webkitRequestFullscreen === 'function') {
     try {
-      const result = anyTarget.webkitRequestFullscreen();
-      if (result && typeof result.then === 'function') await result;
+      await webkitTarget.webkitRequestFullscreen();
       return true;
     } catch {
       /* try fallback */
@@ -2052,11 +2134,11 @@ async function requestFullscreen(target: HTMLElement): Promise<boolean> {
 function tryEnterNativeVideoFullscreen(): boolean {
   const video = videoEl.value;
   if (!video) return false;
-  const anyVideo = video as any;
-  const enter = anyVideo?.webkitEnterFullscreen ?? anyVideo?.webkitEnterFullScreen;
+  const webkitVideo = video as WebkitVideoElement;
+  const enter = webkitVideo.webkitEnterFullscreen ?? webkitVideo.webkitEnterFullScreen;
   if (typeof enter !== 'function') return false;
   try {
-    enter.call(video);
+    enter.call(webkitVideo);
     return true;
   } catch {
     return false;
@@ -2082,14 +2164,13 @@ async function tryEnterFullscreen(target: HTMLElement): Promise<boolean> {
 }
 
 async function exitFullscreen(): Promise<void> {
-  const anyDoc = document as any;
+  const webkitDocument = document as WebkitDocument;
   if (typeof document.exitFullscreen === 'function') {
     await document.exitFullscreen();
     return;
   }
-  if (typeof anyDoc.webkitExitFullscreen === 'function') {
-    const result = anyDoc.webkitExitFullscreen();
-    if (result && typeof result.then === 'function') await result;
+  if (typeof webkitDocument.webkitExitFullscreen === 'function') {
+    await webkitDocument.webkitExitFullscreen();
   }
 }
 
@@ -2161,14 +2242,10 @@ const onFullscreenEscapeDown = (event: KeyboardEvent) => {
   }
   event.preventDefault();
   event.stopPropagation();
-  escHoldTimer = window.setTimeout(async () => {
+  escHoldTimer = window.setTimeout(() => {
     escHoldTimer = null;
     if (getFullscreenElement()) {
-      try {
-        await exitFullscreen();
-      } catch {
-        /* ignore */
-      }
+      void exitFullscreen().catch(() => {});
     }
   }, ESC_HOLD_MS);
 };
@@ -2208,10 +2285,6 @@ function formatKbps(value?: number): string {
 function formatMs(value?: number): string {
   return value != null ? `${value.toFixed(1)} ms` : '--';
 }
-function displayValue(value: unknown): string {
-  return value === null || value === undefined || value === '' ? '--' : String(value);
-}
-
 function pushVideoEvent(label: string): void {
   const stamp = new Date().toLocaleTimeString();
   videoEvents.value = [`${stamp} ${label}`, ...videoEvents.value].slice(0, 8);
@@ -2231,9 +2304,10 @@ function updateVideoElement(stream: MediaStream): boolean {
   const videoTracks = stream.getVideoTracks();
   if (!videoTracks.length) return false;
   if (!videoStream) videoStream = new MediaStream();
-  videoStream.getVideoTracks().forEach((t) => videoStream!.removeTrack(t));
-  videoTracks.forEach((t) => videoStream!.addTrack(t));
-  videoEl.value.srcObject = videoStream;
+  const currentVideoStream = videoStream;
+  currentVideoStream.getVideoTracks().forEach((track) => currentVideoStream.removeTrack(track));
+  videoTracks.forEach((track) => currentVideoStream.addTrack(track));
+  videoEl.value.srcObject = currentVideoStream;
   return true;
 }
 
@@ -2242,9 +2316,10 @@ function updateAudioElement(stream: MediaStream): void {
   const audioTracks = stream.getAudioTracks();
   if (!audioTracks.length) return;
   if (!audioStream) audioStream = new MediaStream();
-  audioStream.getAudioTracks().forEach((t) => audioStream!.removeTrack(t));
-  audioTracks.forEach((t) => audioStream!.addTrack(t));
-  audioEl.value.srcObject = audioStream;
+  const currentAudioStream = audioStream;
+  currentAudioStream.getAudioTracks().forEach((track) => currentAudioStream.removeTrack(track));
+  audioTracks.forEach((track) => currentAudioStream.addTrack(track));
+  audioEl.value.srcObject = currentAudioStream;
   audioEl.value.muted = false;
 }
 
@@ -2274,13 +2349,13 @@ function attachVideoDebug(el: HTMLVideoElement): () => void {
 
 function attachVideoFrameMetrics(el: HTMLVideoElement): () => void {
   const intervalSamples: number[] = [];
-  const delaySamples: number[] = [];
   const maxSamples = 120;
-  let lastTs: number | null = null;
+  let lastTs: number | NullValue = null;
 
-  if ('requestVideoFrameCallback' in el) {
+  const requestVideoFrame = el.requestVideoFrameCallback?.bind(el);
+  if (requestVideoFrame) {
     let handle = 0;
-    const cb = (now: number, meta: VideoFrameCallbackMetadata) => {
+    const cb = (now: number, _meta: VideoFrameCallbackMetadata) => {
       const interval = lastTs != null ? now - lastTs : null;
       lastTs = now;
       if (interval != null) {
@@ -2289,19 +2364,22 @@ function attachVideoFrameMetrics(el: HTMLVideoElement): () => void {
         const sorted = [...intervalSamples].sort((a, b) => a - b);
         const p98Idx = Math.floor(sorted.length * 0.98);
         const p99Idx = Math.floor(sorted.length * 0.99);
+        const maxIntervalMs = sorted[sorted.length - 1];
+        const p98IntervalMs = sorted[p98Idx];
+        const p99IntervalMs = sorted[p99Idx];
         videoFrameMetrics.value = {
           lastIntervalMs: interval,
           avgIntervalMs: sorted.reduce((a, b) => a + b, 0) / sorted.length,
-          maxIntervalMs: sorted[sorted.length - 1],
-          p98IntervalMs: sorted[p98Idx],
+          ...(maxIntervalMs === undefined ? {} : { maxIntervalMs }),
+          ...(p98IntervalMs === undefined ? {} : { p98IntervalMs }),
           avg98IntervalMs: sorted.slice(0, p98Idx + 1).reduce((a, b) => a + b, 0) / (p98Idx + 1),
-          p99IntervalMs: sorted[p99Idx],
+          ...(p99IntervalMs === undefined ? {} : { p99IntervalMs }),
           avg99IntervalMs: sorted.slice(0, p99Idx + 1).reduce((a, b) => a + b, 0) / (p99Idx + 1),
         };
       }
-      handle = el.requestVideoFrameCallback(cb);
+      handle = requestVideoFrame(cb);
     };
-    handle = el.requestVideoFrameCallback(cb);
+    handle = requestVideoFrame(cb);
     return () => {
       if (handle) el.cancelVideoFrameCallback(handle);
     };
@@ -2332,19 +2410,21 @@ function attachVideoFrameMetrics(el: HTMLVideoElement): () => void {
 function attachVideoPacingProbe(
   el: HTMLVideoElement,
   onSample: (sample: {
-    dtMs?: number | null;
-    presentedDelta?: number | null;
+    dtMs?: number | NullValue;
+    presentedDelta?: number | NullValue;
     now?: number;
     mediaTime?: number;
   }) => void,
 ): () => void {
-  if ('requestVideoFrameCallback' in el) {
+  const requestVideoFrame = el.requestVideoFrameCallback?.bind(el);
+  if (requestVideoFrame) {
     let handle = 0;
-    let lastNow: number | null = null;
-    let lastPresented: number | null = null;
+    let lastNow: number | NullValue = null;
+    let lastPresented: number | NullValue = null;
     const cb = (now: number, meta: VideoFrameCallbackMetadata) => {
       const dtMs = lastNow != null ? now - lastNow : null;
-      const presentedFrames = (meta as any).presentedFrames;
+      const metadata = meta as VideoFrameCallbackMetadata & { presentedFrames?: number };
+      const presentedFrames = metadata.presentedFrames;
       const presentedDelta =
         lastPresented != null && typeof presentedFrames === 'number'
           ? presentedFrames - lastPresented
@@ -2352,9 +2432,9 @@ function attachVideoPacingProbe(
       onSample({ dtMs, presentedDelta, now, mediaTime: meta.mediaTime });
       lastPresented = presentedFrames ?? lastPresented;
       lastNow = now;
-      handle = el.requestVideoFrameCallback(cb);
+      handle = requestVideoFrame(cb);
     };
-    handle = el.requestVideoFrameCallback(cb);
+    handle = requestVideoFrame(cb);
     return () => {
       if (handle) el.cancelVideoFrameCallback(handle);
     };
@@ -2379,46 +2459,49 @@ function startInboundVideoStats(
     fpsReceived?: number;
     fpsDecoded?: number;
     framesDropped?: number;
-    avgJitterBufferMs?: number | null;
-    avgDecodeMsPerFrame?: number | null;
+    avgJitterBufferMs?: number | NullValue;
+    avgDecodeMsPerFrame?: number | NullValue;
     packetsLostDelta?: number;
     jitter?: number;
   }) => void,
   intervalMs = 1000,
 ): () => void {
-  let prev: {
-    now: number;
-    framesReceived?: number;
-    framesDecoded?: number;
-    framesDropped?: number;
-    packetsLost?: number;
-    jitter?: number;
-    jitterBufferDelay?: number;
-    jitterBufferEmittedCount?: number;
-    totalDecodeTime?: number;
-  } | null = null;
-  const id = window.setInterval(async () => {
+  let prev:
+    | {
+        now: number;
+        framesReceived: number | UndefinedValue;
+        framesDecoded: number | UndefinedValue;
+        framesDropped: number | UndefinedValue;
+        packetsLost: number | UndefinedValue;
+        jitter: number | UndefinedValue;
+        jitterBufferDelay: number | UndefinedValue;
+        jitterBufferEmittedCount: number | UndefinedValue;
+        totalDecodeTime: number | UndefinedValue;
+      }
+    | NullValue = null;
+  const poll = async () => {
     try {
       const report = await pc.getStats();
-      let best: any = null;
-      report.forEach((s) => {
-        if (s.type !== 'inbound-rtp') return;
-        if (s.kind !== 'video' && s.mediaType !== 'video') return;
-        const frames = typeof s.framesReceived === 'number' ? s.framesReceived : 0;
-        if (!best || frames > (best.framesReceived ?? 0)) best = s;
+      let best: Record<string, unknown> | NullValue = null;
+      report.forEach((rawStat) => {
+        const stat: unknown = rawStat;
+        if (!isRecord(stat) || stat['type'] !== 'inbound-rtp') return;
+        if (stat['kind'] !== 'video' && stat['mediaType'] !== 'video') return;
+        const frames = readNumber(stat, 'framesReceived') ?? 0;
+        if (!best || frames > (readNumber(best, 'framesReceived') ?? 0)) best = stat;
       });
       if (!best) return;
       const now = performance.now();
       const cur = {
         now,
-        framesReceived: best.framesReceived,
-        framesDecoded: best.framesDecoded,
-        framesDropped: best.framesDropped,
-        packetsLost: best.packetsLost,
-        jitter: best.jitter,
-        jitterBufferDelay: best.jitterBufferDelay,
-        jitterBufferEmittedCount: best.jitterBufferEmittedCount,
-        totalDecodeTime: best.totalDecodeTime,
+        framesReceived: readNumber(best, 'framesReceived'),
+        framesDecoded: readNumber(best, 'framesDecoded'),
+        framesDropped: readNumber(best, 'framesDropped'),
+        packetsLost: readNumber(best, 'packetsLost'),
+        jitter: readNumber(best, 'jitter'),
+        jitterBufferDelay: readNumber(best, 'jitterBufferDelay'),
+        jitterBufferEmittedCount: readNumber(best, 'jitterBufferEmittedCount'),
+        totalDecodeTime: readNumber(best, 'totalDecodeTime'),
       };
       if (prev) {
         const dt = (cur.now - prev.now) / 1000;
@@ -2446,30 +2529,35 @@ function startInboundVideoStats(
           cur.framesDecoded > 0
             ? (cur.totalDecodeTime / cur.framesDecoded) * 1000
             : null;
+        const fpsReceived = typeof dRecv === 'number' ? dRecv / dt : undefined;
+        const fpsDecoded = typeof dDec === 'number' ? dDec / dt : undefined;
+        const framesDropped = typeof dDrop === 'number' ? dDrop : undefined;
+        const packetsLostDelta =
+          typeof cur.packetsLost === 'number' && typeof prev.packetsLost === 'number'
+            ? cur.packetsLost - prev.packetsLost
+            : undefined;
         onStats({
-          fpsReceived: typeof dRecv === 'number' ? dRecv / dt : undefined,
-          fpsDecoded: typeof dDec === 'number' ? dDec / dt : undefined,
-          framesDropped: typeof dDrop === 'number' ? dDrop : undefined,
+          ...(fpsReceived === undefined ? {} : { fpsReceived }),
+          ...(fpsDecoded === undefined ? {} : { fpsDecoded }),
+          ...(framesDropped === undefined ? {} : { framesDropped }),
           avgJitterBufferMs: avgJbMs,
           avgDecodeMsPerFrame: avgDecodeMs,
-          packetsLostDelta:
-            typeof cur.packetsLost === 'number' && typeof prev.packetsLost === 'number'
-              ? cur.packetsLost - prev.packetsLost
-              : undefined,
-          jitter: cur.jitter,
+          ...(packetsLostDelta === undefined ? {} : { packetsLostDelta }),
+          ...(cur.jitter === undefined ? {} : { jitter: cur.jitter }),
         });
       }
       prev = cur;
     } catch {
       /* ignore */
     }
-  }, intervalMs);
+  };
+  const id = window.setInterval(() => void poll(), intervalMs);
   return () => {
     window.clearInterval(id);
   };
 }
 
-async function confirmTerminateAndConnect(): Promise<void> {
+function confirmTerminateAndConnect(): void {
   dialog.warning({
     title: t('webrtc.terminate_confirm_title'),
     content: t('webrtc.terminate_confirm_message', {
@@ -2529,13 +2617,18 @@ async function startConnect() {
     const shouldResume = !selectedAppId.value && resumeOnConnect.value && resumeAvailable.value;
     const effectiveAppId = selectedAppId.value ?? undefined;
     const id = await client.connect(
-      { ...config, appId: effectiveAppId, resume: shouldResume },
+      {
+        ...config,
+        ...(effectiveAppId === undefined ? {} : { appId: effectiveAppId }),
+        resume: shouldResume,
+      },
       {
         onRemoteStream: (stream) => {
-          if (videoEl.value) {
+          const videoElement = videoEl.value;
+          if (videoElement) {
             const hasVideo = updateVideoElement(stream);
-            videoEl.value.muted = false;
-            videoEl.value.volume = 1;
+            videoElement.muted = false;
+            videoElement.volume = 1;
             updateRemoteStreamInfo(stream);
             updateAudioElement(stream);
             ensureAudioPlayback('remote-stream');
@@ -2544,13 +2637,10 @@ async function startConnect() {
               videoStartupDrainReleaseSince = null;
               const baseTargetMs = resolveVideoBaseTargetMs();
               setVideoDrainMode('startup', baseTargetMs, resolveVideoStartupTargetMs());
-              const playPromise = videoEl.value.play();
-              if (playPromise && typeof playPromise.catch === 'function') {
-                playPromise.catch((error) => {
-                  const name = error && typeof error === 'object' ? (error as any).name : '';
-                  pushVideoEvent(`play-error${name ? `:${name}` : ''}`);
-                });
-              }
+              void videoElement.play().catch((error: unknown) => {
+                const name = errorName(error);
+                pushVideoEvent(`play-error${name ? `:${name}` : ''}`);
+              });
             }
           }
         },
@@ -2619,7 +2709,7 @@ async function connect() {
   // Always fetch session status to know if we can resume
   if (!sessionStatus.value) await fetchSessionStatus();
   if (selectedAppId.value && hasRunningSession.value) {
-    await confirmTerminateAndConnect();
+    confirmTerminateAndConnect();
     return;
   }
   await startConnect();
@@ -2677,7 +2767,6 @@ async function disconnect() {
   serverSession.value = null;
   resetServerRates();
   remoteStreamInfo.value = null;
-  lastTrackSnapshot = null;
   videoEvents.value = [];
   videoStateTick.value += 1;
   startSessionStatusPolling();

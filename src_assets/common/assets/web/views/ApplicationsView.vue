@@ -25,8 +25,8 @@
             class="h-11 justify-start rounded-xl px-4 text-left sm:h-10 sm:justify-center sm:rounded-md sm:px-3"
             :loading="syncBusy"
             :disabled="syncBusy"
-            @click="forceSync"
             aria-label="Force sync now"
+            @click="forceSync"
           >
             <svg
               class="mr-2 inline-block h-4 w-4 shrink-0"
@@ -55,8 +55,8 @@
             size="medium"
             type="default"
             strong
-            @click="gotoPlaynite"
             class="h-11 justify-start rounded-xl px-4 text-left sm:h-10 sm:justify-center sm:rounded-md sm:px-3"
+            @click="gotoPlaynite"
           >
             <svg
               class="mr-2 inline-block h-4 w-4 shrink-0"
@@ -156,7 +156,7 @@
                   >
                 </template>
               </div>
-              <div class="mt-0.5 text-[11px] opacity-60 truncate" v-if="app['working-dir']">
+              <div v-if="app['working-dir']" class="mt-0.5 text-[11px] opacity-60 truncate">
                 {{ app['working-dir'] }}
               </div>
             </div>
@@ -185,9 +185,6 @@
     </div>
 
     <AppEditModal
-      v-model="showModal"
-      :app="currentApp"
-      :index="currentIndex"
       :key="
         modalKey +
         '|' +
@@ -195,6 +192,9 @@
         '|' +
         (currentApp?.uuid || currentApp?.name || 'new')
       "
+      v-model="showModal"
+      :app="currentApp"
+      :index="currentIndex"
       @saved="reload"
       @deleted="reload"
     />
@@ -202,7 +202,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { ref, onMounted, computed, watch, defineAsyncComponent } from 'vue';
+import { ref, onMounted, computed, defineAsyncComponent } from 'vue';
 // Lazy-load the modal when first opened
 const AppEditModal = defineAsyncComponent(() => import('@/components/AppEditModal.vue'));
 import { useAppsStore } from '@/stores/apps';
@@ -234,8 +234,11 @@ const playniteEnabled = computed(() => playniteInstalled.value);
 
 const showModal = ref(false);
 const modalKey = ref(0);
-const currentApp = ref<App | null>(null);
-const currentIndex = ref<number | null>(-1);
+const NULL_VALUE = null;
+type NullValue = typeof NULL_VALUE;
+type UndefinedValue = typeof undefined;
+const currentApp = ref<App | NullValue>(null);
+const currentIndex = ref(-1);
 
 async function reload(): Promise<void> {
   await appsStore.loadApps(true);
@@ -252,7 +255,7 @@ function openEdit(app: App, i: number): void {
   currentIndex.value = i;
   showModal.value = true;
 }
-function appKey(app: App | null | undefined, index: number) {
+function appKey(app: App | NullValue | UndefinedValue, index: number) {
   const id = app?.uuid || '';
   return `${app?.name || 'app'}|${id}|${index}`;
 }
@@ -263,6 +266,7 @@ async function forceSync(): Promise<void> {
     await http.post('./api/playnite/force_sync', {}, { validateStatus: () => true });
     await reload();
   } catch {
+    // Ignore sync failures; the existing applications stay visible.
   } finally {
     syncBusy.value = false;
   }
@@ -270,7 +274,7 @@ async function forceSync(): Promise<void> {
 
 function gotoPlaynite(): void {
   try {
-    router.push({ path: '/settings', query: { sec: 'playnite' } });
+    void router.push({ path: '/settings', query: { sec: 'playnite' } });
   } catch {
     // ignore navigation errors
   }
@@ -280,16 +284,17 @@ async function fetchPlayniteStatus(): Promise<void> {
   // Only attempt when authenticated; http layer blocks otherwise
   if (!auth.isAuthenticated) return;
   try {
-    const r = await http.get('/api/playnite/status', { validateStatus: () => true });
+    const r = await http.get<{ installed?: boolean; active?: boolean }>('/api/playnite/status', {
+      validateStatus: () => true,
+    });
     if (
       r.status === 200 &&
       r.data &&
       typeof r.data === 'object' &&
       r.data !== null &&
-      'installed' in (r.data as Record<string, unknown>)
+      'installed' in r.data
     ) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = r.data as any;
+      const data = r.data;
       playniteInstalled.value = data.installed === true || data.active === true;
     }
   } catch {
@@ -303,7 +308,9 @@ onMounted(async () => {
   // Ensure metadata/config present for platform + playnite detection
   try {
     await configStore.fetchConfig?.();
-  } catch {}
+  } catch {
+    // Keep the current platform metadata if refresh fails.
+  }
   // Defer Playnite status until authenticated to avoid 401/canceled requests
   if (auth.isAuthenticated) {
     void fetchPlayniteStatus();
@@ -313,7 +320,9 @@ onMounted(async () => {
   // Also load apps list (safe if already loaded by bootstrap)
   try {
     await appsStore.loadApps(true);
-  } catch {}
+  } catch {
+    // Keep the current application list if refresh fails.
+  }
 });
 
 // When user logs in while this view is mounted, refresh Playnite status

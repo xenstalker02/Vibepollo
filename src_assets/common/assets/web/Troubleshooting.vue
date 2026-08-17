@@ -261,13 +261,13 @@
               <button
                 v-for="result in searchResults"
                 :key="result.id"
+                :ref="setResultRef(result.id)"
                 type="button"
                 class="w-full rounded-md border border-dark/10 dark:border-light/10 bg-white/80 dark:bg-surface/60 p-2 text-left transition hover:bg-dark/5 dark:hover:bg-light/5"
                 :class="{
                   'border-amber-400/70 bg-amber-100/60 dark:bg-amber-500/10':
                     result.id === activeMatchIndex,
                 }"
-                :ref="setResultRef(result.id)"
                 @click="openSearchResult(result.id)"
               >
                 <div class="text-[11px] font-semibold text-dark/70 dark:text-light/70">
@@ -317,7 +317,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
+import {
+  ref,
+  computed,
+  onMounted,
+  onBeforeUnmount,
+  nextTick,
+  watch,
+  type ComponentPublicInstance,
+} from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NInput, NAlert, NScrollbar, NSelect } from 'naive-ui';
 import { useConfigStore } from '@/stores/config';
@@ -330,8 +338,10 @@ const store = useConfigStore();
 const authStore = useAuthStore();
 const { t } = useI18n();
 const platform = computed(() => store.metadata.platform);
+const NULL_VALUE = null;
+type NullValue = typeof NULL_VALUE;
 
-const crashDump = ref<CrashDumpStatus | null>(null);
+const crashDump = ref<CrashDumpStatus | NullValue>(null);
 const crashDumpAvailable = computed(() => isCrashDumpEligible(crashDump.value));
 const exportCrashPending = ref(false);
 
@@ -342,7 +352,7 @@ type MicStatus = {
   mic_active: boolean;
   last_session?: { packets_received: number; frames_written: number };
 };
-const micStatus = ref<MicStatus | null>(null);
+const micStatus = ref<MicStatus | NullValue>(null);
 const micStatusLine = computed(() => {
   const s = micStatus.value;
   if (!s) return t('troubleshooting.mic_passthrough_status_loading');
@@ -361,7 +371,7 @@ const micLastSessionLine = computed(() => {
 });
 
 const closeAppPressed = ref(false);
-const closeAppStatus = ref(null as null | boolean);
+const closeAppStatus = ref<NullValue | boolean>(null);
 const restartPressed = ref(false);
 
 const latestLogs = ref('Loading...');
@@ -376,7 +386,7 @@ const searchInProgress = ref(false);
 const searchResultLimit = 200;
 const searchChunkSize = 1000;
 let searchTaskId = 0;
-let searchTaskTimer: number | null = null;
+let searchTaskTimer: number | NullValue = null;
 const segmentCache = new Map<number, { term: string; text: string; segments: LogSegment[] }>();
 
 const translate = (key: string, fallback: string) => {
@@ -416,31 +426,31 @@ const logSourceOptions = computed(() => {
   return options;
 });
 
-const logScrollbar = ref<InstanceType<typeof NScrollbar> | null>(null);
+const logScrollbar = ref<InstanceType<typeof NScrollbar> | NullValue>(null);
 const autoScrollEnabled = ref(true);
 const latestLineCount = ref(0);
 const displayedLineCount = ref(0);
 const isAtBottom = ref(true);
 
-let logInterval: number | null = null;
-let micStatusInterval: number | null = null;
-let loginDisposer: (() => void) | null = null;
-let searchDebounce: number | null = null;
+let logInterval: number | NullValue = null;
+let micStatusInterval: number | NullValue = null;
+let loginDisposer: (() => void) | NullValue = null;
+let searchDebounce: number | NullValue = null;
 
 const lineRefs = new Map<number, HTMLElement>();
 const resultRefs = new Map<number, HTMLElement>();
-const pendingJumpLine = ref<number | null>(null);
+const pendingJumpLine = ref<number | NullValue>(null);
 
-const setLineRef = (index: number) => (el: HTMLElement | null) => {
-  if (el) {
+const setLineRef = (index: number) => (el: Element | ComponentPublicInstance | NullValue) => {
+  if (el instanceof HTMLElement) {
     lineRefs.set(index, el);
   } else {
     lineRefs.delete(index);
   }
 };
 
-const setResultRef = (index: number) => (el: HTMLElement | null) => {
-  if (el) {
+const setResultRef = (index: number) => (el: Element | ComponentPublicInstance | NullValue) => {
+  if (el instanceof HTMLElement) {
     resultRefs.set(index, el);
   } else {
     resultRefs.delete(index);
@@ -582,17 +592,25 @@ function buildLogUrl() {
   return `./api/logs?${params.toString()}`;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
 function getLogContainer() {
   // Naive UI's <n-scrollbar> exposes `scrollbarInstRef` (a Vue ref) which is sometimes
   // auto-unwrapped by the component public instance proxy. Handle both shapes.
-  const maybe = (logScrollbar.value as any)?.scrollbarInstRef;
-  const internal = maybe && typeof maybe === 'object' && 'value' in maybe ? maybe.value : maybe;
-  const fromInst = internal?.containerRef ?? null;
-  if (fromInst) return fromInst;
+  const scrollbar: unknown = logScrollbar.value;
+  if (!isRecord(scrollbar)) return null;
+  const maybe = scrollbar['scrollbarInstRef'];
+  const internal = isRecord(maybe) && 'value' in maybe ? maybe['value'] : maybe;
+  if (isRecord(internal)) {
+    const fromInst = internal['containerRef'];
+    if (fromInst instanceof HTMLElement) return fromInst;
+  }
 
   // Fallback: query the DOM in case the internal instance shape changes.
-  const rootEl = (logScrollbar.value as any)?.$el as HTMLElement | undefined;
-  if (!rootEl) return null;
+  const rootEl = scrollbar['$el'];
+  if (!(rootEl instanceof Element)) return null;
   return (
     rootEl.querySelector<HTMLElement>('.n-scrollbar-container') ??
     rootEl.querySelector<HTMLElement>('[class*="-scrollbar-container"]') ??
@@ -694,7 +712,7 @@ function setActiveMatch(index: number) {
   const nextIndex = ((index % total) + total) % total;
   activeMatchIndex.value = nextIndex;
   autoScrollEnabled.value = false;
-  nextTick(() => {
+  void nextTick(() => {
     scrollToResult(nextIndex);
   });
 }
@@ -814,12 +832,12 @@ function startSearch(term: string) {
 
 async function refreshLogs() {
   if (!authStore.isAuthenticated) return;
-  if (authStore.loggingIn && authStore.loggingIn.value) return;
+  if (authStore.loggingIn) return;
 
   try {
     const r = await http.get(buildLogUrl(), {
       responseType: 'text',
-      transformResponse: [(v) => v],
+      transformResponse: [(value: unknown) => value],
     });
     if (r.status !== 200 || typeof r.data !== 'string') return;
     const nextText = r.data;
@@ -879,7 +897,9 @@ function exportLogs() {
     link.download = `sunshine-logs-${timestamp}.log`;
     link.click();
     window.URL.revokeObjectURL(url);
-  } catch (_) {}
+  } catch {
+    // Ignore browser download failures.
+  }
 }
 
 async function refreshMicStatus() {
@@ -888,8 +908,8 @@ async function refreshMicStatus() {
     return;
   }
   try {
-    const r = await http.get('/api/mic-status', { validateStatus: () => true });
-    micStatus.value = r.status === 200 && r.data ? (r.data as MicStatus) : null;
+    const r = await http.get<MicStatus>('/api/mic-status', { validateStatus: () => true });
+    micStatus.value = r.status === 200 && r.data ? r.data : null;
   } catch {
     micStatus.value = null;
   }
@@ -902,9 +922,11 @@ function filterMicLogs() {
 async function refreshCrashDumpStatus() {
   try {
     if (platform.value === 'windows') {
-      const r = await http.get('/api/health/crashdump', { validateStatus: () => true });
+      const r = await http.get<CrashDumpStatus>('/api/health/crashdump', {
+        validateStatus: () => true,
+      });
       if (r.status === 200 && r.data) {
-        const sanitized = sanitizeCrashDumpStatus(r.data as CrashDumpStatus);
+        const sanitized = sanitizeCrashDumpStatus(r.data);
         crashDump.value = sanitized ?? { available: false };
       } else {
         crashDump.value = { available: false };
@@ -921,7 +943,7 @@ function exportCrashBundle() {
   return void exportCrashBundleAsync();
 }
 
-function parseContentDispositionFilename(header?: string): string | null {
+function parseContentDispositionFilename(header?: string): string | NullValue {
   if (!header) return null;
   const filenameStar = /filename\*=UTF-8''([^;]+)/i.exec(header);
   if (filenameStar?.[1]) {
@@ -931,7 +953,7 @@ function parseContentDispositionFilename(header?: string): string | null {
       return filenameStar[1];
     }
   }
-  const filenameMatch = /filename="?([^\";]+)"?/i.exec(header);
+  const filenameMatch = /filename="?([^";]+)"?/i.exec(header);
   return filenameMatch?.[1] || null;
 }
 
@@ -945,16 +967,28 @@ function triggerDownload(blob: Blob, filename: string) {
 }
 
 async function downloadCrashBundlePart(partIndex: number, filenameHint?: string) {
-  const r = await http.get(`/api/logs/export_crash?part=${partIndex}`, {
+  const r = await http.get<Blob>(`/api/logs/export_crash?part=${partIndex}`, {
     responseType: 'blob',
     validateStatus: () => true,
   });
   if (r.status !== 200) {
     throw new Error('crash bundle download failed');
   }
-  const headerName = parseContentDispositionFilename(r.headers?.['content-disposition']);
+  const disposition: unknown = r.headers?.['content-disposition'];
+  const headerName = parseContentDispositionFilename(
+    typeof disposition === 'string' ? disposition : undefined,
+  );
   const filename = filenameHint || headerName || `sunshine_crashbundle-part${partIndex}.zip`;
-  triggerDownload(r.data as Blob, filename);
+  triggerDownload(r.data, filename);
+}
+
+interface CrashBundlePart {
+  index: number;
+  filename?: string;
+}
+
+interface CrashBundleManifest {
+  parts?: CrashBundlePart[];
 }
 
 async function exportCrashBundleAsync() {
@@ -962,7 +996,7 @@ async function exportCrashBundleAsync() {
   exportCrashPending.value = true;
   try {
     if (typeof window === 'undefined') return;
-    const manifest = await http.get('/api/logs/export_crash/manifest', {
+    const manifest = await http.get<CrashBundleManifest>('/api/logs/export_crash/manifest', {
       validateStatus: () => true,
     });
     const parts = Array.isArray(manifest.data?.parts) ? manifest.data.parts : [];
@@ -987,7 +1021,7 @@ function jumpToLatest() {
   autoScrollEnabled.value = true;
   displayedLogs.value = latestLogs.value;
   displayedLineCount.value = latestLineCount.value;
-  nextTick(() => {
+  void nextTick(() => {
     scrollToBottom();
   });
 }
@@ -995,7 +1029,13 @@ function jumpToLatest() {
 async function closeApp() {
   closeAppPressed.value = true;
   try {
-    const r = await http.post('./api/apps/close', {}, { validateStatus: () => true });
+    const r = await http.post<{ status?: boolean }>(
+      './api/apps/close',
+      {},
+      {
+        validateStatus: () => true,
+      },
+    );
     closeAppStatus.value = r.data?.status === true;
   } catch {
     closeAppStatus.value = false;
@@ -1008,7 +1048,7 @@ async function closeApp() {
 function restart() {
   restartPressed.value = true;
   setTimeout(() => (restartPressed.value = false), 5000);
-  http.post('./api/restart', {}, { validateStatus: () => true });
+  void http.post('./api/restart', {}, { validateStatus: () => true });
 }
 
 onMounted(async () => {
@@ -1023,15 +1063,15 @@ onMounted(async () => {
   await refreshCrashDumpStatus();
   await refreshMicStatus();
 
-  nextTick(() => {
+  void nextTick(() => {
     if (getLogContainer()) scrollToBottom();
   });
 
-  logInterval = window.setInterval(refreshLogs, 5000);
+  logInterval = window.setInterval(() => void refreshLogs(), 5000);
   if (platform.value === 'windows') {
     micStatusInterval = window.setInterval(() => void refreshMicStatus(), 5000);
   }
-  refreshLogs();
+  void refreshLogs();
 });
 
 onBeforeUnmount(() => {
@@ -1078,7 +1118,7 @@ watch(searchActive, (active) => {
   if (pendingJumpLine.value !== null) {
     const targetLine = pendingJumpLine.value;
     pendingJumpLine.value = null;
-    nextTick(() => {
+    void nextTick(() => {
       scrollToLogLine(targetLine);
     });
     return;
@@ -1088,7 +1128,7 @@ watch(searchActive, (active) => {
     autoScrollEnabled.value = true;
     displayedLogs.value = latestLogs.value;
     displayedLineCount.value = latestLineCount.value;
-    nextTick(() => scrollToBottom());
+    void nextTick(() => scrollToBottom());
   }
 });
 
@@ -1111,7 +1151,7 @@ watch(searchTerm, (value, oldValue) => {
 watch(logSource, () => {
   resetLogState();
   void refreshLogs();
-  nextTick(() => scrollToBottom());
+  void nextTick(() => scrollToBottom());
 });
 </script>
 

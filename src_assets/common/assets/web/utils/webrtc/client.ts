@@ -1,6 +1,51 @@
 import { WebRtcApi } from '@/services/webrtcApi';
 import { GamepadFeedbackMessage, StreamConfig, WebRtcStatsSnapshot } from '@/types/webrtc';
 
+const NULL_VALUE = null;
+const UNDEFINED_VALUE = undefined;
+type NullValue = typeof NULL_VALUE;
+type UndefinedValue = typeof UNDEFINED_VALUE;
+type RtpCodecCapability = RTCRtpCapabilities['codecs'][number];
+type ReceiverParameters = RTCRtpReceiveParameters & { jitterBufferTarget?: number };
+type ExtendedReceiver = RTCRtpReceiver & {
+  playoutDelayHint?: number;
+  jitterBufferTarget?: number;
+  getParameters: () => ReceiverParameters;
+  setParameters?: (parameters: ReceiverParameters) => Promise<void>;
+};
+type BrowserRTCConfiguration = Omit<RTCConfiguration, 'rtcpMuxPolicy'> & {
+  rtcpMuxPolicy?: 'require' | 'negotiate';
+};
+type BrowserDataChannelInit = RTCDataChannelInit & { priority: RTCPriorityType };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object';
+}
+
+function readNumber(
+  value: Record<string, unknown> | UndefinedValue,
+  key: string,
+): number | UndefinedValue {
+  const field = value?.[key];
+  return typeof field === 'number' ? field : undefined;
+}
+
+function readString(
+  value: Record<string, unknown> | UndefinedValue,
+  key: string,
+): string | UndefinedValue {
+  const field = value?.[key];
+  return typeof field === 'string' ? field : undefined;
+}
+
+function readBoolean(
+  value: Record<string, unknown> | UndefinedValue,
+  key: string,
+): boolean | UndefinedValue {
+  const field = value?.[key];
+  return typeof field === 'boolean' ? field : undefined;
+}
+
 export interface WebRtcClientCallbacks {
   onRemoteStream?: (stream: MediaStream) => void;
   onConnectionState?: (state: RTCPeerConnectionState) => void;
@@ -52,7 +97,7 @@ const STATS_POLL_FAST_JITTER_THRESHOLD_MS = 60;
 const ICE_CANDIDATE_BATCH_WINDOW_MS = 75;
 const ICE_CANDIDATE_BATCH_LIMIT = 256;
 
-function getVideoCodecCapabilities(): RTCRtpCapabilities | null {
+function getVideoCodecCapabilities(): RTCRtpCapabilities | NullValue {
   try {
     const receiverCaps =
       typeof RTCRtpReceiver !== 'undefined' ? RTCRtpReceiver.getCapabilities?.('video') : null;
@@ -68,15 +113,6 @@ function getVideoCodecCapabilities(): RTCRtpCapabilities | null {
     /* ignore */
   }
   return null;
-}
-
-function resolveEncodingPreference(encoding: string): string {
-  const mimes = ENCODING_MIME[encoding.toLowerCase()];
-  if (!mimes) return encoding;
-  const caps = getVideoCodecCapabilities();
-  if (!caps?.codecs) return encoding;
-  const supported = caps.codecs.some((codec) => mimes.includes(codec.mimeType.toLowerCase()));
-  return supported ? encoding : 'h264';
 }
 
 function parseFmtpParams(fmtpLine?: string): Record<string, string> {
@@ -99,14 +135,37 @@ function parseFmtpParams(fmtpLine?: string): Record<string, string> {
   return params;
 }
 
-function getFmtpParam(fmtpLine: string | undefined, key: string): string | null {
+export function hasPacketizationMode1(fmtpLine?: string): boolean {
+  return /(?:^|;)\s*packetization-mode=1(?:;|$)/i.test(fmtpLine ?? '');
+}
+
+export function rewriteFmtp(params: string[], bitrateKbps?: number): string[] {
+  const rewritten = [...params];
+  if (bitrateKbps === undefined || rewritten.some((param) => /(?:^|\s)apt=\d+/i.test(param))) {
+    return rewritten;
+  }
+
+  const bitrateParam = `x-google-start-bitrate=${bitrateKbps}`;
+  const bitrateIndex = rewritten.findIndex((param) => /x-google-start-bitrate=\d+/i.test(param));
+  if (bitrateIndex === -1) {
+    rewritten.push(bitrateParam);
+  } else {
+    const current = rewritten[bitrateIndex];
+    if (current !== undefined) {
+      rewritten[bitrateIndex] = current.replace(/x-google-start-bitrate=\d+/i, bitrateParam);
+    }
+  }
+  return rewritten;
+}
+
+function getFmtpParam(fmtpLine: string | UndefinedValue, key: string): string | NullValue {
   const params = parseFmtpParams(fmtpLine);
   const value = params[key.toLowerCase()];
   if (value === undefined || value === '') return null;
   return value;
 }
 
-function getCodecCapsForEncoding(encoding: string): RTCRtpCodecCapability[] {
+function getCodecCapsForEncoding(encoding: string): RtpCodecCapability[] {
   const mimes = ENCODING_MIME[encoding.toLowerCase()];
   if (!mimes) return [];
   const caps = getVideoCodecCapabilities();
@@ -114,7 +173,7 @@ function getCodecCapsForEncoding(encoding: string): RTCRtpCodecCapability[] {
   return caps.codecs.filter((codec) => mimes.includes(codec.mimeType.toLowerCase()));
 }
 
-function isHevcHdrCodec(codec: RTCRtpCodecCapability): boolean {
+function isHevcHdrCodec(codec: RtpCodecCapability): boolean {
   const profileId = getFmtpParam(codec.sdpFmtpLine ?? undefined, 'profile-id');
   if (!profileId) {
     return false;
@@ -176,8 +235,9 @@ function offerSupportsEncoding(sdp: string, encoding: string): boolean {
 function parseOfferedCodecNamesFromError(message: string): Set<string> {
   const offered = new Set<string>();
   const match = message.match(/\(offered:\s*([^)]+)\)\s*$/i);
-  if (!match) return offered;
-  const raw = match[1].trim();
+  const matchedCodecs = match?.[1];
+  if (matchedCodecs === undefined) return offered;
+  const raw = matchedCodecs.trim();
   if (!raw || raw.toLowerCase() === 'none') return offered;
   for (const part of raw.split(',')) {
     const name = part.trim().toLowerCase();
@@ -187,7 +247,7 @@ function parseOfferedCodecNamesFromError(message: string): Set<string> {
 }
 
 function applyCodecPreferences(
-  transceiver: RTCRtpTransceiver | null,
+  transceiver: RTCRtpTransceiver | NullValue,
   encoding: string,
   preferHdr = false,
 ): void {
@@ -207,7 +267,7 @@ function applyCodecPreferences(
   }
   if (mimes.includes('video/h264')) {
     const packetizationMode1 = preferred.filter((codec) =>
-      /(?:^|;)\s*packetization-mode=1(?:;|$)/i.test(codec.sdpFmtpLine ?? ''),
+      hasPacketizationMode1(codec.sdpFmtpLine),
     );
     if (packetizationMode1.length) {
       // Prefer H.264 packetization-mode=1 to avoid receiver assembly mismatches.
@@ -264,23 +324,20 @@ function applyInitialBitrateHints(sdp: string, bitrateKbps?: number): string {
           continue;
         }
         const payloadType = match[1];
+        if (payloadType === undefined) {
+          output.push(line);
+          continue;
+        }
         const params = match[2] ?? '';
         if (/(?:^|;)\s*apt=\d+/i.test(params)) {
           output.push(line);
           continue;
         }
         const trimmed = params.trim();
-        let updatedParams = trimmed;
-        if (!trimmed) {
-          updatedParams = `x-google-start-bitrate=${normalizedBitrateKbps}`;
-        } else if (/x-google-start-bitrate=\d+/i.test(trimmed)) {
-          updatedParams = trimmed.replace(
-            /x-google-start-bitrate=\d+/i,
-            `x-google-start-bitrate=${normalizedBitrateKbps}`,
-          );
-        } else {
-          updatedParams = `${trimmed};x-google-start-bitrate=${normalizedBitrateKbps}`;
-        }
+        const updatedParams = rewriteFmtp(
+          trimmed ? trimmed.split(';') : [],
+          normalizedBitrateKbps,
+        ).join(';');
         output.push(`a=fmtp:${payloadType} ${updatedParams}`);
         continue;
       }
@@ -303,22 +360,22 @@ function applyAudioReceiverHints(
   playoutDelayHintMs?: number,
 ): void {
   if (!receiver) return;
-  const receiverAny = receiver as any;
+  const extendedReceiver = receiver as ExtendedReceiver;
   const target = resolveJitterTargetMs(targetMs);
   const delayHintMs =
     typeof playoutDelayHintMs === 'number' && Number.isFinite(playoutDelayHintMs)
       ? Math.max(0, playoutDelayHintMs)
       : undefined;
   try {
-    if (delayHintMs != null && 'playoutDelayHint' in receiverAny) {
-      receiverAny.playoutDelayHint = delayHintMs / 1000;
+    if (delayHintMs != null && 'playoutDelayHint' in extendedReceiver) {
+      extendedReceiver.playoutDelayHint = delayHintMs / 1000;
     }
   } catch {
     /* ignore */
   }
   try {
-    if (target != null && typeof receiverAny.jitterBufferTarget === 'number') {
-      receiverAny.jitterBufferTarget = target;
+    if (target != null && typeof extendedReceiver.jitterBufferTarget === 'number') {
+      extendedReceiver.jitterBufferTarget = target;
     }
   } catch {
     /* ignore */
@@ -326,13 +383,13 @@ function applyAudioReceiverHints(
   if (target == null) return;
   try {
     if (
-      typeof receiverAny.getParameters === 'function' &&
-      typeof receiverAny.setParameters === 'function'
+      typeof extendedReceiver.getParameters === 'function' &&
+      typeof extendedReceiver.setParameters === 'function'
     ) {
-      const parameters = receiverAny.getParameters();
-      if (parameters && typeof parameters === 'object' && 'jitterBufferTarget' in parameters) {
+      const parameters: ReceiverParameters = extendedReceiver.getParameters();
+      if (Object.prototype.hasOwnProperty.call(parameters, 'jitterBufferTarget')) {
         parameters.jitterBufferTarget = target;
-        receiverAny.setParameters(parameters);
+        void extendedReceiver.setParameters(parameters);
       }
     }
   } catch {
@@ -340,7 +397,7 @@ function applyAudioReceiverHints(
   }
 }
 
-function resolveJitterTargetMs(value?: number): number | undefined {
+function resolveJitterTargetMs(value?: number): number | UndefinedValue {
   if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
   return Math.max(0, value);
 }
@@ -348,7 +405,7 @@ function resolveJitterTargetMs(value?: number): number | undefined {
 const VIDEO_MAX_FRAME_AGE_MIN_MS = 5;
 const VIDEO_MAX_FRAME_AGE_MAX_MS = 100;
 
-function resolveVideoJitterTargetMs(config: StreamConfig): number | undefined {
+function resolveVideoJitterTargetMs(config: StreamConfig): number | UndefinedValue {
   const fps =
     typeof config.fps === 'number' && Number.isFinite(config.fps) && config.fps > 0
       ? config.fps
@@ -375,30 +432,30 @@ function applyVideoReceiverHints(receiver?: RTCRtpReceiver, targetMs?: number): 
   if (!receiver) return;
   const target = resolveJitterTargetMs(targetMs);
   if (target == null) return;
-  const receiverAny = receiver as any;
+  const extendedReceiver = receiver as ExtendedReceiver;
   try {
-    if ('playoutDelayHint' in receiverAny) {
-      receiverAny.playoutDelayHint = target / 1000;
+    if ('playoutDelayHint' in extendedReceiver) {
+      extendedReceiver.playoutDelayHint = target / 1000;
     }
   } catch {
     /* ignore */
   }
   try {
-    if (typeof receiverAny.jitterBufferTarget === 'number') {
-      receiverAny.jitterBufferTarget = target;
+    if (typeof extendedReceiver.jitterBufferTarget === 'number') {
+      extendedReceiver.jitterBufferTarget = target;
     }
   } catch {
     /* ignore */
   }
   try {
     if (
-      typeof receiverAny.getParameters === 'function' &&
-      typeof receiverAny.setParameters === 'function'
+      typeof extendedReceiver.getParameters === 'function' &&
+      typeof extendedReceiver.setParameters === 'function'
     ) {
-      const parameters = receiverAny.getParameters();
-      if (parameters && typeof parameters === 'object' && 'jitterBufferTarget' in parameters) {
+      const parameters: ReceiverParameters = extendedReceiver.getParameters();
+      if (Object.prototype.hasOwnProperty.call(parameters, 'jitterBufferTarget')) {
         parameters.jitterBufferTarget = target;
-        receiverAny.setParameters(parameters);
+        void extendedReceiver.setParameters(parameters);
       }
     }
   } catch {
@@ -433,19 +490,19 @@ export class WebRtcClient {
     this.api = api;
   }
 
-  get connectionState(): RTCPeerConnectionState | undefined {
+  get connectionState(): RTCPeerConnectionState | UndefinedValue {
     return this.pc?.connectionState;
   }
 
-  get inputChannelState(): RTCDataChannelState | undefined {
+  get inputChannelState(): RTCDataChannelState | UndefinedValue {
     return this.inputChannel?.readyState;
   }
 
-  get inputChannelBufferedAmount(): number | undefined {
+  get inputChannelBufferedAmount(): number | UndefinedValue {
     return this.inputChannel?.bufferedAmount;
   }
 
-  get peerConnection(): RTCPeerConnection | undefined {
+  get peerConnection(): RTCPeerConnection | UndefinedValue {
     return this.pc;
   }
 
@@ -570,30 +627,37 @@ export class WebRtcClient {
     const session = await this.api.createSession(sessionConfig);
     this.sessionId = session.sessionId;
     this.pendingRemoteCandidates = [];
-    this.videoJitterTargetMs = resolveVideoJitterTargetMs(sessionConfig);
+    const videoJitterTargetMs = resolveVideoJitterTargetMs(sessionConfig);
+    if (videoJitterTargetMs === undefined) {
+      delete this.videoJitterTargetMs;
+    } else {
+      this.videoJitterTargetMs = videoJitterTargetMs;
+    }
     this.audioJitterTargetMs = DEFAULT_AUDIO_JITTER_TARGET_MS;
     this.audioPlayoutDelayHintMs = DEFAULT_AUDIO_PLAYOUT_DELAY_MS;
-    this.statsFastUntilMs = undefined;
-    this.statsConnectedAtMs = undefined;
+    delete this.statsFastUntilMs;
+    delete this.statsConnectedAtMs;
     const requestedEncoding = sessionConfig.encoding.toLowerCase();
     const bundlePolicy: RTCBundlePolicy = requestedEncoding === 'hevc' ? 'balanced' : 'max-bundle';
-    const rtcpMuxPolicy: RTCRtcpMuxPolicy = requestedEncoding === 'hevc' ? 'negotiate' : 'require';
-    this.pc = new RTCPeerConnection({
+    const rtcpMuxPolicy = requestedEncoding === 'hevc' ? 'negotiate' : 'require';
+    const peerConfiguration: BrowserRTCConfiguration = {
       iceServers: session.iceServers,
       bundlePolicy,
       rtcpMuxPolicy,
-    });
+    };
+    this.pc = new RTCPeerConnection(peerConfiguration as RTCConfiguration);
 
     const videoTransceiver = this.pc.addTransceiver('video', { direction: 'recvonly' });
     this.pc.addTransceiver('audio', { direction: 'recvonly' });
     applyCodecPreferences(videoTransceiver, sessionConfig.encoding, Boolean(sessionConfig.hdr));
 
     const inputPriority = options.inputPriority ?? 'high';
-    this.inputChannel = this.pc.createDataChannel('input', {
+    const inputChannelOptions: BrowserDataChannelInit = {
       ordered: false,
       maxRetransmits: 0,
       priority: inputPriority,
-    });
+    };
+    this.inputChannel = this.pc.createDataChannel('input', inputChannelOptions);
     this.inputChannel.onopen = () => {
       callbacks.onInputChannelState?.('open');
       this.flushPendingInput();
@@ -744,7 +808,7 @@ export class WebRtcClient {
     }
     if (this.pendingLocalCandidatesTimer) return;
     this.pendingLocalCandidatesTimer = window.setTimeout(() => {
-      this.pendingLocalCandidatesTimer = undefined;
+      delete this.pendingLocalCandidatesTimer;
       this.flushLocalCandidates();
     }, ICE_CANDIDATE_BATCH_WINDOW_MS);
   }
@@ -763,12 +827,12 @@ export class WebRtcClient {
     this.stopReceiverHintRefresh();
     if (this.statsTimer) {
       window.clearTimeout(this.statsTimer);
-      this.statsTimer = undefined;
+      delete this.statsTimer;
     }
-    this.statsFastUntilMs = undefined;
-    this.statsConnectedAtMs = undefined;
+    delete this.statsFastUntilMs;
+    delete this.statsConnectedAtMs;
     this.unsubscribeCandidates?.();
-    this.unsubscribeCandidates = undefined;
+    delete this.unsubscribeCandidates;
     if (this.inputChannel) {
       try {
         this.inputChannel.close();
@@ -785,26 +849,28 @@ export class WebRtcClient {
     }
     if (this.sessionId) {
       try {
-        await this.api.endSession(this.sessionId, { keepalive: options.keepalive });
+        await this.api.endSession(this.sessionId, {
+          ...(options.keepalive === undefined ? {} : { keepalive: options.keepalive }),
+        });
       } catch {
         /* ignore */
       }
     }
     if (this.pendingLocalCandidatesTimer) {
       window.clearTimeout(this.pendingLocalCandidatesTimer);
-      this.pendingLocalCandidatesTimer = undefined;
+      delete this.pendingLocalCandidatesTimer;
     }
     this.remoteStream = new MediaStream();
     this.pendingRemoteCandidates = [];
     this.pendingLocalCandidates = [];
-    this.pc = undefined;
-    this.sessionId = undefined;
-    this.inputChannel = undefined;
+    delete this.pc;
+    delete this.sessionId;
+    delete this.inputChannel;
     this.pendingInput = [];
     this.statsState = {};
-    this.videoJitterTargetMs = undefined;
-    this.statsFastUntilMs = undefined;
-    this.statsConnectedAtMs = undefined;
+    delete this.videoJitterTargetMs;
+    delete this.statsFastUntilMs;
+    delete this.statsConnectedAtMs;
     this.disconnecting = false;
   }
 
@@ -825,7 +891,7 @@ export class WebRtcClient {
   private stopReceiverHintRefresh(): void {
     if (!this.receiverHintTimer) return;
     window.clearInterval(this.receiverHintTimer);
-    this.receiverHintTimer = undefined;
+    delete this.receiverHintTimer;
   }
 
   setAudioLatencyTargets(targetMs: number, playoutDelayHintMs?: number): void {
@@ -845,7 +911,12 @@ export class WebRtcClient {
   }
 
   setVideoLatencyTarget(targetMs?: number): void {
-    this.videoJitterTargetMs = resolveJitterTargetMs(targetMs);
+    const resolvedTarget = resolveJitterTargetMs(targetMs);
+    if (resolvedTarget === undefined) {
+      delete this.videoJitterTargetMs;
+    } else {
+      this.videoJitterTargetMs = resolvedTarget;
+    }
     if (!this.pc) return;
     for (const receiver of this.pc.getReceivers()) {
       if (receiver.track?.kind === 'video') {
@@ -860,7 +931,11 @@ export class WebRtcClient {
       return false;
     }
     try {
-      this.inputChannel.send(payload);
+      if (typeof payload === 'string') {
+        this.inputChannel.send(payload);
+      } else {
+        this.inputChannel.send(payload);
+      }
       return true;
     } catch {
       this.queueInput(payload);
@@ -882,7 +957,11 @@ export class WebRtcClient {
     this.pendingInput = [];
     for (const payload of pending) {
       try {
-        this.inputChannel.send(payload);
+        if (typeof payload === 'string') {
+          this.inputChannel.send(payload);
+        } else {
+          this.inputChannel.send(payload);
+        }
       } catch {
         this.queueInput(payload);
         break;
@@ -895,7 +974,7 @@ export class WebRtcClient {
     if (this.statsTimer) return;
     const poll = async () => {
       if (!this.pc) return;
-      let snapshot: WebRtcStatsSnapshot | null = null;
+      let snapshot: WebRtcStatsSnapshot | NullValue = null;
       try {
         const stats = await this.pc.getStats();
         snapshot = this.extractStats(stats);
@@ -920,7 +999,7 @@ export class WebRtcClient {
           now - this.statsConnectedAtMs <= STATS_POLL_FAST_BOOT_MS);
       const delay = shouldFast ? STATS_POLL_FAST_MS : STATS_POLL_SLOW_MS;
       this.statsTimer = window.setTimeout(() => {
-        this.statsTimer = undefined;
+        delete this.statsTimer;
         void poll();
       }, delay);
     };
@@ -944,7 +1023,7 @@ export class WebRtcClient {
   private clearAutoDisconnectTimer(): void {
     if (this.autoDisconnectTimer) {
       window.clearTimeout(this.autoDisconnectTimer);
-      this.autoDisconnectTimer = undefined;
+      delete this.autoDisconnectTimer;
     }
   }
 
@@ -956,46 +1035,46 @@ export class WebRtcClient {
       return;
     }
     this.autoDisconnectTimer = window.setTimeout(() => {
-      this.autoDisconnectTimer = undefined;
+      delete this.autoDisconnectTimer;
       void this.disconnect();
     }, delayMs);
   }
 
   private extractStats(report: RTCStatsReport): WebRtcStatsSnapshot {
-    const inboundVideo: any[] = [];
-    const inboundAudio: any[] = [];
-    let rttMs: number | undefined;
-    let selectedPair: any | undefined;
-    const candidates = new Map<string, any>();
+    const inboundVideo: Record<string, unknown>[] = [];
+    const inboundAudio: Record<string, unknown>[] = [];
+    let rttMs: number | UndefinedValue;
+    let selectedPair: Record<string, unknown> | UndefinedValue;
+    const candidates = new Map<string, Record<string, unknown>>();
 
-    report.forEach((item) => {
-      if (item.type === 'inbound-rtp' && item.kind === 'video') {
-        inboundVideo.push(item as any);
-      }
-      if (item.type === 'inbound-rtp' && item.kind === 'audio') {
-        inboundAudio.push(item as any);
-      }
-      if (item.type === 'candidate-pair' && (item as any).state === 'succeeded') {
-        rttMs = (item as any).currentRoundTripTime
-          ? (item as any).currentRoundTripTime * 1000
-          : rttMs;
-        if ((item as any).selected || (item as any).nominated || !selectedPair) {
+    report.forEach((rawItem) => {
+      const item: unknown = rawItem;
+      if (!isRecord(item)) return;
+      const type = readString(item, 'type');
+      const kind = readString(item, 'kind');
+      if (type === 'inbound-rtp' && kind === 'video') inboundVideo.push(item);
+      if (type === 'inbound-rtp' && kind === 'audio') inboundAudio.push(item);
+      if (type === 'candidate-pair' && readString(item, 'state') === 'succeeded') {
+        const currentRoundTripTime = readNumber(item, 'currentRoundTripTime');
+        if (currentRoundTripTime) rttMs = currentRoundTripTime * 1000;
+        if (readBoolean(item, 'selected') || readBoolean(item, 'nominated') || !selectedPair) {
           selectedPair = item;
         }
       }
-      if (item.type === 'local-candidate' || item.type === 'remote-candidate') {
-        candidates.set(item.id, item);
+      if (type === 'local-candidate' || type === 'remote-candidate') {
+        const id = readString(item, 'id');
+        if (id !== undefined) candidates.set(id, item);
       }
     });
 
-    const pickInbound = (items: any[]): any | undefined => {
-      if (!items.length) return undefined;
-      const asNumber = (value: unknown): number => (typeof value === 'number' ? value : 0);
+    const pickInbound = (
+      items: Record<string, unknown>[],
+    ): Record<string, unknown> | UndefinedValue => {
       const sorted = [...items].sort((left, right) => {
-        const leftFramesDecoded = asNumber(left.framesDecoded);
-        const rightFramesDecoded = asNumber(right.framesDecoded);
-        const leftFramesReceived = asNumber(left.framesReceived);
-        const rightFramesReceived = asNumber(right.framesReceived);
+        const leftFramesDecoded = readNumber(left, 'framesDecoded') ?? 0;
+        const rightFramesDecoded = readNumber(right, 'framesDecoded') ?? 0;
+        const leftFramesReceived = readNumber(left, 'framesReceived') ?? 0;
+        const rightFramesReceived = readNumber(right, 'framesReceived') ?? 0;
         const leftHasFrames = leftFramesDecoded > 0 || leftFramesReceived > 0;
         const rightHasFrames = rightFramesDecoded > 0 || rightFramesReceived > 0;
         if (leftHasFrames !== rightHasFrames) {
@@ -1007,13 +1086,13 @@ export class WebRtcClient {
         if (leftFramesReceived !== rightFramesReceived) {
           return rightFramesReceived - leftFramesReceived;
         }
-        const leftBytes = asNumber(left.bytesReceived);
-        const rightBytes = asNumber(right.bytesReceived);
+        const leftBytes = readNumber(left, 'bytesReceived') ?? 0;
+        const rightBytes = readNumber(right, 'bytesReceived') ?? 0;
         if (leftBytes !== rightBytes) {
           return rightBytes - leftBytes;
         }
-        const leftPackets = asNumber(left.packetsReceived);
-        const rightPackets = asNumber(right.packetsReceived);
+        const leftPackets = readNumber(left, 'packetsReceived') ?? 0;
+        const rightPackets = readNumber(right, 'packetsReceived') ?? 0;
         return rightPackets - leftPackets;
       });
       return sorted[0];
@@ -1022,62 +1101,62 @@ export class WebRtcClient {
     const videoInbound = pickInbound(inboundVideo);
     const audioInbound = pickInbound(inboundAudio);
 
-    const videoInboundId: string | undefined = videoInbound?.id;
-    const audioInboundId: string | undefined = audioInbound?.id;
+    const videoInboundId = readString(videoInbound, 'id');
+    const audioInboundId = readString(audioInbound, 'id');
+    const videoBytes = readNumber(videoInbound, 'bytesReceived');
+    const audioBytes = readNumber(audioInbound, 'bytesReceived');
+    const inboundVideoFps = readNumber(videoInbound, 'framesPerSecond');
+    const packetsLost =
+      readNumber(videoInbound, 'packetsLost') ?? readNumber(audioInbound, 'packetsLost');
+    const videoPackets = readNumber(videoInbound, 'packetsReceived');
+    const audioPackets = readNumber(audioInbound, 'packetsReceived');
+    const videoFramesReceived = readNumber(videoInbound, 'framesReceived');
+    const videoFramesDecoded = readNumber(videoInbound, 'framesDecoded');
+    const videoFramesDropped = readNumber(videoInbound, 'framesDropped');
+    const videoTotalDecodeTime = readNumber(videoInbound, 'totalDecodeTime');
+    const rawVideoJitter = readNumber(videoInbound, 'jitter');
+    const rawAudioJitter = readNumber(audioInbound, 'jitter');
+    const videoJitterMs = rawVideoJitter === undefined ? undefined : rawVideoJitter * 1000;
+    const audioJitterMs = rawAudioJitter === undefined ? undefined : rawAudioJitter * 1000;
+    const videoJitterBufferDelay = readNumber(videoInbound, 'jitterBufferDelay');
+    const videoJitterBufferEmittedCount = readNumber(videoInbound, 'jitterBufferEmittedCount');
+    const audioJitterBufferDelay = readNumber(audioInbound, 'jitterBufferDelay');
+    const audioJitterBufferEmittedCount = readNumber(audioInbound, 'jitterBufferEmittedCount');
+    const videoCodecId = readString(videoInbound, 'codecId');
+    const audioCodecId = readString(audioInbound, 'codecId');
 
-    const videoBytes: number | undefined = videoInbound?.bytesReceived;
-    const audioBytes: number | undefined = audioInbound?.bytesReceived;
-    const inboundVideoFps: number | undefined = videoInbound?.framesPerSecond;
-    const packetsLost: number | undefined =
-      (typeof videoInbound?.packetsLost === 'number' ? videoInbound.packetsLost : undefined) ??
-      (typeof audioInbound?.packetsLost === 'number' ? audioInbound.packetsLost : undefined);
-    const videoPackets: number | undefined = videoInbound?.packetsReceived;
-    const audioPackets: number | undefined = audioInbound?.packetsReceived;
-    const videoFramesReceived: number | undefined = videoInbound?.framesReceived;
-    const videoFramesDecoded: number | undefined = videoInbound?.framesDecoded;
-    const videoFramesDropped: number | undefined = videoInbound?.framesDropped;
-    const videoTotalDecodeTime: number | undefined = videoInbound?.totalDecodeTime;
-    const videoJitterMs: number | undefined =
-      typeof videoInbound?.jitter === 'number' ? videoInbound.jitter * 1000 : undefined;
-    const audioJitterMs: number | undefined =
-      typeof audioInbound?.jitter === 'number' ? audioInbound.jitter * 1000 : undefined;
-    const videoJitterBufferDelay: number | undefined = videoInbound?.jitterBufferDelay;
-    const videoJitterBufferEmittedCount: number | undefined =
-      videoInbound?.jitterBufferEmittedCount;
-    const audioJitterBufferDelay: number | undefined = audioInbound?.jitterBufferDelay;
-    const audioJitterBufferEmittedCount: number | undefined =
-      audioInbound?.jitterBufferEmittedCount;
-    const videoCodecId: string | undefined = videoInbound?.codecId;
-    const audioCodecId: string | undefined = audioInbound?.codecId;
-
-    let videoCodec: string | undefined;
-    let audioCodec: string | undefined;
+    let videoCodec: string | UndefinedValue;
+    let audioCodec: string | UndefinedValue;
     if (videoCodecId) {
-      const codec = report.get(videoCodecId) as any;
-      if (codec?.mimeType) {
-        videoCodec = codec.mimeType;
-      }
+      const codec: unknown = report.get(videoCodecId);
+      if (isRecord(codec)) videoCodec = readString(codec, 'mimeType');
     }
     if (audioCodecId) {
-      const codec = report.get(audioCodecId) as any;
-      if (codec?.mimeType) {
-        audioCodec = codec.mimeType;
-      }
+      const codec: unknown = report.get(audioCodecId);
+      if (isRecord(codec)) audioCodec = readString(codec, 'mimeType');
     }
 
     let candidatePair: WebRtcStatsSnapshot['candidatePair'];
     if (selectedPair) {
-      const local = candidates.get((selectedPair as any).localCandidateId);
-      const remote = candidates.get((selectedPair as any).remoteCandidateId);
+      const local = candidates.get(readString(selectedPair, 'localCandidateId') ?? '');
+      const remote = candidates.get(readString(selectedPair, 'remoteCandidateId') ?? '');
+      const state = readString(selectedPair, 'state');
+      const protocol = readString(selectedPair, 'protocol');
+      const localAddress = readString(local, 'address');
+      const localPort = readNumber(local, 'port');
+      const localType = readString(local, 'candidateType');
+      const remoteAddress = readString(remote, 'address');
+      const remotePort = readNumber(remote, 'port');
+      const remoteType = readString(remote, 'candidateType');
       candidatePair = {
-        state: (selectedPair as any).state,
-        protocol: (selectedPair as any).protocol,
-        localAddress: local?.address,
-        localPort: local?.port,
-        localType: local?.candidateType,
-        remoteAddress: remote?.address,
-        remotePort: remote?.port,
-        remoteType: remote?.candidateType,
+        ...(state === undefined ? {} : { state }),
+        ...(protocol === undefined ? {} : { protocol }),
+        ...(localAddress === undefined ? {} : { localAddress }),
+        ...(localPort === undefined ? {} : { localPort }),
+        ...(localType === undefined ? {} : { localType }),
+        ...(remoteAddress === undefined ? {} : { remoteAddress }),
+        ...(remotePort === undefined ? {} : { remotePort }),
+        ...(remoteType === undefined ? {} : { remoteType }),
       };
     }
 
@@ -1110,16 +1189,6 @@ export class WebRtcClient {
       const deltaEmitted = emitted - lastEmitted;
       if (deltaEmitted <= 0 || deltaDelay < 0) return undefined;
       return (deltaDelay / deltaEmitted) * 1000;
-    };
-    // Note: calcPlayoutDelayMs attempts to compute delay from estimatedPlayoutTimestamp
-    // but this is unreliable due to timestamp format ambiguity. We prefer jitterBufferMs
-    // which is well-defined. Keeping this function for potential future use if browsers
-    // standardize the format.
-    const calcPlayoutDelayMs = (inbound?: any): number | undefined => {
-      // estimatedPlayoutTimestamp represents WHEN content will play (wall-clock time),
-      // not the delay. The computation is complex and browser-dependent.
-      // Return undefined to fall back to delta-based jitterBufferMs.
-      return undefined;
     };
     const calcDecodeMs = (
       totalDecodeTime?: number,
@@ -1166,47 +1235,54 @@ export class WebRtcClient {
       sameVideoInbound ? last.lastVideoFramesReceived : undefined,
     );
     const videoFps = videoFpsFromDecoded ?? videoFpsFromReceived ?? inboundVideoFps;
-    const videoPlayoutDelayMs = calcPlayoutDelayMs(videoInbound);
-    const audioPlayoutDelayMs = calcPlayoutDelayMs(audioInbound);
-
     this.statsState = {
       lastTimestampMs: now,
-      lastVideoInboundId: videoInboundId,
-      lastAudioInboundId: audioInboundId,
-      lastVideoBytes: videoBytes,
-      lastAudioBytes: audioBytes,
-      lastVideoJitterBufferDelay: videoJitterBufferDelay,
-      lastVideoJitterBufferEmittedCount: videoJitterBufferEmittedCount,
-      lastAudioJitterBufferDelay: audioJitterBufferDelay,
-      lastAudioJitterBufferEmittedCount: audioJitterBufferEmittedCount,
-      lastVideoTotalDecodeTime: videoTotalDecodeTime,
-      lastVideoFramesDecoded: videoFramesDecoded,
-      lastVideoFramesReceived: videoFramesReceived,
+      ...(videoInboundId === undefined ? {} : { lastVideoInboundId: videoInboundId }),
+      ...(audioInboundId === undefined ? {} : { lastAudioInboundId: audioInboundId }),
+      ...(videoBytes === undefined ? {} : { lastVideoBytes: videoBytes }),
+      ...(audioBytes === undefined ? {} : { lastAudioBytes: audioBytes }),
+      ...(videoJitterBufferDelay === undefined
+        ? {}
+        : { lastVideoJitterBufferDelay: videoJitterBufferDelay }),
+      ...(videoJitterBufferEmittedCount === undefined
+        ? {}
+        : { lastVideoJitterBufferEmittedCount: videoJitterBufferEmittedCount }),
+      ...(audioJitterBufferDelay === undefined
+        ? {}
+        : { lastAudioJitterBufferDelay: audioJitterBufferDelay }),
+      ...(audioJitterBufferEmittedCount === undefined
+        ? {}
+        : { lastAudioJitterBufferEmittedCount: audioJitterBufferEmittedCount }),
+      ...(videoTotalDecodeTime === undefined
+        ? {}
+        : { lastVideoTotalDecodeTime: videoTotalDecodeTime }),
+      ...(videoFramesDecoded === undefined ? {} : { lastVideoFramesDecoded: videoFramesDecoded }),
+      ...(videoFramesReceived === undefined
+        ? {}
+        : { lastVideoFramesReceived: videoFramesReceived }),
     };
 
     return {
-      videoBitrateKbps: videoBitrate ? Math.max(0, videoBitrate) : undefined,
-      audioBitrateKbps: audioBitrate ? Math.max(0, audioBitrate) : undefined,
-      videoFps,
-      packetsLost,
-      roundTripTimeMs: rttMs,
-      videoBytesReceived: videoBytes,
-      audioBytesReceived: audioBytes,
-      videoPacketsReceived: videoPackets,
-      audioPacketsReceived: audioPackets,
-      videoFramesReceived,
-      videoFramesDecoded,
-      videoFramesDropped,
-      videoDecodeMs,
-      videoJitterMs,
-      audioJitterMs,
-      videoJitterBufferMs,
-      audioJitterBufferMs,
-      videoPlayoutDelayMs,
-      audioPlayoutDelayMs,
-      videoCodec,
-      audioCodec,
-      candidatePair,
+      ...(videoBitrate ? { videoBitrateKbps: Math.max(0, videoBitrate) } : {}),
+      ...(audioBitrate ? { audioBitrateKbps: Math.max(0, audioBitrate) } : {}),
+      ...(videoFps === undefined ? {} : { videoFps }),
+      ...(packetsLost === undefined ? {} : { packetsLost }),
+      ...(rttMs === undefined ? {} : { roundTripTimeMs: rttMs }),
+      ...(videoBytes === undefined ? {} : { videoBytesReceived: videoBytes }),
+      ...(audioBytes === undefined ? {} : { audioBytesReceived: audioBytes }),
+      ...(videoPackets === undefined ? {} : { videoPacketsReceived: videoPackets }),
+      ...(audioPackets === undefined ? {} : { audioPacketsReceived: audioPackets }),
+      ...(videoFramesReceived === undefined ? {} : { videoFramesReceived }),
+      ...(videoFramesDecoded === undefined ? {} : { videoFramesDecoded }),
+      ...(videoFramesDropped === undefined ? {} : { videoFramesDropped }),
+      ...(videoDecodeMs === undefined ? {} : { videoDecodeMs }),
+      ...(videoJitterMs === undefined ? {} : { videoJitterMs }),
+      ...(audioJitterMs === undefined ? {} : { audioJitterMs }),
+      ...(videoJitterBufferMs === undefined ? {} : { videoJitterBufferMs }),
+      ...(audioJitterBufferMs === undefined ? {} : { audioJitterBufferMs }),
+      ...(videoCodec === undefined ? {} : { videoCodec }),
+      ...(audioCodec === undefined ? {} : { audioCodec }),
+      ...(candidatePair === undefined ? {} : { candidatePair }),
     };
   }
 }

@@ -1,4 +1,5 @@
 import { http } from '@/http';
+import type { AxiosRequestConfig } from 'axios';
 import {
   StreamConfig,
   WebRtcIceCandidate,
@@ -8,10 +9,13 @@ import {
   WebRtcSessionState,
 } from '@/types/webrtc';
 
+const NULL_VALUE = null;
+type NullValue = typeof NULL_VALUE;
+
 export interface WebRtcApi {
   createSession(config: StreamConfig): Promise<WebRtcSessionInfo>;
   getSessionState(sessionId: string): Promise<WebRtcSessionFetchResult>;
-  sendOffer(sessionId: string, offer: WebRtcOffer): Promise<WebRtcAnswer | null>;
+  sendOffer(sessionId: string, offer: WebRtcOffer): Promise<WebRtcAnswer | NullValue>;
   sendIceCandidates(sessionId: string, candidates: RTCIceCandidateInit[]): Promise<void>;
   sendIceCandidate(sessionId: string, candidate: RTCIceCandidateInit): Promise<void>;
   subscribeRemoteCandidates(
@@ -23,7 +27,7 @@ export interface WebRtcApi {
 
 export interface WebRtcSessionFetchResult {
   status: number;
-  session: WebRtcSessionState | null;
+  session: WebRtcSessionState | NullValue;
   error?: string;
 }
 
@@ -61,10 +65,24 @@ export interface WebRtcSessionEndOptions {
   keepalive?: boolean;
 }
 
+interface RawIceCandidate {
+  candidate: string;
+  sdpMid?: string | NullValue;
+  sdpMLineIndex?: number | NullValue;
+}
+
+export function toRtcIceCandidateInit(raw: RawIceCandidate): RTCIceCandidateInit {
+  return {
+    candidate: raw.candidate,
+    ...(raw.sdpMid === undefined ? {} : { sdpMid: raw.sdpMid }),
+    ...(raw.sdpMLineIndex === undefined ? {} : { sdpMLineIndex: raw.sdpMLineIndex }),
+  };
+}
+
 const VIDEO_MAX_FRAME_AGE_MIN_MS = 5;
 const VIDEO_MAX_FRAME_AGE_MAX_MS = 100;
 
-function resolveVideoMaxFrameAgeMs(config: StreamConfig): number | undefined {
+function resolveVideoMaxFrameAgeMs(config: StreamConfig) {
   const fps =
     typeof config.fps === 'number' && Number.isFinite(config.fps) && config.fps > 0
       ? config.fps
@@ -88,12 +106,34 @@ function resolveVideoMaxFrameAgeMs(config: StreamConfig): number | undefined {
   return undefined;
 }
 
-const webrtcAuthConfig = (overrides?: Record<string, any>) =>
-  ({
-    validateStatus: () => true,
-    __allowUnauthenticated: true,
-    ...(overrides || {}),
-  }) as any;
+interface WebRtcRequestConfig extends AxiosRequestConfig {
+  __allowUnauthenticated: boolean;
+}
+
+const webrtcAuthConfig = (overrides?: AxiosRequestConfig): WebRtcRequestConfig => ({
+  validateStatus: () => true,
+  __allowUnauthenticated: true,
+  ...(overrides ?? {}),
+});
+
+function isRawIceCandidate(value: unknown): value is RawIceCandidate {
+  if (typeof value !== 'object' || value === null || !('candidate' in value)) return false;
+  if (typeof value.candidate !== 'string') return false;
+  if (
+    'sdpMid' in value &&
+    value.sdpMid !== undefined &&
+    value.sdpMid !== null &&
+    typeof value.sdpMid !== 'string'
+  ) {
+    return false;
+  }
+  return (
+    !('sdpMLineIndex' in value) ||
+    value.sdpMLineIndex === undefined ||
+    value.sdpMLineIndex === null ||
+    typeof value.sdpMLineIndex === 'number'
+  );
+}
 
 export class WebRtcHttpApi implements WebRtcApi {
   async createSession(config: StreamConfig): Promise<WebRtcSessionInfo> {
@@ -131,8 +171,10 @@ export class WebRtcHttpApi implements WebRtcApi {
     return {
       sessionId: r.data.session.id,
       iceServers: r.data.ice_servers ?? [],
-      certFingerprint: r.data.cert_fingerprint,
-      certPem: r.data.cert_pem,
+      ...(r.data.cert_fingerprint === undefined
+        ? {}
+        : { certFingerprint: r.data.cert_fingerprint }),
+      ...(r.data.cert_pem === undefined ? {} : { certPem: r.data.cert_pem }),
     };
   }
 
@@ -143,12 +185,17 @@ export class WebRtcHttpApi implements WebRtcApi {
     );
     if (r.status !== 200) {
       const error = r.data?.error ? String(r.data.error) : undefined;
-      return { status: r.status, session: null, error };
+      return { status: r.status, session: null, ...(error === undefined ? {} : { error }) };
     }
-    return { status: r.status, session: r.data?.session ?? null, error: r.data?.error };
+    const error = r.data?.error;
+    return {
+      status: r.status,
+      session: r.data?.session ?? null,
+      ...(error === undefined ? {} : { error }),
+    };
   }
 
-  async sendOffer(sessionId: string, offer: WebRtcOffer): Promise<WebRtcAnswer | null> {
+  async sendOffer(sessionId: string, offer: WebRtcOffer): Promise<WebRtcAnswer | NullValue> {
     const r = await http.post<WebRtcOfferResponse>(
       `/api/webrtc/sessions/${encodeURIComponent(sessionId)}/offer`,
       offer,
@@ -173,13 +220,12 @@ export class WebRtcHttpApi implements WebRtcApi {
 
   async sendIceCandidates(sessionId: string, candidates: RTCIceCandidateInit[]): Promise<void> {
     const payload = candidates
-      .filter((candidate) => Boolean(candidate.candidate))
+      .filter(
+        (candidate): candidate is RTCIceCandidateInit & { candidate: string } =>
+          typeof candidate.candidate === 'string' && candidate.candidate.length > 0,
+      )
       .slice(0, 256)
-      .map((candidate) => ({
-        sdpMid: candidate.sdpMid,
-        sdpMLineIndex: candidate.sdpMLineIndex,
-        candidate: candidate.candidate,
-      }));
+      .map(toRtcIceCandidateInit);
     if (!payload.length) return;
     await http.post(
       `/api/webrtc/sessions/${encodeURIComponent(sessionId)}/ice`,
@@ -194,13 +240,13 @@ export class WebRtcHttpApi implements WebRtcApi {
   ): () => void {
     let stopped = false;
     let lastIndex = 0;
-    let pollTimer: number | undefined;
-    let eventSource: EventSource | null = null;
+    let pollTimer = 0;
+    let eventSource: EventSource | NullValue = null;
 
     const stopPolling = () => {
       if (pollTimer) {
         window.clearTimeout(pollTimer);
-        pollTimer = undefined;
+        pollTimer = 0;
       }
     };
 
@@ -213,11 +259,7 @@ export class WebRtcHttpApi implements WebRtcApi {
         );
         if (r.status === 200 && Array.isArray(r.data?.candidates)) {
           for (const candidate of r.data.candidates) {
-            onCandidate({
-              sdpMid: candidate.sdpMid,
-              sdpMLineIndex: candidate.sdpMLineIndex,
-              candidate: candidate.candidate,
-            });
+            onCandidate(toRtcIceCandidateInit(candidate));
             if (typeof candidate.index === 'number') {
               lastIndex = Math.max(lastIndex, candidate.index);
             }
@@ -230,13 +272,13 @@ export class WebRtcHttpApi implements WebRtcApi {
         /* ignore */
       }
       if (!stopped) {
-        pollTimer = window.setTimeout(poll, 1000);
+        pollTimer = window.setTimeout(() => void poll(), 1000);
       }
     };
 
     const startPolling = () => {
       if (pollTimer || stopped) return;
-      poll();
+      void poll();
     };
 
     try {
@@ -246,13 +288,12 @@ export class WebRtcHttpApi implements WebRtcApi {
       eventSource.addEventListener('candidate', (event) => {
         if (stopped) return;
         try {
-          const payload = JSON.parse((event as MessageEvent).data) as WebRtcIceCandidate;
-          onCandidate({
-            sdpMid: payload.sdpMid,
-            sdpMLineIndex: payload.sdpMLineIndex,
-            candidate: payload.candidate,
-          });
-          const id = (event as MessageEvent).lastEventId;
+          const messageEvent = event as MessageEvent<unknown>;
+          if (typeof messageEvent.data !== 'string') return;
+          const payload: unknown = JSON.parse(messageEvent.data);
+          if (!isRawIceCandidate(payload)) return;
+          onCandidate(toRtcIceCandidateInit(payload));
+          const id = messageEvent.lastEventId;
           if (id) {
             const parsed = Number.parseInt(id, 10);
             if (!Number.isNaN(parsed)) {
@@ -305,7 +346,7 @@ export class WebRtcHttpApi implements WebRtcApi {
     await http.delete(`/api/webrtc/sessions/${encodeURIComponent(sessionId)}`, webrtcAuthConfig());
   }
 
-  private async waitForAnswer(sessionId: string): Promise<WebRtcAnswer | null> {
+  private async waitForAnswer(sessionId: string): Promise<WebRtcAnswer | NullValue> {
     const start = Date.now();
     const timeoutMs = 30000;
     while (Date.now() - start < timeoutMs) {
