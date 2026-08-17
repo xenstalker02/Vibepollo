@@ -116,6 +116,8 @@ installer/output/
 
 # Claude Code dev environment (personal session state, not for distribution)
 .claude/
+.superpowers/
+.worktrees/
 QUICK_REFERENCE.md
 sunshine_state.json
 vibeshine_state.json
