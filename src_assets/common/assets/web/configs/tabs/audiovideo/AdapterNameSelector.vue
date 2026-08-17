@@ -31,8 +31,7 @@ const platform = computed(() => config.platform || '');
           <pre>
               vainfo --display drm --device /dev/dri/renderD129 | \
                 grep -E "((VAProfileH264High|VAProfileHEVCMain|VAProfileHEVCMain10).*VAEntrypointEncSlice)|Driver version"
-            </pre
-          >
+            </pre>
           {{ $t('config.adapter_name_desc_linux_3') }}<br />
           <i>VAProfileH264High : VAEntrypointEncSlice</i>
         </template>
@@ -42,8 +41,7 @@ const platform = computed(() => config.platform || '');
           <pre>
               vainfo --display drm --device /dev/dri/renderD129 | \
                 grep -E "((VAProfileH264High|VAProfileHEVCMain|VAProfileHEVCMain10).*VAEntrypointEncSlice)|Driver version"
-            </pre
-          >
+            </pre>
           {{ $t('config.adapter_name_desc_linux_3') }}<br />
           <i>VAProfileH264High : VAEntrypointEncSlice</i>
         </template>

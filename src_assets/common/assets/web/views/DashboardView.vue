@@ -42,7 +42,9 @@
       <div class="min-w-0">
         <n-card v-if="installedVersion" :segmented="{ content: true, footer: true }">
           <template #header>
-            <h2 class="text-xl sm:text-2xl font-semibold tracking-tight mx-auto text-center break-words">
+            <h2
+              class="text-xl sm:text-2xl font-semibold tracking-tight mx-auto text-center break-words"
+            >
               {{ 'Version ' + displayVersion }}
             </h2>
           </template>
@@ -177,7 +179,12 @@
                       }}
                     </span>
                   </n-button>
-                  <n-button tertiary size="small" class="w-full justify-center sm:w-auto" @click="dismissCrashBundle">
+                  <n-button
+                    tertiary
+                    size="small"
+                    class="w-full justify-center sm:w-auto"
+                    @click="dismissCrashBundle"
+                  >
                     <i class="fas fa-xmark" />
                     <span>{{ $t('config.crash_dump_dismiss') || 'Dismiss' }}</span>
                   </n-button>
@@ -348,7 +355,9 @@
                       </p>
                     </div>
                   </div>
-                  <div class="dashboard-release-alert__actions grid gap-2 sm:flex sm:flex-wrap sm:items-center shrink-0">
+                  <div
+                    class="dashboard-release-alert__actions grid gap-2 sm:flex sm:flex-wrap sm:items-center shrink-0"
+                  >
                     <n-button
                       type="default"
                       strong
@@ -409,7 +418,9 @@
                       </p>
                     </div>
                   </div>
-                  <div class="dashboard-release-alert__actions grid gap-2 sm:flex sm:flex-wrap sm:items-center shrink-0">
+                  <div
+                    class="dashboard-release-alert__actions grid gap-2 sm:flex sm:flex-wrap sm:items-center shrink-0"
+                  >
                     <n-button
                       type="default"
                       strong

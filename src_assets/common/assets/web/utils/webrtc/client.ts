@@ -350,7 +350,9 @@ const VIDEO_MAX_FRAME_AGE_MAX_MS = 100;
 
 function resolveVideoJitterTargetMs(config: StreamConfig): number | undefined {
   const fps =
-    typeof config.fps === 'number' && Number.isFinite(config.fps) && config.fps > 0 ? config.fps : 60;
+    typeof config.fps === 'number' && Number.isFinite(config.fps) && config.fps > 0
+      ? config.fps
+      : 60;
   const minMs = VIDEO_MAX_FRAME_AGE_MIN_MS;
   const maxMs = VIDEO_MAX_FRAME_AGE_MAX_MS;
   if (
@@ -484,12 +486,20 @@ export class WebRtcClient {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const requested = config.encoding.toLowerCase();
-      const isCodecOfferMismatch = message.startsWith('Browser did not offer requested video codec');
+      const isCodecOfferMismatch = message.startsWith(
+        'Browser did not offer requested video codec',
+      );
 
-      if (requested !== 'h264' && (isCodecOfferMismatch || message.includes('Failed to process offer'))) {
-        const offered = isCodecOfferMismatch ? parseOfferedCodecNamesFromError(message) : new Set<string>();
+      if (
+        requested !== 'h264' &&
+        (isCodecOfferMismatch || message.includes('Failed to process offer'))
+      ) {
+        const offered = isCodecOfferMismatch
+          ? parseOfferedCodecNamesFromError(message)
+          : new Set<string>();
         const hdrRequestedNow = Boolean(config.hdr);
-        const candidates: Array<{ encoding: 'hevc' | 'av1' | 'h264'; hdr: boolean; why: string }> = [];
+        const candidates: Array<{ encoding: 'hevc' | 'av1' | 'h264'; hdr: boolean; why: string }> =
+          [];
 
         if (hdrRequestedNow) {
           if (requested === 'hevc' && (offered.has('av1') || offered.has('av1x'))) {
@@ -519,10 +529,7 @@ export class WebRtcClient {
         }
 
         for (const candidate of candidates) {
-          if (
-            candidate.encoding === requested &&
-            candidate.hdr === hdrRequestedNow
-          ) {
+          if (candidate.encoding === requested && candidate.hdr === hdrRequestedNow) {
             continue;
           }
 
@@ -900,11 +907,17 @@ export class WebRtcClient {
       if (!this.pc) return;
       const now = Date.now();
       const jitter = snapshot?.videoPlayoutDelayMs ?? snapshot?.videoJitterBufferMs;
-      if (typeof jitter === 'number' && Number.isFinite(jitter) && jitter >= STATS_POLL_FAST_JITTER_THRESHOLD_MS) {
+      if (
+        typeof jitter === 'number' &&
+        Number.isFinite(jitter) &&
+        jitter >= STATS_POLL_FAST_JITTER_THRESHOLD_MS
+      ) {
         this.statsFastUntilMs = Math.max(this.statsFastUntilMs ?? 0, now + STATS_POLL_FAST_HOLD_MS);
       }
-      const shouldFast = (this.statsFastUntilMs != null && now <= this.statsFastUntilMs) ||
-        (this.statsConnectedAtMs != null && now - this.statsConnectedAtMs <= STATS_POLL_FAST_BOOT_MS);
+      const shouldFast =
+        (this.statsFastUntilMs != null && now <= this.statsFastUntilMs) ||
+        (this.statsConnectedAtMs != null &&
+          now - this.statsConnectedAtMs <= STATS_POLL_FAST_BOOT_MS);
       const delay = shouldFast ? STATS_POLL_FAST_MS : STATS_POLL_SLOW_MS;
       this.statsTimer = window.setTimeout(() => {
         this.statsTimer = undefined;

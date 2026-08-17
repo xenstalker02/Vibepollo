@@ -66,7 +66,9 @@ const VIDEO_MAX_FRAME_AGE_MAX_MS = 100;
 
 function resolveVideoMaxFrameAgeMs(config: StreamConfig): number | undefined {
   const fps =
-    typeof config.fps === 'number' && Number.isFinite(config.fps) && config.fps > 0 ? config.fps : 60;
+    typeof config.fps === 'number' && Number.isFinite(config.fps) && config.fps > 0
+      ? config.fps
+      : 60;
   const minMs = VIDEO_MAX_FRAME_AGE_MIN_MS;
   const maxMs = VIDEO_MAX_FRAME_AGE_MAX_MS;
   if (
@@ -300,10 +302,7 @@ export class WebRtcHttpApi implements WebRtcApi {
         /* ignore */
       }
     }
-    await http.delete(
-      `/api/webrtc/sessions/${encodeURIComponent(sessionId)}`,
-      webrtcAuthConfig(),
-    );
+    await http.delete(`/api/webrtc/sessions/${encodeURIComponent(sessionId)}`, webrtcAuthConfig());
   }
 
   private async waitForAnswer(sessionId: string): Promise<WebRtcAnswer | null> {

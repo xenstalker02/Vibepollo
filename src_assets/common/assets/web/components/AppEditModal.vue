@@ -108,7 +108,11 @@
             <n-checkbox v-model:checked="form.terminateOnPause" size="small">
               Terminate On Pause
             </n-checkbox>
-            <n-checkbox v-model:checked="form.allowClientCommands" size="small" class="md:col-span-2">
+            <n-checkbox
+              v-model:checked="form.allowClientCommands"
+              size="small"
+              class="md:col-span-2"
+            >
               Allow Client Commands
             </n-checkbox>
             <n-checkbox v-model:checked="form.useAppIdentity" size="small">
@@ -409,8 +413,11 @@
             </n-checkbox>
             <div v-if="form.stateCmd.length === 0" class="text-[12px] opacity-60">None</div>
             <div v-else class="space-y-2">
-              <div v-for="(s, i) in form.stateCmd" :key="`state-${i}`"
-                class="rounded-md border border-dark/10 dark:border-light/10 p-2">
+              <div
+                v-for="(s, i) in form.stateCmd"
+                :key="`state-${i}`"
+                class="rounded-md border border-dark/10 dark:border-light/10 p-2"
+              >
                 <div class="flex items-center justify-between gap-2 mb-2">
                   <div class="text-xs opacity-70">Step {{ i + 1 }}</div>
                   <div class="flex items-center gap-2">
@@ -425,13 +432,23 @@
                 <div class="grid grid-cols-1 gap-2">
                   <div>
                     <label class="text-[11px] opacity-60">Do Command</label>
-                    <n-input v-model:value="s.do" type="textarea" :autosize="{ minRows: 1, maxRows: 3 }"
-                      class="font-mono" placeholder="Command to run when stream starts" />
+                    <n-input
+                      v-model:value="s.do"
+                      type="textarea"
+                      :autosize="{ minRows: 1, maxRows: 3 }"
+                      class="font-mono"
+                      placeholder="Command to run when stream starts"
+                    />
                   </div>
                   <div>
                     <label class="text-[11px] opacity-60">Undo Command</label>
-                    <n-input v-model:value="s.undo" type="textarea" :autosize="{ minRows: 1, maxRows: 3 }"
-                      class="font-mono" placeholder="Command to run when stream stops" />
+                    <n-input
+                      v-model:value="s.undo"
+                      type="textarea"
+                      :autosize="{ minRows: 1, maxRows: 3 }"
+                      class="font-mono"
+                      placeholder="Command to run when stream stops"
+                    />
                   </div>
                 </div>
               </div>
@@ -683,10 +700,10 @@ function fromServerApp(src?: ServerApp | null, idx: number = -1): AppForm {
     : [];
   const state = Array.isArray(src['state-cmd'])
     ? src['state-cmd'].map((p) => ({
-      do: String(p?.do ?? ''),
-      undo: String(p?.undo ?? ''),
-      elevated: !!p?.elevated,
-    }))
+        do: String(p?.do ?? ''),
+        undo: String(p?.undo ?? ''),
+        elevated: !!p?.elevated,
+      }))
     : [];
   const isPlayniteLinked = !!src['playnite-id'];
   const derivedExitTimeout =
@@ -729,8 +746,8 @@ function fromServerApp(src?: ServerApp | null, idx: number = -1): AppForm {
     typeof src['lossless-scaling-enabled'] === 'boolean'
       ? src['lossless-scaling-enabled']
       : !hasExplicitLosslessEnabled &&
-          frameGenerationMode !== 'lossless-scaling' &&
-          legacyLosslessFlag;
+        frameGenerationMode !== 'lossless-scaling' &&
+        legacyLosslessFlag;
   const frameGenerationProvider =
     frameGenerationModeFromConfig && frameGenerationModeFromConfig !== 'off'
       ? (frameGenerationModeFromConfig as FrameGenerationProvider)
@@ -879,12 +896,12 @@ function toServerPayload(f: AppForm): Record<string, any> {
     detached: Array.isArray(f.detached) ? f.detached : [],
     // Leave 'virtual-screen' to be persisted only if explicitly different from the global setting.
   };
-  
+
   // Include uuid to enable backend UUID-matching for updates
   if (f.uuid) {
     payload['uuid'] = f.uuid;
   }
-  
+
   // Only persist virtual display mode/layout if explicitly set and different from global defaults
   const _globalVDMode = globalVirtualDisplayMode.value;
   const _globalVDLayout = globalVirtualDisplayLayout.value;
@@ -917,10 +934,8 @@ function toServerPayload(f: AppForm): Record<string, any> {
   const losslessRuntimeActive = !!f.losslessScalingEnabled || losslessFramegenActive;
   payload['lossless-scaling-enabled'] = !!f.losslessScalingEnabled;
   payload['lossless-scaling-framegen'] = losslessFramegenActive;
-  payload['lossless-scaling-target-fps'] =
-    losslessFramegenActive ? payloadLosslessTarget : null;
-  payload['lossless-scaling-rtss-limit'] =
-    losslessFramegenActive ? payloadLosslessLimit : null;
+  payload['lossless-scaling-target-fps'] = losslessFramegenActive ? payloadLosslessTarget : null;
+  payload['lossless-scaling-rtss-limit'] = losslessFramegenActive ? payloadLosslessLimit : null;
   const payloadLosslessDelayRaw = parseNumeric(f.losslessScalingLaunchDelay);
   const payloadLosslessDelay =
     payloadLosslessDelayRaw && payloadLosslessDelayRaw > 0

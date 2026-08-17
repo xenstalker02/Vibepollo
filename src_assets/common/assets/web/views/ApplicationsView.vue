@@ -4,7 +4,9 @@
       class="flex flex-col gap-3 rounded-2xl border border-dark/10 bg-white/75 p-4 shadow-sm backdrop-blur dark:border-light/10 dark:bg-surface/70 sm:flex-row sm:items-center sm:justify-between sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none sm:backdrop-blur-none"
     >
       <div class="min-w-0 space-y-1">
-        <h2 class="text-base font-semibold text-dark dark:text-light sm:text-sm sm:uppercase sm:tracking-wider">
+        <h2
+          class="text-base font-semibold text-dark dark:text-light sm:text-sm sm:uppercase sm:tracking-wider"
+        >
           Applications
         </h2>
         <p class="text-[12px] leading-relaxed opacity-65 sm:hidden">
@@ -39,7 +41,9 @@
                 d="M21 12a9 9 0 11-3.2-6.6M21 3v6h-6"
               />
             </svg>
-            <span class="inline-flex flex-col items-start leading-tight sm:flex-row sm:items-center">
+            <span
+              class="inline-flex flex-col items-start leading-tight sm:flex-row sm:items-center"
+            >
               <span>{{ $t('playnite.force_sync') || 'Force Sync' }}</span>
               <span class="text-[11px] opacity-60 sm:hidden">Refresh imported titles</span>
             </span>
@@ -67,7 +71,9 @@
                 d="M12 3v3m0 12v3m9-9h-3M6 12H3m13.95 5.657l-2.121-2.121M8.172 8.172 6.05 6.05m11.9 0-2.121 2.121M8.172 15.828 6.05 17.95"
               />
             </svg>
-            <span class="inline-flex flex-col items-start leading-tight sm:flex-row sm:items-center">
+            <span
+              class="inline-flex flex-col items-start leading-tight sm:flex-row sm:items-center"
+            >
               <span class="sm:hidden">Connect Playnite</span>
               <span class="hidden sm:inline">{{
                 $t('playnite.setup_integration') || 'Setup Playnite'

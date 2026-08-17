@@ -603,7 +603,12 @@ function buildSearchIndex() {
   ) => {
     const label = (labelText || '').trim();
     if (!label) return;
-    const target = resolveTarget(sectionEl, sourceEl, sourceEl?.getAttribute?.('for'), targetOverride);
+    const target = resolveTarget(
+      sectionEl,
+      sourceEl,
+      sourceEl?.getAttribute?.('for'),
+      targetOverride,
+    );
     if (!target) return;
     const key = `${sectionId ?? 'unknown'}::${label}`;
     if (seen.has(key)) return;

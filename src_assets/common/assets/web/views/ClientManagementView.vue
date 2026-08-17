@@ -171,11 +171,7 @@
 
               <div class="space-y-3">
                 <div class="grid gap-4 md:grid-cols-3">
-                  <div
-                    v-for="group in permissionGroups"
-                    :key="group.id"
-                    class="space-y-2"
-                  >
+                  <div v-for="group in permissionGroups" :key="group.id" class="space-y-2">
                     <div class="text-xs font-medium uppercase tracking-wide opacity-70">
                       {{ $t(group.labelKey) }}
                     </div>
@@ -246,7 +242,11 @@
                           class="font-mono"
                           :placeholder="$t('_common.cmd')"
                         />
-                        <n-checkbox v-if="isWindows" v-model:checked="command.elevated" size="small">
+                        <n-checkbox
+                          v-if="isWindows"
+                          v-model:checked="command.elevated"
+                          size="small"
+                        >
                           {{ $t('_common.elevated') }}
                         </n-checkbox>
                         <n-button
@@ -269,7 +269,11 @@
                     <div class="text-xs font-semibold uppercase tracking-wide opacity-70">
                       Disconnect Commands
                     </div>
-                    <n-button size="tiny" tertiary @click="addClientCommand(client.editUndoCommands)">
+                    <n-button
+                      size="tiny"
+                      tertiary
+                      @click="addClientCommand(client.editUndoCommands)"
+                    >
                       <i class="fas fa-plus" /> {{ $t('_common.add') }}
                     </n-button>
                   </div>
@@ -288,7 +292,11 @@
                           class="font-mono"
                           :placeholder="$t('_common.cmd')"
                         />
-                        <n-checkbox v-if="isWindows" v-model:checked="command.elevated" size="small">
+                        <n-checkbox
+                          v-if="isWindows"
+                          v-model:checked="command.elevated"
+                          size="small"
+                        >
                           {{ $t('_common.elevated') }}
                         </n-checkbox>
                         <n-button

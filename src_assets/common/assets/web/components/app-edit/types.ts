@@ -25,11 +25,7 @@ export type FrameGenerationProvider = 'lossless-scaling' | 'nvidia-smooth-motion
 export type FrameGenerationMode = 'off' | FrameGenerationProvider;
 export type AppVirtualDisplayMode = 'disabled' | 'per_client' | 'shared';
 export type AppVirtualDisplayLayout =
-  | 'exclusive'
-  | 'extended'
-  | 'extended_primary'
-  | 'extended_isolated'
-  | 'extended_primary_isolated';
+  'exclusive' | 'extended' | 'extended_primary' | 'extended_isolated' | 'extended_primary_isolated';
 
 export interface LosslessProfileOverrides {
   performanceMode: boolean | null;
@@ -95,12 +91,7 @@ export interface AppForm {
   playniteId?: string | undefined;
   playniteManaged?: 'manual' | string | undefined;
   ddConfigurationOption?:
-    | 'disabled'
-    | 'verify_only'
-    | 'ensure_active'
-    | 'ensure_primary'
-    | 'ensure_only_display'
-    | null;
+    'disabled' | 'verify_only' | 'ensure_active' | 'ensure_primary' | 'ensure_only_display' | null;
 }
 
 export interface ServerApp {

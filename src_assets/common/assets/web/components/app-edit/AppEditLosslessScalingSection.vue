@@ -217,8 +217,8 @@
           size="small"
         />
         <p class="text-[11px] opacity-60">
-          Wait additional seconds after the game starts before opening Lossless Scaling.
-          Leave blank to use the default 8-second delay.
+          Wait additional seconds after the game starts before opening Lossless Scaling. Leave blank
+          to use the default 8-second delay.
         </p>
       </div>
     </div>

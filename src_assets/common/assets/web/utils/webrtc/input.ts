@@ -51,7 +51,11 @@ let keyboardLockPendingRequests = 0;
 export function requestKeyboardLock(keys?: string[]): Promise<boolean> {
   const keyboardLockApi = getKeyboardLockApi();
   if (!keyboardLockApi?.lock) return Promise.resolve(false);
-  if (typeof window !== 'undefined' && 'isSecureContext' in window && !(window as any).isSecureContext) {
+  if (
+    typeof window !== 'undefined' &&
+    'isSecureContext' in window &&
+    !(window as any).isSecureContext
+  ) {
     return Promise.resolve(false);
   }
   if (keyboardLockActive) {
@@ -621,7 +625,7 @@ export function attachInputCapture(
         key: entry.key,
         code: entry.code,
         repeat: false,
-        modifiers: { alt: false, ctrl: false, shift: false, meta: false },      
+        modifiers: { alt: false, ctrl: false, shift: false, meta: false },
         ts,
       };
       sendPayload(payload);
@@ -830,7 +834,8 @@ export function attachInputCapture(
       sendPayload(payload);
       return;
     }
-    const chorded = shouldPreventDefaultKey(event) && (event.metaKey || event.ctrlKey || event.altKey);
+    const chorded =
+      shouldPreventDefaultKey(event) && (event.metaKey || event.ctrlKey || event.altKey);
     pressedKeys.set(event.code, { key: event.key, code: event.code, chorded });
     const payload: InputMessage = {
       type: 'key_down',
@@ -1179,14 +1184,14 @@ export function attachInputCapture(
     element.removeEventListener('contextmenu', onContextMenu);
     element.removeEventListener('blur', onBlur);
     window.removeEventListener('blur', onBlur);
-    document.removeEventListener('visibilitychange', onVisibilityChange);       
+    document.removeEventListener('visibilitychange', onVisibilityChange);
     releaseKeyboardLockForCapture();
     keyAutoReleaseTimers.forEach((timer) => {
       window.clearTimeout(timer);
     });
     keyAutoReleaseTimers.clear();
     if (supportsGamepad) {
-      window.removeEventListener('gamepadconnected', onGamepadConnected);       
+      window.removeEventListener('gamepadconnected', onGamepadConnected);
       window.removeEventListener('gamepaddisconnected', onGamepadDisconnected);
     }
     releaseAllKeys();
