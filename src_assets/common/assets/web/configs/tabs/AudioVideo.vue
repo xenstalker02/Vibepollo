@@ -17,9 +17,9 @@ import { storeToRefs } from 'pinia';
 const { t } = useI18n();
 const store = useConfigStore();
 const { config } = storeToRefs(store);
-const platform = computed(() => (config.value as any)?.platform || '');
+const configValues = computed(() => config.value as unknown as Record<string, unknown>);
 const ddConfigDisabled = computed(
-  () => (config.value as any)?.dd_configuration_option === 'disabled',
+  () => configValues.value['dd_configuration_option'] === 'disabled',
 );
 const frameLimiterStepLabel = computed(() =>
   ddConfigDisabled.value ? t('config.dd_step_3') : t('config.dd_step_4'),
@@ -33,7 +33,7 @@ const sudovdaStatus = computed(() => ({
   '-2': t('config.sudovda_status_version_incompatible'),
   '-3': t('config.sudovda_status_watchdog_failed'),
 }));
-const vdisplay = computed(() => (config as any)?.vdisplay || 0);
+const vdisplay = computed(() => configValues.value['vdisplay'] || 0);
 const currentDriverStatus = computed(
   () =>
     sudovdaStatus.value[String(vdisplay.value) as keyof typeof sudovdaStatus.value] ||
@@ -72,9 +72,9 @@ const displayAutomationEnabled = computed<boolean>({
     if (!enabled) {
       const next = 'disabled';
       if (typeof store.updateOption === 'function') {
-        store.updateOption('dd_configuration_option', next as any);
+        store.updateOption('dd_configuration_option', next);
       } else {
-        (config.value as any).dd_configuration_option = next as any;
+        config.value.dd_configuration_option = next;
       }
       return;
     }
@@ -83,9 +83,9 @@ const displayAutomationEnabled = computed<boolean>({
       const fallback = lastAutomationOption.value || 'verify_only';
       const next = fallback === 'disabled' ? 'verify_only' : fallback;
       if (typeof store.updateOption === 'function') {
-        store.updateOption('dd_configuration_option', next as any);
+        store.updateOption('dd_configuration_option', next);
       } else {
-        (config.value as any).dd_configuration_option = next as any;
+        config.value.dd_configuration_option = next;
       }
     }
   },
@@ -160,7 +160,15 @@ function selectVirtualDisplayLayout(v: unknown) {
   const sv = String(v);
   const opts = virtualDisplayLayoutOptions.value.map((o) => o.value);
   if (opts.includes(sv)) {
-    virtualDisplayLayout.value = sv as any;
+    if (
+      sv === 'exclusive' ||
+      sv === 'extended' ||
+      sv === 'extended_primary' ||
+      sv === 'extended_isolated' ||
+      sv === 'extended_primary_isolated'
+    ) {
+      virtualDisplayLayout.value = sv;
+    }
   }
 }
 </script>
@@ -168,8 +176,8 @@ function selectVirtualDisplayLayout(v: unknown) {
 <template>
   <div id="av" class="config-page">
     <ConfigFieldRenderer
-      setting-key="audio_sink"
       v-model="config.audio_sink"
+      setting-key="audio_sink"
       class="mb-6"
       :desc="$tp('config.audio_sink_desc')"
       :placeholder="
@@ -199,53 +207,53 @@ function selectVirtualDisplayLayout(v: unknown) {
     <PlatformLayout>
       <template #windows>
         <ConfigFieldRenderer
-          setting-key="virtual_sink"
           v-model="config.virtual_sink"
+          setting-key="virtual_sink"
           class="mb-6"
           :placeholder="$t('config.virtual_sink_placeholder')"
         />
 
         <ConfigFieldRenderer
-          setting-key="mic_sink"
           v-model="config.mic_sink"
+          setting-key="mic_sink"
           class="mb-3"
           :placeholder="$t('config.mic_sink_placeholder')"
         />
 
         <ConfigFieldRenderer
-          setting-key="mic_capture_device"
           v-model="config.mic_capture_device"
+          setting-key="mic_capture_device"
           class="mb-3"
           :placeholder="$t('config.mic_capture_device_placeholder')"
         />
 
         <ConfigFieldRenderer
-          setting-key="mic_buffer_ms"
           v-model="config['mic_buffer_ms']"
+          setting-key="mic_buffer_ms"
           class="mb-3"
         />
 
         <ConfigFieldRenderer
-          setting-key="mic_buffer_packets"
           v-model="config['mic_buffer_packets']"
+          setting-key="mic_buffer_packets"
           class="mb-6"
         />
       </template>
     </PlatformLayout>
 
-    <ConfigFieldRenderer setting-key="stream_audio" v-model="config.stream_audio" class="mb-3" />
+    <ConfigFieldRenderer v-model="config.stream_audio" setting-key="stream_audio" class="mb-3" />
 
     <ConfigFieldRenderer
       v-if="config.stream_audio === 'enabled'"
-      setting-key="keep_sink_default"
       v-model="config.keep_sink_default"
+      setting-key="keep_sink_default"
       class="mb-3"
     />
 
     <ConfigFieldRenderer
       v-if="config.stream_audio === 'enabled'"
-      setting-key="auto_capture_sink"
       v-model="config.auto_capture_sink"
+      setting-key="auto_capture_sink"
       class="mb-6"
     />
 
@@ -328,10 +336,10 @@ function selectVirtualDisplayLayout(v: unknown) {
                   v-for="option in virtualDisplayLayoutOptions"
                   :key="option.value"
                   class="flex flex-col cursor-pointer py-2 px-2 rounded-md hover:bg-surface/10"
+                  tabindex="0"
                   @click.prevent="selectVirtualDisplayLayout(option.value)"
                   @keydown.enter.prevent="selectVirtualDisplayLayout(option.value)"
                   @keydown.space.prevent="selectVirtualDisplayLayout(option.value)"
-                  tabindex="0"
                 >
                   <div class="flex items-center gap-3">
                     <n-radio :value="option.value" />

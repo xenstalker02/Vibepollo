@@ -18,6 +18,8 @@ import {
 } from '@/configs/configFieldSchema';
 import type { ConfigSelectOption } from '@/configs/configSelectOptions';
 
+const noValue = null;
+type NoValue = typeof noValue;
 const model = defineModel<unknown>({ required: true });
 const attrs = useAttrs();
 const store = useConfigStore();
@@ -60,12 +62,15 @@ function translateDesc(key: string): string {
 }
 
 const platform = computed(() =>
-  String(store.metadata?.platform || (store.config as any)?.platform || '').toLowerCase(),
+  String(store.metadata?.platform || configValues['platform'] || '').toLowerCase(),
 );
+
+const configValues = store.config as unknown as Record<string, unknown>;
+const defaultValues = store.defaults as unknown as Record<string, unknown>;
 
 const resolvedDefaultValue = computed(() => {
   if (props.defaultValue !== undefined) return props.defaultValue;
-  return (store.defaults as any)?.[props.settingKey];
+  return defaultValues[props.settingKey];
 });
 
 const field = computed(() => {
@@ -140,7 +145,7 @@ const stringModel = computed<string>({
   },
 });
 
-const numberModel = computed<number | null>({
+const numberModel = computed<number | NoValue>({
   get() {
     if (typeof model.value === 'number' && Number.isFinite(model.value)) return model.value;
     if (typeof model.value === 'string') {
@@ -154,7 +159,7 @@ const numberModel = computed<number | null>({
   },
 });
 
-const selectModel = computed<string | number | null>({
+const selectModel = computed<string | number | NoValue>({
   get() {
     if (
       typeof model.value === 'string' ||
@@ -177,6 +182,12 @@ const switchModel = computed<boolean>({
     model.value = value;
   },
 });
+
+function checkboxDefault(value: unknown): boolean | number | string {
+  return typeof value === 'boolean' || typeof value === 'number' || typeof value === 'string'
+    ? value
+    : false;
+}
 </script>
 
 <template>
@@ -186,7 +197,7 @@ const switchModel = computed<boolean>({
     v-model="model"
     :label="resolvedLabel"
     :desc="resolvedDesc"
-    :default="resolvedDefaultValue"
+    :default="checkboxDefault(resolvedDefaultValue)"
     :locale-prefix="resolvedLocalePrefix"
     :inverse-values="resolvedInverseValues"
     v-bind="attrs"

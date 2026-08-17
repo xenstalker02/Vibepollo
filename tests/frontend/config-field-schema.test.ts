@@ -20,14 +20,17 @@ describe('configFieldSchema', () => {
     },
   );
 
-  test('still infers checkbox fields from boolean-like numeric values when not overridden', () => {
-    const field = getConfigFieldDefinition('custom_toggle', {
-      ...baseContext,
-      currentValue: 0,
-    });
+  test.each([0, 1])(
+    'infers checkbox fields from boolean-like numeric values when not overridden: %p',
+    (currentValue) => {
+      const field = getConfigFieldDefinition('custom_toggle', {
+        ...baseContext,
+        currentValue,
+      });
 
-    expect(field.kind).toBe('checkbox');
-  });
+      expect(field.kind).toBe('checkbox');
+    },
+  );
 
   test('omits optional metadata when a plain input has none', () => {
     const field = getConfigFieldDefinition('custom_text', {

@@ -2,35 +2,41 @@ import { mount } from '@vue/test-utils';
 import Checkbox from '@web/Checkbox.vue';
 
 describe('Checkbox.vue', () => {
-  const mountWith = (model: any, props: any = {}) =>
-    mount(Checkbox as any, {
+  type CheckboxValue = boolean | number | string;
+  type CheckboxProps = {
+    inverseValues?: boolean;
+    default?: CheckboxValue;
+  };
+
+  const mountWith = (model: CheckboxValue, props: CheckboxProps = {}) =>
+    mount(Checkbox, {
       props: { id: 'flag', localePrefix: 'playnite', label: 'Label', modelValue: model, ...props },
       global: { mocks: { $t: (k: string) => k } },
     });
 
   test('maps boolean model to true/false values', async () => {
     const w = mountWith(true);
-    const input = w.get('input[type="checkbox"]');
-    expect((input.element as HTMLInputElement).checked).toBe(true);
-    await input.setValue(false);
+    const checkbox = w.get('[role="checkbox"]');
+    expect(checkbox.attributes('aria-checked')).toBe('true');
+    await checkbox.trigger('click');
     expect(w.emitted()['update:modelValue'][0][0]).toBe(false);
   });
 
   test('maps string "enabled/disabled" and respects inverseValues', async () => {
     const w = mountWith('enabled', { inverseValues: true });
-    const input = w.get('input');
+    const checkbox = w.get('.n-checkbox');
     // inverseValues flips truthy/falsy mapping; enabled becomes falsy
-    expect((input.element as HTMLInputElement).checked).toBe(false);
-    await input.setValue(true);
+    expect(checkbox.attributes('aria-checked')).toBe('false');
+    await checkbox.trigger('click');
     // when checked, model updates to mapped truthy (which is original falsy due to inverse)
     expect(w.emitted()['update:modelValue'][0][0]).toBe('disabled');
   });
 
   test('numeric 1/0 mapping works', async () => {
     const w = mountWith(1);
-    const input = w.get('input');
-    expect((input.element as HTMLInputElement).checked).toBe(true);
-    await input.setValue(false);
+    const checkbox = w.get('[role="checkbox"]');
+    expect(checkbox.attributes('aria-checked')).toBe('true');
+    await checkbox.trigger('click');
     expect(w.emitted()['update:modelValue'][0][0]).toBe(0);
   });
 

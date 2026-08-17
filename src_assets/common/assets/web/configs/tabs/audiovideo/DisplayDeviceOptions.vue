@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { computed, h, onMounted, ref, watch } from 'vue';
 import PlatformLayout from '@/PlatformLayout.vue';
 import Checkbox from '@/Checkbox.vue';
 import ConfigDurationField from '@/ConfigDurationField.vue';
 import { useConfigStore } from '@/stores/config';
 import { NSelect, NInput, NInputNumber, NButton, NRadioGroup, NRadio, NGrid, NGi } from 'naive-ui';
+import type { SelectRenderLabel, SelectRenderOption } from 'naive-ui/es/select';
 import { useI18n } from 'vue-i18n';
 import { http } from '@/http';
 
@@ -70,30 +71,18 @@ const MIXED: RemapType = 'mixed';
 function isObject(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === 'object';
 }
-function isStringRecord(v: unknown, keys: string[]): v is Record<string, string> {
-  if (!isObject(v)) return false;
-  return keys.every((k) => typeof (v as any)[k] === 'string');
-}
-function isRefreshRateOnly(v: unknown): v is RefreshRateOnly {
-  return isStringRecord(v, ['requested_fps', 'final_refresh_rate']);
-}
-function isResolutionOnly(v: unknown): v is ResolutionOnly {
-  return isStringRecord(v, ['requested_resolution', 'final_resolution']);
-}
-function isMixed(v: unknown): v is MixedRemap {
-  return isRefreshRateOnly(v) && isResolutionOnly(v);
-}
 function isRemapping(obj: unknown): obj is DdModeRemapping {
   if (!isObject(obj)) return false;
-  const r = obj as any;
   return (
-    Array.isArray(r.refresh_rate_only) && Array.isArray(r.resolution_only) && Array.isArray(r.mixed)
+    Array.isArray(obj['refresh_rate_only']) &&
+    Array.isArray(obj['resolution_only']) &&
+    Array.isArray(obj['mixed'])
   );
 }
 
-function getRemapping(): DdModeRemapping | null {
+function getRemapping(): DdModeRemapping | false {
   const v = config.dd_mode_remapping;
-  return isRemapping(v) ? v : null;
+  return isRemapping(v) ? v : false;
 }
 
 function canBeRemapped(): boolean {
@@ -150,11 +139,9 @@ function removeRemappingEntry(idx: number): void {
 }
 
 // Safe accessor for the currently selected remapping list
-const remappingArray = computed(() => {
-  const type = getRemappingType();
-  const dd = config.dd_mode_remapping as Record<string, unknown>;
-  const arr = dd?.[type];
-  return Array.isArray(arr) ? arr : [];
+const remappingArray = computed<MixedRemap[]>(() => {
+  const remapping = getRemapping();
+  return remapping ? remapping.mixed : [];
 });
 
 // ----- i18n helpers -----
@@ -162,9 +149,10 @@ const { t } = useI18n();
 
 // ----- Golden Restore (Windows) -----
 const goldenBusy = ref(false);
-const exportStatus = ref<null | boolean>(null);
-const deleteStatus = ref<null | boolean>(null);
-const goldenExists = ref<null | boolean>(null);
+type GoldenStatus = 'idle' | boolean;
+const exportStatus = ref<GoldenStatus>('idle');
+const deleteStatus = ref<GoldenStatus>('idle');
+const goldenExists = ref<GoldenStatus>('idle');
 const snapshotDevices = ref<DisplayDevice[]>([]);
 const snapshotDevicesLoading = ref(false);
 const snapshotDevicesError = ref('');
@@ -173,7 +161,7 @@ const excludeAllWarning = ref(false);
 async function loadGoldenStatus(): Promise<void> {
   try {
     const r = await http.get('/api/display/golden_status', { validateStatus: () => true });
-    goldenExists.value = r?.data?.exists === true;
+    goldenExists.value = isObject(r.data) && r.data['exists'] === true;
   } catch {
     goldenExists.value = false;
   }
@@ -187,10 +175,10 @@ const createOrRecreateLabel = computed(() =>
 
 async function exportGolden(): Promise<void> {
   goldenBusy.value = true;
-  exportStatus.value = null;
+  exportStatus.value = 'idle';
   try {
     const r = await http.post('/api/display/export_golden', {}, { validateStatus: () => true });
-    exportStatus.value = r?.data?.status === true;
+    exportStatus.value = isObject(r.data) && r.data['status'] === true;
     await loadGoldenStatus();
   } catch {
     exportStatus.value = false;
@@ -207,8 +195,11 @@ async function loadSnapshotDevices(): Promise<void> {
       params: { detail: 'full' },
     });
     snapshotDevices.value = Array.isArray(res.data) ? res.data : [];
-  } catch (e: any) {
-    snapshotDevicesError.value = e?.message || 'Failed to load display devices';
+  } catch (error) {
+    snapshotDevicesError.value =
+      isObject(error) && typeof error['message'] === 'string'
+        ? error['message']
+        : 'Failed to load display devices';
     snapshotDevices.value = [];
   } finally {
     snapshotDevicesLoading.value = false;
@@ -233,10 +224,8 @@ const snapshotExcludeOptions = computed(() => {
     seen.add(value);
   }
 
-  const current = Array.isArray((config as any).dd_snapshot_exclude_devices)
-    ? ((config as any).dd_snapshot_exclude_devices as unknown[])
-        .map((v) => String(v ?? '').trim())
-        .filter(Boolean)
+  const current = Array.isArray(config.dd_snapshot_exclude_devices)
+    ? config.dd_snapshot_exclude_devices.map((v) => String(v ?? '').trim()).filter(Boolean)
     : [];
   for (const id of current) {
     if (!seen.has(id)) {
@@ -247,15 +236,33 @@ const snapshotExcludeOptions = computed(() => {
   return opts;
 });
 
+function displayOptionText(option: Record<string, unknown>, key: string): string {
+  const value = option[key];
+  return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
+}
+
+const renderSnapshotDeviceLabel: SelectRenderLabel = (option) => {
+  const displayName =
+    displayOptionText(option, 'displayName') || displayOptionText(option, 'label') || 'Display';
+  const identifier = displayOptionText(option, 'id') || displayOptionText(option, 'value');
+  return h('div', { class: 'leading-tight' }, [
+    h('div', displayName),
+    h('div', { class: 'text-[12px] opacity-60 font-mono' }, identifier),
+  ]);
+};
+
+const renderSnapshotDeviceOption: SelectRenderOption = ({ node }) =>
+  h('div', { class: 'py-0.5' }, node);
+
 const availableExcludeDeviceIds = computed(() =>
   snapshotExcludeOptions.value.map((opt) => (opt.value ? String(opt.value) : '')).filter(Boolean),
 );
 
 const excludedSnapshotDevices = computed<string[]>({
   get() {
-    const raw = (config as any).dd_snapshot_exclude_devices;
+    const raw = config.dd_snapshot_exclude_devices;
     if (Array.isArray(raw)) {
-      return raw.map((v: any) => String(v ?? '').trim()).filter(Boolean);
+      return raw.map((value) => String(value ?? '').trim()).filter(Boolean);
     }
     return [];
   },
@@ -272,19 +279,17 @@ const excludedSnapshotDevices = computed<string[]>({
       return;
     }
     if (typeof store.updateOption === 'function') {
-      store.updateOption('dd_snapshot_exclude_devices', normalized as any);
-    } else {
-      (config as any).dd_snapshot_exclude_devices = normalized as any;
+      store.updateOption('dd_snapshot_exclude_devices', normalized);
     }
   },
 });
 
 async function deleteGolden(): Promise<void> {
   goldenBusy.value = true;
-  deleteStatus.value = null;
+  deleteStatus.value = 'idle';
   try {
     const r = await http.delete('/api/display/golden', { validateStatus: () => true });
-    deleteStatus.value = r?.data?.deleted === true;
+    deleteStatus.value = isObject(r.data) && r.data['deleted'] === true;
     await loadGoldenStatus();
   } catch {
     deleteStatus.value = false;
@@ -294,7 +299,7 @@ async function deleteGolden(): Promise<void> {
 }
 
 onMounted(() => {
-  loadGoldenStatus();
+  void loadGoldenStatus();
   if (!snapshotDevicesLoading.value && snapshotDevices.value.length === 0) {
     void loadSnapshotDevices();
   }
@@ -302,28 +307,28 @@ onMounted(() => {
 
 // Build translated option lists as computeds so they react to locale changes
 const ddConfigurationOptions = computed(() => [
-  { label: t('_common.disabled') as string, value: 'disabled' },
-  { label: t('config.dd_config_verify_only') as string, value: 'verify_only' },
-  { label: t('config.dd_config_ensure_active') as string, value: 'ensure_active' },
-  { label: t('config.dd_config_ensure_primary') as string, value: 'ensure_primary' },
-  { label: t('config.dd_config_ensure_only_display') as string, value: 'ensure_only_display' },
+  { label: t('_common.disabled'), value: 'disabled' },
+  { label: t('config.dd_config_verify_only'), value: 'verify_only' },
+  { label: t('config.dd_config_ensure_active'), value: 'ensure_active' },
+  { label: t('config.dd_config_ensure_primary'), value: 'ensure_primary' },
+  { label: t('config.dd_config_ensure_only_display'), value: 'ensure_only_display' },
 ]);
 
 const ddResolutionOptions = computed(() => [
-  { label: t('config.dd_resolution_option_disabled') as string, value: 'disabled' },
-  { label: t('config.dd_resolution_option_auto') as string, value: 'auto' },
-  { label: t('config.dd_resolution_option_manual') as string, value: 'manual' },
+  { label: t('config.dd_resolution_option_disabled'), value: 'disabled' },
+  { label: t('config.dd_resolution_option_auto'), value: 'auto' },
+  { label: t('config.dd_resolution_option_manual'), value: 'manual' },
 ]);
 
 const ddRefreshRateOptions = computed(() => [
-  { label: t('config.dd_refresh_rate_option_disabled') as string, value: 'disabled' },
-  { label: t('config.dd_refresh_rate_option_auto') as string, value: 'auto' },
-  { label: t('config.dd_refresh_rate_option_manual') as string, value: 'manual' },
+  { label: t('config.dd_refresh_rate_option_disabled'), value: 'disabled' },
+  { label: t('config.dd_refresh_rate_option_auto'), value: 'auto' },
+  { label: t('config.dd_refresh_rate_option_manual'), value: 'manual' },
 ]);
 
 const ddHdrOptions = computed(() => [
-  { label: t('config.dd_hdr_option_disabled') as string, value: 'disabled' },
-  { label: t('config.dd_hdr_option_auto') as string, value: 'auto' },
+  { label: t('config.dd_hdr_option_disabled'), value: 'disabled' },
+  { label: t('config.dd_hdr_option_auto'), value: 'auto' },
 ]);
 
 // ----- Manual Resolution Validation -----
@@ -335,19 +340,19 @@ const manualResolutionValid = computed(() => {
   return manualResolutionPattern.test(v);
 });
 
-function isResolutionFieldValid(v: string | undefined | null): boolean {
+function isResolutionFieldValid(v?: string): boolean {
   if (!v) return true; // allow empty to support refresh-rate-only mappings
   return manualResolutionPattern.test(String(v));
 }
 
 // ----- Refresh Rate Validation -----
 // Allow integers or decimals, must be > 0
-function isPositiveNumber(value: any): boolean {
+function isPositiveNumber(value: unknown): boolean {
   if (value === undefined || value === null || String(value).trim() === '') return false;
   const n = Number(value);
   return Number.isFinite(n) && n > 0;
 }
-function isRefreshFieldValid(v: string | undefined | null): boolean {
+function isRefreshFieldValid(v?: string): boolean {
   if (!v) return true; // allow empty when not required
   const s = String(v).trim();
   if (s === '') return true; // empty allowed in some contexts
@@ -391,13 +396,13 @@ const hotkeyComboPreview = computed(() => {
 const hotkeyCaptureActive = ref(false);
 const hotkeyCaptureError = ref('');
 
-function normalizeHotkeyKey(raw: string): string | null {
+function normalizeHotkeyKey(raw: string): string | false {
   if (/^F\d{1,2}$/i.test(raw)) {
     const num = Number(raw.slice(1));
     if (Number.isInteger(num) && num >= 1 && num <= 24) {
       return `F${num}`;
     }
-    return null;
+    return false;
   }
   if (raw.length === 1) {
     if (/[a-z]/i.test(raw)) {
@@ -407,7 +412,7 @@ function normalizeHotkeyKey(raw: string): string | null {
       return raw;
     }
   }
-  return null;
+  return false;
 }
 
 function updateSnapshotHotkey(e: KeyboardEvent): void {
@@ -538,7 +543,7 @@ function clearSnapshotHotkey(): void {
                   type="primary"
                   strong
                   :disabled="goldenBusy"
-                  :loading="goldenBusy && exportStatus === null && deleteStatus === null"
+                  :loading="goldenBusy && exportStatus === 'idle' && deleteStatus === 'idle'"
                   @click="exportGolden"
                 >
                   <span>{{ createOrRecreateLabel }}</span>
@@ -548,7 +553,7 @@ function clearSnapshotHotkey(): void {
                   type="error"
                   strong
                   :disabled="goldenBusy || goldenExists !== true"
-                  :loading="goldenBusy && deleteStatus === null"
+                  :loading="goldenBusy && deleteStatus === 'idle'"
                   @click="deleteGolden"
                 >
                   {{ $t('troubleshooting.dd_golden_delete') }}
@@ -615,6 +620,8 @@ function clearSnapshotHotkey(): void {
                 :loading="snapshotDevicesLoading"
                 :disabled="snapshotDevicesLoading"
                 :placeholder="$t('config.dd_snapshot_exclude_placeholder')"
+                :render-label="renderSnapshotDeviceLabel"
+                :render-option="renderSnapshotDeviceOption"
                 @focus="
                   () => {
                     if (!snapshotDevicesLoading && snapshotDevices.length === 0) {
@@ -784,12 +791,12 @@ function clearSnapshotHotkey(): void {
                           class="font-mono w-full"
                           :placeholder="'1920x1080'"
                           :input-props="{ id: `dd-remap-${idx}-requested-resolution` }"
-                          @update:value="store.markManualDirty?.('dd_mode_remapping')"
                           v-bind="
                             isResolutionFieldValid(value.requested_resolution)
                               ? {}
                               : { status: 'error' }
                           "
+                          @update:value="store.markManualDirty?.('dd_mode_remapping')"
                         />
                       </div>
                       <div
@@ -808,10 +815,10 @@ function clearSnapshotHotkey(): void {
                           class="font-mono w-full"
                           :placeholder="'60'"
                           :input-props="{ id: `dd-remap-${idx}-requested-fps` }"
-                          @update:value="store.markManualDirty?.('dd_mode_remapping')"
                           v-bind="
                             isRefreshFieldValid(value.requested_fps) ? {} : { status: 'error' }
                           "
+                          @update:value="store.markManualDirty?.('dd_mode_remapping')"
                         />
                       </div>
 
@@ -831,12 +838,12 @@ function clearSnapshotHotkey(): void {
                           class="font-mono w-full"
                           :placeholder="'2560x1440'"
                           :input-props="{ id: `dd-remap-${idx}-final-resolution` }"
-                          @update:value="store.markManualDirty?.('dd_mode_remapping')"
                           v-bind="
                             isResolutionFieldValid(value.final_resolution)
                               ? {}
                               : { status: 'error' }
                           "
+                          @update:value="store.markManualDirty?.('dd_mode_remapping')"
                         />
                       </div>
                       <div
@@ -855,10 +862,10 @@ function clearSnapshotHotkey(): void {
                           class="font-mono w-full"
                           :placeholder="'119.95'"
                           :input-props="{ id: `dd-remap-${idx}-final-refresh` }"
-                          @update:value="store.markManualDirty?.('dd_mode_remapping')"
                           v-bind="
                             isRefreshFieldValid(value.final_refresh_rate) ? {} : { status: 'error' }
                           "
+                          @update:value="store.markManualDirty?.('dd_mode_remapping')"
                         />
                       </div>
                       <div
@@ -975,8 +982,8 @@ function clearSnapshotHotkey(): void {
                       type="text"
                       class="font-mono w-full"
                       placeholder="2560x1440"
-                      @update:value="store.markManualDirty?.('dd_manual_resolution')"
                       v-bind="manualResolutionValid ? {} : { status: 'error' }"
+                      @update:value="store.markManualDirty?.('dd_manual_resolution')"
                     />
                     <p v-if="!manualResolutionValid" class="text-[11px] text-red-500">
                       Invalid format. Use WIDTHxHEIGHT, e.g., 2560x1440 (x or ×).

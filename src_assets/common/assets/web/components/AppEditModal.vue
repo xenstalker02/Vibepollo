@@ -190,6 +190,8 @@
                 :placeholder="t('config.app_display_physical_placeholder')"
                 filterable
                 clearable
+                :render-label="renderDisplayDeviceLabel"
+                :render-option="renderDisplayDeviceOption"
                 @focus="onDisplaySelectFocus"
               />
               <div class="text-[11px] opacity-70">
@@ -285,19 +287,19 @@
               </div>
               <n-radio-group
                 :value="resolvedVirtualDisplayLayout"
+                class="space-y-4"
                 @update:value="
                   (v) => (form.virtualDisplayLayout = v === globalVirtualDisplayLayout ? null : v)
                 "
-                class="space-y-4"
               >
                 <div
                   v-for="option in appVirtualDisplayLayoutOptions"
                   :key="option.value"
                   class="flex flex-col cursor-pointer py-2 px-2 rounded-md hover:bg-surface/10"
+                  tabindex="0"
                   @click="selectVirtualDisplayLayout(option.value)"
                   @keydown.enter.prevent="selectVirtualDisplayLayout(option.value)"
                   @keydown.space.prevent="selectVirtualDisplayLayout(option.value)"
-                  tabindex="0"
                 >
                   <div class="flex items-center gap-3">
                     <n-radio :value="option.value" />
@@ -466,25 +468,35 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue';
+import { computed, h, ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useMessage } from 'naive-ui';
 import { http } from '@/http';
-import { NModal, NCard, NButton, NCheckbox, NRadioGroup, NRadio, NSelect } from 'naive-ui';
+import {
+  NModal,
+  NCard,
+  NButton,
+  NCheckbox,
+  NRadioGroup,
+  NRadio,
+  NSelect,
+  type SelectOption,
+} from 'naive-ui';
 import { useConfigStore } from '@/stores/config';
 import { useI18n } from 'vue-i18n';
-import type {
-  AppForm,
-  ServerApp,
-  PrepCmd,
-  LosslessProfileKey,
-  LosslessScalingMode,
-  LosslessProfileOverrides,
-  Anime4kSize,
-  FrameGenerationProvider,
-  FrameGenerationMode,
-  FrameGenHealth,
-  AppVirtualDisplayMode,
-  AppVirtualDisplayLayout,
+import {
+  isRecord,
+  type Anime4kSize,
+  type AppForm,
+  type AppVirtualDisplayLayout,
+  type AppVirtualDisplayMode,
+  type FrameGenerationMode,
+  type FrameGenerationProvider,
+  type FrameGenHealth,
+  type LosslessProfileKey,
+  type LosslessProfileOverrides,
+  type LosslessScalingMode,
+  type Nullable,
+  type ServerApp,
 } from './app-edit/types';
 import {
   LOSSLESS_PROFILE_DEFAULTS,
@@ -505,7 +517,7 @@ import AppEditConfigOverridesSection from './app-edit/AppEditConfigOverridesSect
 import AppEditLosslessScalingSection from './app-edit/AppEditLosslessScalingSection.vue';
 import AppEditPrepCommandsSection from './app-edit/AppEditPrepCommandsSection.vue';
 import AppEditFrameGenSection from './app-edit/AppEditFrameGenSection.vue';
-import AppEditCoverModal, { type CoverCandidate } from './app-edit/AppEditCoverModal.vue';
+import AppEditCoverModal from './app-edit/AppEditCoverModal.vue';
 import AppEditDeleteConfirmModal from './app-edit/AppEditDeleteConfirmModal.vue';
 type DisplayDevice = {
   device_id?: string;
@@ -513,14 +525,29 @@ type DisplayDevice = {
   friendly_name?: string;
   info?: {
     active?: boolean;
+    refresh_rate?: unknown;
+    refreshRate?: unknown;
   };
+  supported_refresh_rates?: unknown;
+  supportedRefreshRates?: unknown;
+};
+type CoverCandidate = {
+  name: string;
+  key: string;
+  url: string;
+  saveUrl: string;
+};
+type DisplayDeviceOption = SelectOption & {
+  displayName?: string;
+  id?: string;
+  active?: Nullable<boolean>;
 };
 type DisplaySelection = 'global' | 'virtual' | 'physical';
 type AppVirtualDisplayModeSelection = AppVirtualDisplayMode | 'global';
 
 interface AppEditModalProps {
   modelValue: boolean;
-  app?: ServerApp | null;
+  app?: Nullable<ServerApp>;
   index?: number;
 }
 
@@ -578,6 +605,44 @@ function fresh(): AppForm {
     ddConfigurationOption: null,
   };
 }
+
+function getValue(source: unknown, key: string): unknown {
+  return isRecord(source) ? source[key] : undefined;
+}
+
+function getStringValue(source: unknown, key: string): string {
+  const value = getValue(source, key);
+  return typeof value === 'string' ? value : '';
+}
+
+function asDisplayDevice(value: unknown): DisplayDevice {
+  const info = getValue(value, 'info');
+  const deviceId = getStringValue(value, 'device_id');
+  const displayName = getStringValue(value, 'display_name');
+  const friendlyName = getStringValue(value, 'friendly_name');
+  const supportedRefreshRates = getValue(value, 'supported_refresh_rates');
+  const supportedRefreshRatesCamel = getValue(value, 'supportedRefreshRates');
+  const normalizedInfo = isRecord(info)
+    ? {
+        ...(typeof info['active'] === 'boolean' ? { active: info['active'] } : {}),
+        ...(info['refresh_rate'] !== undefined ? { refresh_rate: info['refresh_rate'] } : {}),
+        ...(info['refreshRate'] !== undefined ? { refreshRate: info['refreshRate'] } : {}),
+      }
+    : null;
+  return {
+    ...(deviceId ? { device_id: deviceId } : {}),
+    ...(displayName ? { display_name: displayName } : {}),
+    ...(friendlyName ? { friendly_name: friendlyName } : {}),
+    ...(normalizedInfo ? { info: normalizedInfo } : {}),
+    ...(supportedRefreshRates !== undefined
+      ? { supported_refresh_rates: supportedRefreshRates }
+      : {}),
+    ...(supportedRefreshRatesCamel !== undefined
+      ? { supportedRefreshRates: supportedRefreshRatesCamel }
+      : {}),
+  };
+}
+
 const form = ref<AppForm>(fresh());
 const overridesPickerOpen = ref(false);
 
@@ -590,7 +655,7 @@ const APP_VIRTUAL_DISPLAY_LAYOUTS: AppVirtualDisplayLayout[] = [
   'extended_primary_isolated',
 ];
 
-function parseAppVirtualDisplayMode(value: unknown): AppVirtualDisplayMode | null {
+function parseAppVirtualDisplayMode(value: unknown): Nullable<AppVirtualDisplayMode> {
   if (typeof value !== 'string') {
     return null;
   }
@@ -601,7 +666,7 @@ function parseAppVirtualDisplayMode(value: unknown): AppVirtualDisplayMode | nul
   return null;
 }
 
-function parseAppVirtualDisplayLayout(value: unknown): AppVirtualDisplayLayout | null {
+function parseAppVirtualDisplayLayout(value: unknown): Nullable<AppVirtualDisplayLayout> {
   if (typeof value !== 'string') {
     return null;
   }
@@ -615,7 +680,7 @@ function parseAppVirtualDisplayLayout(value: unknown): AppVirtualDisplayLayout |
 watch(
   () => form.value.playniteId,
   () => {
-    const et = form.value.exitTimeout as any;
+    const et = form.value.exitTimeout;
     if (form.value.playniteId && (typeof et !== 'number' || et === 5)) {
       form.value.exitTimeout = 10;
     }
@@ -643,7 +708,7 @@ watch(
   },
 );
 
-function clampScaleFactor(value: number | null): number {
+function clampScaleFactor(value: Nullable<number>): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return 100;
   }
@@ -651,7 +716,7 @@ function clampScaleFactor(value: number | null): number {
   return Math.min(SCALE_FACTOR_MAX, Math.max(SCALE_FACTOR_MIN, rounded));
 }
 
-function fromServerApp(src?: ServerApp | null, idx: number = -1): AppForm {
+function fromServerApp(src?: Nullable<ServerApp>, idx: number = -1): AppForm {
   const base = fresh();
   if (!src) return { ...base, index: idx };
   const cmdStr = Array.isArray(src.cmd) ? src.cmd.join(' ') : (src.cmd ?? '');
@@ -686,9 +751,7 @@ function fromServerApp(src?: ServerApp | null, idx: number = -1): AppForm {
   const losslessProfiles = emptyLosslessProfileState();
   losslessProfiles.recommended = parseLosslessOverrides(src['lossless-scaling-recommended']);
   losslessProfiles.custom = parseLosslessOverrides(src['lossless-scaling-custom']);
-  const frameGenerationModeFromConfig = parseFrameGenerationMode(
-    (src as any)?.['frame-generation-mode'],
-  );
+  const frameGenerationModeFromConfig = parseFrameGenerationMode(src['frame-generation-mode']);
   const useAppIdentity = !!src['use-app-identity'];
   const normalizedProvider = normalizeFrameGenerationProvider(src['frame-generation-provider']);
   let frameGenerationMode: FrameGenerationMode = frameGenerationModeFromConfig ?? 'off';
@@ -714,7 +777,7 @@ function fromServerApp(src?: ServerApp | null, idx: number = -1): AppForm {
         legacyLosslessFlag;
   const frameGenerationProvider =
     frameGenerationModeFromConfig && frameGenerationModeFromConfig !== 'off'
-      ? (frameGenerationModeFromConfig as FrameGenerationProvider)
+      ? frameGenerationModeFromConfig
       : normalizedProvider;
   const rawOutput = String(src.output ?? '');
   const rawVirtualScreen = src['virtual-screen'];
@@ -722,14 +785,9 @@ function fromServerApp(src?: ServerApp | null, idx: number = -1): AppForm {
     typeof rawVirtualScreen === 'boolean'
       ? rawVirtualScreen
       : rawOutput === VIRTUAL_DISPLAY_SELECTION;
-  const sanitizedOutput = virtualScreen && rawOutput === VIRTUAL_DISPLAY_SELECTION ? '' : rawOutput;
-  const serverVirtualDisplayMode = parseAppVirtualDisplayMode(
-    (src as any)?.['virtual-display-mode'],
-  );
-  const serverVirtualDisplayLayout = parseAppVirtualDisplayLayout(
-    (src as any)?.['virtual-display-layout'],
-  );
-  const ddConfigRaw = (src as any)?.['dd-configuration-option'];
+  const serverVirtualDisplayMode = parseAppVirtualDisplayMode(src['virtual-display-mode']);
+  const serverVirtualDisplayLayout = parseAppVirtualDisplayLayout(src['virtual-display-layout']);
+  const ddConfigRaw = src['dd-configuration-option'];
   let ddConfigValue: AppForm['ddConfigurationOption'] = null;
   if (typeof ddConfigRaw === 'string') {
     const normalized = ddConfigRaw.trim().toLowerCase();
@@ -759,12 +817,7 @@ function fromServerApp(src?: ServerApp | null, idx: number = -1): AppForm {
     imagePath: String(src['image-path'] ?? ''),
     excludeGlobalPrepCmd: !!src['exclude-global-prep-cmd'],
     excludeGlobalStateCmd: !!src['exclude-global-state-cmd'],
-    configOverrides:
-      (src as any)?.['config-overrides'] &&
-      typeof (src as any)['config-overrides'] === 'object' &&
-      !Array.isArray((src as any)['config-overrides'])
-        ? JSON.parse(JSON.stringify((src as any)['config-overrides']))
-        : {},
+    configOverrides: isRecord(src['config-overrides']) ? { ...src['config-overrides'] } : {},
     elevated: !!src.elevated,
     autoDetach: src['auto-detach'] !== undefined ? !!src['auto-detach'] : base.autoDetach,
     waitAll: src['wait-all'] !== undefined ? !!src['wait-all'] : base.waitAll,
@@ -813,16 +866,16 @@ function fromServerApp(src?: ServerApp | null, idx: number = -1): AppForm {
   };
 }
 
-function toServerPayload(f: AppForm): Record<string, any> {
+function toServerPayload(f: AppForm): Record<string, unknown> {
   const selection = displaySelection.value;
   const captureFixEnabled = !!(f.gen1FramegenFix || f.gen2FramegenFix);
-  const payload: Record<string, any> = {
+  const payload: Record<string, unknown> = {
     // Index is required by the backend to determine add (-1) vs update (>= 0)
     index: typeof f.index === 'number' ? f.index : -1,
     name: f.name,
     cmd: f.cmd,
     'working-dir': f.workingDir,
-    'image-path': String(f.imagePath || '').replace(/\"/g, ''),
+    'image-path': String(f.imagePath || '').replace(/"/g, ''),
     'exclude-global-prep-cmd': !!f.excludeGlobalPrepCmd,
     'exclude-global-state-cmd': !!f.excludeGlobalStateCmd,
     ...(f.configOverrides &&
@@ -913,7 +966,7 @@ function toServerPayload(f: AppForm): Record<string, any> {
   payload['lossless-scaling-profile'] =
     f.losslessScalingProfile === 'recommended' ? 'recommended' : 'custom';
   const buildLosslessProfilePayload = (profile: LosslessProfileOverrides) => {
-    const profilePayload: Record<string, any> = {};
+    const profilePayload: Record<string, unknown> = {};
     if (profile.performanceMode !== null) {
       profilePayload['performance-mode'] = profile.performanceMode;
     }
@@ -968,7 +1021,7 @@ watch(
   () => props.app,
   (val) => {
     if (!open.value) return;
-    form.value = fromServerApp(val as ServerApp | undefined, props.index ?? -1);
+    form.value = fromServerApp(val, props.index ?? -1);
   },
   { immediate: true },
 );
@@ -978,30 +1031,22 @@ const cmdText = computed<string>({
     form.value.cmd = v;
   },
 });
-const scaleFactorModel = computed<number>({
-  get: () => form.value.scaleFactor,
-  set: (v: number) => {
-    form.value.scaleFactor = clampScaleFactor(
-      typeof v === 'number' && Number.isFinite(v) ? v : null,
-    );
-  },
-});
 const isPlayniteManaged = computed<boolean>(() => !!form.value.playniteId);
 const isPlayniteAuto = computed<boolean>(
   () => isPlayniteManaged.value && form.value.playniteManaged !== 'manual',
 );
 
-const losslessExecutableStatus = ref<any | null>(null);
+const losslessExecutableStatus = ref<Nullable<Record<string, unknown>>>(null);
 const losslessExecutableCheckComplete = ref(false);
-function hasLosslessCandidates(status: any | null): boolean {
-  return Array.isArray(status?.candidates) && status.candidates.length > 0;
+function hasLosslessCandidates(status: Nullable<Record<string, unknown>>): boolean {
+  return Array.isArray(status?.['candidates']) && status['candidates'].length > 0;
 }
 const losslessExecutableDetected = computed<boolean>(() => {
   const status = losslessExecutableStatus.value;
   if (!status) {
     return false;
   }
-  if (status.checked_exists || status.configured_exists || status.default_exists) {
+  if (status['checked_exists'] || status['configured_exists'] || status['default_exists']) {
     return true;
   }
   return hasLosslessCandidates(status);
@@ -1016,7 +1061,7 @@ async function refreshLosslessExecutableStatus() {
   losslessExecutableCheckComplete.value = false;
   try {
     const params: Record<string, string> = {};
-    const configuredPath = (configStore.config as any)?.lossless_scaling_path;
+    const configuredPath = getStringValue(configStore.config, 'lossless_scaling_path');
     if (configuredPath) {
       params['path'] = String(configuredPath);
     }
@@ -1025,7 +1070,7 @@ async function refreshLosslessExecutableStatus() {
       validateStatus: () => true,
     });
     if (response.status >= 200 && response.status < 300) {
-      losslessExecutableStatus.value = response.data ?? {};
+      losslessExecutableStatus.value = isRecord(response.data) ? response.data : {};
     } else {
       losslessExecutableStatus.value = null;
     }
@@ -1134,7 +1179,7 @@ watch(
   },
 );
 
-function onLosslessRtssLimitChange(value: number | null) {
+function onLosslessRtssLimitChange(value: Nullable<number>) {
   const normalized = parseNumeric(value);
   if (normalized === null) {
     form.value.losslessScalingRtssTouched = false;
@@ -1165,7 +1210,7 @@ function getEffectiveFlowScale(profile: LosslessProfileKey): number {
   return overrides.flowScale ?? LOSSLESS_PROFILE_DEFAULTS[profile].flowScale;
 }
 
-function setFlowScale(profile: LosslessProfileKey, value: number | null): void {
+function setFlowScale(profile: LosslessProfileKey, value: Nullable<number>): void {
   const defaults = LOSSLESS_PROFILE_DEFAULTS[profile];
   const clamped = clampFlow(value);
   form.value.losslessScalingProfiles[profile].flowScale =
@@ -1177,7 +1222,7 @@ function getEffectiveResolutionScale(profile: LosslessProfileKey): number {
   return overrides.resolutionScale ?? LOSSLESS_PROFILE_DEFAULTS[profile].resolutionScale;
 }
 
-function setResolutionScale(profile: LosslessProfileKey, value: number | null): void {
+function setResolutionScale(profile: LosslessProfileKey, value: Nullable<number>): void {
   const defaults = LOSSLESS_PROFILE_DEFAULTS[profile];
   const clamped = clampResolution(value);
   form.value.losslessScalingProfiles[profile].resolutionScale =
@@ -1204,8 +1249,6 @@ function setScalingMode(profile: LosslessProfileKey, value: LosslessScalingMode)
   if (value === 'off') {
     overrides.resolutionScale = null;
   }
-  if (profile === activeLosslessProfile.value) {
-  }
 }
 
 function getEffectiveSharpening(profile: LosslessProfileKey): number {
@@ -1214,7 +1257,7 @@ function getEffectiveSharpening(profile: LosslessProfileKey): number {
   return overrides.sharpening ?? defaults.sharpening;
 }
 
-function setSharpening(profile: LosslessProfileKey, value: number | null): void {
+function setSharpening(profile: LosslessProfileKey, value: Nullable<number>): void {
   const defaults = LOSSLESS_PROFILE_DEFAULTS[profile];
   const clamped = clampSharpness(value);
   form.value.losslessScalingProfiles[profile].sharpening =
@@ -1226,7 +1269,7 @@ function getEffectiveAnimeSize(profile: LosslessProfileKey): Anime4kSize {
   return overrides.anime4kSize ?? LOSSLESS_PROFILE_DEFAULTS[profile].anime4kSize;
 }
 
-function setAnimeSize(profile: LosslessProfileKey, value: Anime4kSize | null): void {
+function setAnimeSize(profile: LosslessProfileKey, value: Nullable<Anime4kSize>): void {
   const defaults = LOSSLESS_PROFILE_DEFAULTS[profile];
   const resolved = value ?? defaults.anime4kSize;
   form.value.losslessScalingProfiles[profile].anime4kSize =
@@ -1251,14 +1294,14 @@ const losslessPerformanceModeModel = computed<boolean>({
   },
 });
 
-const losslessFlowScaleModel = computed<number | null>({
+const losslessFlowScaleModel = computed<Nullable<number>>({
   get: () => getEffectiveFlowScale(activeLosslessProfile.value),
   set: (value) => {
     setFlowScale(activeLosslessProfile.value, value ?? null);
   },
 });
 
-const losslessResolutionScaleModel = computed<number | null>({
+const losslessResolutionScaleModel = computed<Nullable<number>>({
   get: () => getEffectiveResolutionScale(activeLosslessProfile.value),
   set: (value) => {
     setResolutionScale(activeLosslessProfile.value, value ?? null);
@@ -1274,14 +1317,14 @@ const losslessScalingModeModel = computed<LosslessScalingMode>({
 
 const losslessSharpeningModel = computed<number>({
   get: () => getEffectiveSharpening(activeLosslessProfile.value),
-  set: (value: number | null) => {
+  set: (value: Nullable<number>) => {
     setSharpening(activeLosslessProfile.value, value ?? null);
   },
 });
 
 const losslessAnimeSizeModel = computed<Anime4kSize>({
   get: () => getEffectiveAnimeSize(activeLosslessProfile.value),
-  set: (value: Anime4kSize | null) => {
+  set: (value: Nullable<Anime4kSize>) => {
     setAnimeSize(activeLosslessProfile.value, value);
   },
 });
@@ -1347,12 +1390,10 @@ const nameSelectOptions = computed(() => {
 });
 
 // Populate suggestions immediately on focus so dropdown isn't empty
-async function onNameFocus() {
+function onNameFocus() {
   // Show a friendly placeholder immediately to avoid "No Data"
   if (!playniteOptions.value.length) {
-    nameOptions.value = [
-      { label: 'Loading Playnite games…', value: '__loading__', disabled: true } as any,
-    ];
+    nameOptions.value = [{ label: 'Loading Playnite games…', value: '__loading__' }];
   }
   // Kick off loading (don’t block the UI), then refresh list
   loadPlayniteGames()
@@ -1422,38 +1463,43 @@ async function searchCovers(name: string): Promise<CoverCandidate[]> {
   const bucket = getSearchBucket(name);
   const res = await fetch(`${dbUrl}/buckets/${bucket}.json`);
   if (!res.ok) return [];
-  const maps = await res.json();
-  const ids = Object.keys(maps || {});
+  const maps: unknown = await res.json();
+  if (!isRecord(maps)) return [];
+  const ids = Object.keys(maps);
   const promises = ids.map(async (id) => {
     const item = maps[id];
-    if (!item?.name) return null;
-    if (String(item.name).replace(/\s+/g, '.').toLowerCase().startsWith(searchName)) {
+    const itemName = getStringValue(item, 'name');
+    if (!itemName) return null;
+    if (itemName.replace(/\s+/g, '.').toLowerCase().startsWith(searchName)) {
       try {
         const r = await fetch(`${dbUrl}/games/${id}.json`);
-        return await r.json();
+        return (await r.json()) as unknown;
       } catch {
         return null;
       }
     }
     return null;
   });
-  const results = (await Promise.all(promises)).filter(Boolean);
-  return results
-    .filter((item) => item && item.cover && item.cover.url)
-    .map((game) => {
-      const thumb: string = game.cover.url;
-      const dotIndex = thumb.lastIndexOf('.');
-      const slashIndex = thumb.lastIndexOf('/');
-      if (dotIndex < 0 || slashIndex < 0) return null as any;
-      const slug = thumb.substring(slashIndex + 1, dotIndex);
-      return {
-        name: game.name,
-        key: `igdb_${game.id}`,
-        url: `https://images.igdb.com/igdb/image/upload/t_cover_big/${slug}.jpg`,
-        saveUrl: `https://images.igdb.com/igdb/image/upload/t_cover_big_2x/${slug}.png`,
-      } as CoverCandidate;
-    })
-    .filter(Boolean);
+  const results = await Promise.all(promises);
+  const candidates: CoverCandidate[] = [];
+  for (const game of results) {
+    const cover = isRecord(game) ? game['cover'] : undefined;
+    const thumb = getStringValue(cover, 'url');
+    const gameName = getStringValue(game, 'name');
+    const gameId = getStringValue(game, 'id');
+    if (!thumb || !gameName || !gameId) continue;
+    const dotIndex = thumb.lastIndexOf('.');
+    const slashIndex = thumb.lastIndexOf('/');
+    if (dotIndex < 0 || slashIndex < 0) continue;
+    const slug = thumb.substring(slashIndex + 1, dotIndex);
+    candidates.push({
+      name: gameName,
+      key: `igdb_${gameId}`,
+      url: `https://images.igdb.com/igdb/image/upload/t_cover_big/${slug}.jpg`,
+      saveUrl: `https://images.igdb.com/igdb/image/upload/t_cover_big_2x/${slug}.png`,
+    });
+  }
+  return candidates;
 }
 
 async function openCoverFinder() {
@@ -1477,8 +1523,10 @@ async function useCover(cover: CoverCandidate) {
       { key: cover.key, url: cover.saveUrl },
       { headers: { 'Content-Type': 'application/json' }, validateStatus: () => true },
     );
-    if (r.status >= 200 && r.status < 300 && r.data && r.data.path) {
-      form.value.imagePath = String(r.data.path || '');
+    const response = isRecord(r.data) ? r.data : {};
+    const imagePath = getStringValue(response, 'path');
+    if (r.status >= 200 && r.status < 300 && imagePath) {
+      form.value.imagePath = imagePath;
       showCoverModal.value = false;
     }
   } finally {
@@ -1490,42 +1538,24 @@ async function useCover(cover: CoverCandidate) {
 const configStore = useConfigStore();
 const platformName = computed(() => (configStore.metadata?.platform || '').toLowerCase());
 const isWindows = computed(() => platformName.value === 'windows');
-const isLinux = computed(() => platformName.value === 'linux');
-const isMac = computed(() => platformName.value === 'macos');
-const gamepadOptions = computed(() => {
-  const options = [
-    { label: 'Default (Global)', value: '' },
-    { label: 'Disabled', value: 'disabled' },
-    { label: 'Auto', value: 'auto' },
-  ];
-  if (isLinux.value) {
-    options.push(
-      { label: 'DualSense (PS5)', value: 'ds5' },
-      { label: 'Switch Pro', value: 'switch' },
-      { label: 'Xbox One', value: 'xone' },
-    );
-  }
-  if (isWindows.value) {
-    options.push({ label: 'DualShock 4', value: 'ds4' }, { label: 'Xbox 360', value: 'x360' });
-  }
-  return options;
-});
 const ddConfigOption = computed(
-  () => (configStore.config as any)?.dd_configuration_option ?? 'disabled',
+  () => getStringValue(configStore.config, 'dd_configuration_option') || 'disabled',
 );
-const captureMethod = computed(() => (configStore.config as any)?.capture ?? '');
+const captureMethod = computed(() => getStringValue(configStore.config, 'capture'));
 const VIRTUAL_DISPLAY_SELECTION = 'sunshine:sudovda_virtual_display';
 const globalOutputName = computed(() => {
-  const name = (configStore.config as any)?.output_name;
-  return typeof name === 'string' ? name : '';
+  return getStringValue(configStore.config, 'output_name');
 });
 const globalVirtualDisplayMode = computed<AppVirtualDisplayMode>(() => {
-  const mode = (configStore.config as any)?.virtual_display_mode;
-  return parseAppVirtualDisplayMode(mode) ?? 'disabled';
+  return (
+    parseAppVirtualDisplayMode(getValue(configStore.config, 'virtual_display_mode')) ?? 'disabled'
+  );
 });
 const globalVirtualDisplayLayout = computed<AppVirtualDisplayLayout>(() => {
-  const layout = (configStore.config as any)?.virtual_display_layout;
-  return parseAppVirtualDisplayLayout(layout) ?? 'exclusive';
+  return (
+    parseAppVirtualDisplayLayout(getValue(configStore.config, 'virtual_display_layout')) ??
+    'exclusive'
+  );
 });
 const resolvedVirtualDisplayMode = computed<AppVirtualDisplayMode>(
   () => form.value.virtualDisplayMode ?? globalVirtualDisplayMode.value,
@@ -1563,21 +1593,22 @@ const appVirtualDisplayLayoutOptions = computed(() =>
   })),
 );
 const appDdConfigurationOptions = computed(() => [
-  { label: t('_common.disabled') as string, value: 'disabled' },
-  { label: t('config.dd_config_verify_only') as string, value: 'verify_only' },
-  { label: t('config.dd_config_ensure_active') as string, value: 'ensure_active' },
-  { label: t('config.dd_config_ensure_primary') as string, value: 'ensure_primary' },
-  { label: t('config.dd_config_ensure_only_display') as string, value: 'ensure_only_display' },
+  { label: t('_common.disabled'), value: 'disabled' },
+  { label: t('config.dd_config_verify_only'), value: 'verify_only' },
+  { label: t('config.dd_config_ensure_active'), value: 'ensure_active' },
+  { label: t('config.dd_config_ensure_primary'), value: 'ensure_primary' },
+  { label: t('config.dd_config_ensure_only_display'), value: 'ensure_only_display' },
 ]);
 
 function selectVirtualDisplayLayout(v: unknown) {
   const sv = String(v).trim().toLowerCase();
-  if (APP_VIRTUAL_DISPLAY_LAYOUTS.includes(sv as AppVirtualDisplayLayout)) {
-    form.value.virtualDisplayLayout = sv as AppVirtualDisplayLayout;
+  const layout = parseAppVirtualDisplayLayout(sv);
+  if (layout !== null) {
+    form.value.virtualDisplayLayout = layout;
   }
 }
 const lastPhysicalOutput = ref('');
-const lastVirtualDisplayMode = ref<AppVirtualDisplayMode | null>(null);
+const lastVirtualDisplayMode = ref<Nullable<AppVirtualDisplayMode>>(null);
 const displaySelection = computed<DisplaySelection>({
   get: () => {
     const currentOutput = typeof form.value.output === 'string' ? form.value.output.trim() : '';
@@ -1639,11 +1670,10 @@ const displayOverrideEnabled = computed<boolean>({
   },
 });
 const windowsDisplayVersion = computed(() => {
-  const v = (configStore.metadata as any)?.windows_display_version;
-  return typeof v === 'string' ? v : '';
+  return getStringValue(configStore.metadata, 'windows_display_version');
 });
-const windowsBuildNumber = computed<number | null>(() => {
-  const raw = (configStore.metadata as any)?.windows_build_number;
+const windowsBuildNumber = computed<Nullable<number>>(() => {
+  const raw = getValue(configStore.metadata, 'windows_build_number');
   if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
   if (typeof raw === 'string') {
     const parsed = Number(raw);
@@ -1669,8 +1699,7 @@ const autoCaptureUsesWgc = computed(() => {
   return false;
 });
 const virtualOutputName = computed(() => {
-  const outputName = (configStore.config as any)?.output_name;
-  return typeof outputName === 'string' ? outputName : '';
+  return getStringValue(configStore.config, 'output_name');
 });
 const usingVirtualDisplay = computed(() => {
   const selection = displaySelection.value;
@@ -1690,7 +1719,7 @@ const displayDevices = ref<DisplayDevice[]>([]);
 const displayDevicesLoading = ref(false);
 const displayDevicesError = ref('');
 const displayNameCache = ref<Record<string, string>>({});
-const physicalOutputModel = computed<string | null>({
+const physicalOutputModel = computed<Nullable<string>>({
   get: () => {
     const value = typeof form.value.output === 'string' ? form.value.output.trim() : '';
     return value || null;
@@ -1720,8 +1749,9 @@ async function loadDisplayDevices(): Promise<void> {
     const devices = Array.isArray(res.data) ? res.data : [];
     displayDevices.value = devices;
     cacheDisplayNames(devices);
-  } catch (e: any) {
-    displayDevicesError.value = e?.message || 'Failed to load display devices';
+  } catch (error) {
+    displayDevicesError.value =
+      error instanceof Error ? error.message : 'Failed to load display devices';
     displayDevices.value = [];
   } finally {
     displayDevicesLoading.value = false;
@@ -1748,20 +1778,14 @@ function cacheDisplayNames(devices: DisplayDevice[]): void {
   displayNameCache.value = updated;
 }
 
-function getCachedDisplayLabel(value: string): string | null {
+function getCachedDisplayLabel(value: string): Nullable<string> {
   const key = normalizeDisplayKey(value);
   if (!key) return null;
   return displayNameCache.value[key] ?? null;
 }
 
 const displayDeviceOptions = computed(() => {
-  const opts: Array<{
-    label: string;
-    value: string;
-    displayName?: string;
-    id?: string;
-    active: boolean | null;
-  }> = [];
+  const opts: DisplayDeviceOption[] = [];
   const seen = new Set<string>();
   for (const d of displayDevices.value) {
     const value = d.device_id || d.display_name || '';
@@ -1769,10 +1793,10 @@ const displayDeviceOptions = computed(() => {
     const displayName = d.friendly_name || d.display_name || 'Display';
     const guid = d.device_id || '';
     const dispName = d.display_name || '';
-    const info = d.info as any;
-    let active: boolean | null = null;
-    if (info && typeof info === 'object' && 'active' in info) {
-      active = !!(info as any).active;
+    const info = d.info;
+    let active: Nullable<boolean> = null;
+    if (typeof info?.active === 'boolean') {
+      active = info.active;
     } else if (info) {
       active = true;
     }
@@ -1804,6 +1828,25 @@ const displayDeviceOptions = computed(() => {
   return opts;
 });
 
+function renderDisplayDeviceLabel(option: SelectOption) {
+  const device = option as DisplayDeviceOption;
+  return h('span', device.displayName || String(device.label || device.value || 'Display'));
+}
+
+function renderDisplayDeviceOption(option: SelectOption) {
+  const device = option as DisplayDeviceOption;
+  const label = device.displayName || String(device.label || device.value || 'Display');
+  const status = device.active === null ? '' : device.active ? 'Active' : 'Inactive';
+  return h('div', { class: 'flex min-w-0 flex-col gap-0.5 py-0.5' }, [
+    h('span', { class: 'truncate text-sm font-medium' }, label),
+    h(
+      'span',
+      { class: 'truncate text-[11px] opacity-60' },
+      [device.id || '', status].filter(Boolean).join(' · '),
+    ),
+  ]);
+}
+
 function onDisplaySelectFocus() {
   if (!displayDevicesLoading.value && displayDevices.value.length === 0) {
     void loadDisplayDevices();
@@ -1831,10 +1874,10 @@ watch(
   { immediate: true },
 );
 
-const frameGenHealth = ref<FrameGenHealth | null>(null);
+const frameGenHealth = ref<Nullable<FrameGenHealth>>(null);
 const frameGenHealthLoading = ref(false);
-const frameGenHealthError = ref<string | null>(null);
-let frameGenHealthPromise: Promise<void> | null = null;
+const frameGenHealthError = ref<Nullable<string>>(null);
+let frameGenHealthPromise: Nullable<Promise<void>> = null;
 
 watch(open, (o) => {
   if (o) {
@@ -1852,7 +1895,7 @@ watch(open, (o) => {
     selectedPlayniteId.value = '';
     lockPlaynite.value = false;
     newAppSource.value = 'custom';
-    refreshPlayniteStatus().then(() => {
+    void refreshPlayniteStatus().then(() => {
       if (playniteInstalled.value) void loadPlayniteGames();
     });
     requestAnimationFrame(() => updateShadows());
@@ -1877,7 +1920,7 @@ watch(open, (o) => {
 });
 
 watch(
-  () => (configStore.config as any)?.lossless_scaling_path,
+  () => getStringValue(configStore.config, 'lossless_scaling_path'),
   () => {
     if (!open.value || !isWindows.value) return;
     refreshLosslessExecutableStatus().catch(() => {});
@@ -1920,7 +1963,7 @@ function normalizeDeviceId(value: unknown): string {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
 }
 
-function parseRefreshHz(raw: any): number | null {
+function parseRefreshHz(raw: unknown): Nullable<number> {
   if (raw === null || raw === undefined) return null;
   if (Array.isArray(raw)) {
     for (const item of raw) {
@@ -1951,42 +1994,34 @@ function parseRefreshHz(raw: any): number | null {
     }
     return null;
   }
-  if (typeof raw === 'object') {
-    if ('hz' in raw) {
-      const hzCandidate = parseRefreshHz((raw as any).hz);
-      if (hzCandidate !== null) return hzCandidate;
-    }
-    if ('value' in raw) {
-      const valueCandidate = parseRefreshHz((raw as any).value);
-      if (valueCandidate !== null) return valueCandidate;
-    }
-    if (typeof raw.type === 'string' && raw.value !== undefined) {
-      const typed = raw as { type: string; value: unknown };
-      if (typed.type === 'double') {
-        return parseRefreshHz(typed.value);
-      }
-      if (typed.type === 'rational') {
-        const val = typed.value ?? {};
-        const numerator = Number(
-          (val as any)?.numerator ?? (val as any)?.m_numerator ?? (val as any)?.num,
-        );
-        const denominator = Number(
-          (val as any)?.denominator ?? (val as any)?.m_denominator ?? (val as any)?.den ?? 1,
-        );
-        if (Number.isFinite(numerator) && Number.isFinite(denominator) && denominator !== 0) {
-          return numerator / denominator;
-        }
+  if (isRecord(raw)) {
+    const hzCandidate = parseRefreshHz(getValue(raw, 'hz'));
+    if (hzCandidate !== null) return hzCandidate;
+    const value = getValue(raw, 'value');
+    const valueCandidate = parseRefreshHz(value);
+    if (valueCandidate !== null) return valueCandidate;
+    if (getStringValue(raw, 'type') === 'rational' && isRecord(value)) {
+      const numerator = Number(
+        getValue(value, 'numerator') ?? getValue(value, 'm_numerator') ?? getValue(value, 'num'),
+      );
+      const denominator = Number(
+        getValue(value, 'denominator') ??
+          getValue(value, 'm_denominator') ??
+          getValue(value, 'den') ??
+          1,
+      );
+      if (Number.isFinite(numerator) && Number.isFinite(denominator) && denominator !== 0) {
+        return numerator / denominator;
       }
     }
     const numerator = Number(
-      (raw as any)?.numerator ??
-        (raw as any)?.m_numerator ??
-        (raw as any)?.num ??
-        (raw as any)?.n ??
-        null,
+      getValue(raw, 'numerator') ??
+        getValue(raw, 'm_numerator') ??
+        getValue(raw, 'num') ??
+        getValue(raw, 'n'),
     );
     const denominator = Number(
-      (raw as any)?.denominator ?? (raw as any)?.m_denominator ?? (raw as any)?.den ?? 1,
+      getValue(raw, 'denominator') ?? getValue(raw, 'm_denominator') ?? getValue(raw, 'den') ?? 1,
     );
     if (Number.isFinite(numerator) && Number.isFinite(denominator) && denominator !== 0) {
       return numerator / denominator;
@@ -2061,10 +2096,10 @@ async function refreshFrameGenHealth(options: FrameGenHealthOptions = {}): Promi
         const res = rtssResult.value;
         const ok = res.status >= 200 && res.status < 300;
         if (ok) {
-          const data = res.data as any;
-          rtssInstalled = !!data?.path_exists;
-          rtssHooks = !!data?.hooks_found;
-          rtssRunning = !!data?.process_running;
+          const data = isRecord(res.data) ? res.data : {};
+          rtssInstalled = data['path_exists'] === true;
+          rtssHooks = data['hooks_found'] === true;
+          rtssRunning = data['process_running'] === true;
           if (rtssInstalled && rtssHooks) {
             rtssStatus = 'pass';
             rtssMessage = 'RTSS hooks detected. Vibepollo can control the frame limiter.';
@@ -2092,41 +2127,41 @@ async function refreshFrameGenHealth(options: FrameGenHealthOptions = {}): Promi
       let displayMessage = 'Unable to determine display refresh capabilities.';
       let displayLabel = usingVirtual ? 'Vibepollo Virtual Screen' : 'Active display';
       let displayId = usingVirtual ? VIRTUAL_DISPLAY_SELECTION : '';
-      let displayHz: number | null = null;
-      let displayError: string | null = null;
+      let displayHz: Nullable<number> = null;
+      let displayError: Nullable<string> = null;
       let displayTargets = fpsTargets.map((fps) => ({
         fps,
         requiredHz: fps * 2,
         supported: usingVirtual ? true : null,
       }));
-      let highestFailUnder144: number | null = null;
+      let highestFailUnder144: Nullable<number> = null;
       let only144Fails = false;
-      const edidSupport: Record<string, boolean | null> = {};
-      let edidCapHz: number | null = null;
-      let edidFetchError: string | null = null;
+      const edidSupport: Record<string, Nullable<boolean>> = {};
+      let edidCapHz: Nullable<number> = null;
+      let edidFetchError: Nullable<string> = null;
 
       if (!usingVirtual) {
         if (displayResult.status === 'fulfilled') {
           const res = displayResult.value;
           const ok = res.status >= 200 && res.status < 300;
           if (ok && Array.isArray(res.data)) {
-            const devices = res.data as any[];
+            const devices = res.data.map(asDisplayDevice);
             const appOutput = form.value.output;
             const globalOutput = globalOutputName.value;
             const candidates = [
               appOutput && appOutput !== VIRTUAL_DISPLAY_SELECTION ? appOutput : '',
               globalOutput && globalOutput !== VIRTUAL_DISPLAY_SELECTION ? globalOutput : '',
-            ].filter(Boolean) as string[];
+            ].filter((value): value is string => Boolean(value));
             const normalizedCandidates = candidates.map((c) => normalizeDeviceId(c));
             let target = devices.find((item) => {
-              const id = normalizeDeviceId(item?.device_id);
-              const displayName = normalizeDeviceId(item?.display_name);
+              const id = normalizeDeviceId(item.device_id);
+              const displayName = normalizeDeviceId(item.display_name);
               return (
                 normalizedCandidates.includes(id) || normalizedCandidates.includes(displayName)
               );
             });
             if (!target) {
-              target = devices.find((item) => item && item.info) || devices[0];
+              target = devices.find((item) => item.info) || devices[0];
             }
             if (target) {
               displayLabel =
@@ -2137,14 +2172,16 @@ async function refreshFrameGenHealth(options: FrameGenHealthOptions = {}): Promi
                 (typeof target.device_id === 'string' && target.device_id) ||
                 (typeof target.display_name === 'string' && target.display_name) ||
                 '';
-              const info = target.info as any;
+              const info = target.info;
               const refreshRaw = info?.refresh_rate ?? info?.refreshRate;
               const activeRefresh = parseRefreshHz(refreshRaw);
               const supportedRatesRaw =
-                (target as any)?.supported_refresh_rates ?? (target as any)?.supportedRefreshRates;
+                target.supported_refresh_rates ?? target.supportedRefreshRates;
               const supportedRates = parseRefreshList(supportedRatesRaw);
               const highestSupportedDxgi =
-                supportedRates.length > 0 ? (supportedRates[supportedRates.length - 1] ?? null) : null;
+                supportedRates.length > 0
+                  ? (supportedRates[supportedRates.length - 1] ?? null)
+                  : null;
 
               try {
                 const deviceHint = displayId || displayLabel;
@@ -2159,15 +2196,16 @@ async function refreshFrameGenHealth(options: FrameGenHealthOptions = {}): Promi
                   if (
                     edidRes.status >= 200 &&
                     edidRes.status < 300 &&
-                    edidRes.data &&
-                    edidRes.data.status !== false
+                    isRecord(edidRes.data) &&
+                    edidRes.data['status'] !== false
                   ) {
-                    const data: any = edidRes.data;
-                    if (!displayLabel && typeof data?.device_label === 'string') {
-                      displayLabel = data.device_label;
+                    const data = edidRes.data;
+                    const deviceLabel = getStringValue(data, 'device_label');
+                    if (!displayLabel && deviceLabel) {
+                      displayLabel = deviceLabel;
                     }
-                    const rangeHz = parseRefreshHz((data as any)?.max_vertical_hz);
-                    const timingHz = parseRefreshHz((data as any)?.max_timing_hz);
+                    const rangeHz = parseRefreshHz(getValue(data, 'max_vertical_hz'));
+                    const timingHz = parseRefreshHz(getValue(data, 'max_timing_hz'));
                     const capCandidate =
                       rangeHz !== null && rangeHz > 0
                         ? rangeHz
@@ -2177,26 +2215,26 @@ async function refreshFrameGenHealth(options: FrameGenHealthOptions = {}): Promi
                     if (capCandidate !== null) {
                       edidCapHz = capCandidate;
                     }
-                    const targetEntries = Array.isArray((data as any)?.targets)
-                      ? (data as any).targets
-                      : [];
+                    const targetEntries = Array.isArray(data['targets']) ? data['targets'] : [];
                     for (const entry of targetEntries) {
-                      const hz = parseRefreshHz((entry as any)?.hz);
+                      const hz = parseRefreshHz(getValue(entry, 'hz'));
                       if (hz === null) continue;
                       const key = hz.toFixed(3);
-                      if (typeof (entry as any)?.supported === 'boolean') {
-                        edidSupport[key] = (entry as any).supported;
+                      const supported = getValue(entry, 'supported');
+                      if (typeof supported === 'boolean') {
+                        edidSupport[key] = supported;
                       } else if (!(key in edidSupport)) {
                         edidSupport[key] = null;
                       }
                     }
-                  } else if (edidRes.data && typeof (edidRes.data as any).error === 'string') {
-                    edidFetchError = (edidRes.data as any).error;
+                  } else if (isRecord(edidRes.data)) {
+                    edidFetchError = getStringValue(edidRes.data, 'error') || null;
                   }
                 }
-              } catch (e: any) {
+              } catch (error) {
                 if (!edidFetchError) {
-                  edidFetchError = e?.message || 'EDID refresh validation failed.';
+                  edidFetchError =
+                    error instanceof Error ? error.message : 'EDID refresh validation failed.';
                 }
               }
 
@@ -2207,12 +2245,12 @@ async function refreshFrameGenHealth(options: FrameGenHealthOptions = {}): Promi
               displayTargets = fpsTargets.map((fps) => {
                 const required = fps * 2;
                 const edidKey = required.toFixed(3);
-                let supported: boolean | null;
+                let supported: Nullable<boolean>;
                 if (
                   Object.prototype.hasOwnProperty.call(edidSupport, edidKey) &&
                   typeof edidSupport[edidKey] === 'boolean'
                 ) {
-                  supported = edidSupport[edidKey] as boolean;
+                  supported = edidSupport[edidKey];
                 } else if (supportedRates.length > 0) {
                   supported = supportedRates.some((rate) => rate >= required - tolerance);
                 } else if (activeRefresh !== null) {
@@ -2454,28 +2492,37 @@ async function loadPlayniteGames() {
   gamesLoading.value = true;
   try {
     const r = await http.get('/api/playnite/games');
-    const games: any[] = Array.isArray(r.data) ? r.data : [];
+    const games: unknown[] = Array.isArray(r.data) ? r.data : [];
     playniteOptions.value = games
-      .filter((g) => !!g.installed)
-      .map((g) => ({ label: g.name || g.id, value: g.id }))
+      .filter(isRecord)
+      .filter((game) => game['installed'] === true)
+      .map((game) => ({
+        label: getStringValue(game, 'name') || getStringValue(game, 'id'),
+        value: getStringValue(game, 'id'),
+      }))
+      .filter((game) => Boolean(game.label) && Boolean(game.value))
       .sort((a, b) => a.label.localeCompare(b.label));
-  } catch (_) {}
+  } catch {
+    // Playnite is optional; keep the app-name picker available without it.
+  }
   gamesLoading.value = false;
   // Refresh suggestions (replace placeholder with actual items)
   try {
     onNameSearch(nameSearchQuery.value);
-  } catch {}
+  } catch {
+    // Suggestions remain available from the current local state.
+  }
 }
 
 async function refreshPlayniteStatus() {
   try {
     const r = await http.get('/api/playnite/status', { validateStatus: () => true });
-    if (r.status === 200 && r.data && typeof r.data === 'object' && r.data !== null) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = r.data as any;
-      playniteInstalled.value = data.installed === true || data.active === true;
+    if (r.status === 200 && isRecord(r.data)) {
+      playniteInstalled.value = r.data['installed'] === true || r.data['active'] === true;
     }
-  } catch (_) {}
+  } catch {
+    // The optional Playnite service is unavailable.
+  }
 }
 
 function onPickPlaynite(id: string) {
@@ -2631,7 +2678,7 @@ watch(
   },
 );
 // Scroll affordance logic for modal body
-const bodyRef = ref<HTMLElement | null>(null);
+const bodyRef = ref<Nullable<HTMLElement>>(null);
 const showTopShadow = ref(false);
 const showBottomShadow = ref(false);
 
@@ -2648,7 +2695,7 @@ function onBodyScroll() {
   updateShadows();
 }
 
-let ro: ResizeObserver | null = null;
+let ro: Nullable<ResizeObserver> = null;
 onMounted(() => {
   const el = bodyRef.value;
   if (el) {
@@ -2658,16 +2705,20 @@ onMounted(() => {
   try {
     ro = new ResizeObserver(() => updateShadows());
     if (el) ro.observe(el);
-  } catch {}
+  } catch {
+    // ResizeObserver is unavailable in older browser engines.
+  }
   // Initial calc after next paint
   requestAnimationFrame(() => updateShadows());
 });
 onBeforeUnmount(() => {
   const el = bodyRef.value;
-  if (el) el.removeEventListener('scroll', onBodyScroll as any);
+  if (el) el.removeEventListener('scroll', onBodyScroll);
   try {
     ro?.disconnect();
-  } catch {}
+  } catch {
+    // The observer may already have been disconnected.
+  }
   ro = null;
 });
 
@@ -2696,7 +2747,7 @@ function onNameSearch(q: string) {
 }
 
 // Handle picking either a Playnite game or a custom name
-function onNamePicked(val: string | null) {
+function onNamePicked(val: Nullable<string>) {
   const v = String(val || '');
   if (!v) {
     nameSelectValue.value = '';
@@ -2742,18 +2793,20 @@ async function save() {
           form.value.playniteManaged = 'manual';
         }
       }
-    } catch (_) {}
+    } catch {
+      // Automatic Playnite linking is best effort.
+    }
     const payload = toServerPayload(form.value);
     const response = await http.post('./api/apps', payload, {
       headers: { 'Content-Type': 'application/json' },
       validateStatus: () => true,
     });
     const okStatus = response.status >= 200 && response.status < 300;
-    const responseData = response?.data as any;
-    if (!okStatus || (responseData && responseData.status === false)) {
+    const responseData = isRecord(response.data) ? response.data : {};
+    if (!okStatus || responseData['status'] === false) {
       const errMessage =
-        responseData && typeof responseData === 'object' && 'error' in responseData
-          ? String(responseData.error ?? 'Failed to save application.')
+        typeof responseData['error'] === 'string'
+          ? responseData['error']
           : 'Failed to save application.';
       message?.error(errMessage);
       return;
@@ -2774,14 +2827,17 @@ async function del() {
       try {
         // Ensure config store is loaded
         try {
-          // @ts-ignore optional chaining for older runtime
-          if (!configStore.config) await (configStore.fetchConfig?.() || Promise.resolve());
-        } catch {}
+          if (!configStore.config) await configStore.fetchConfig?.();
+        } catch {
+          // Use the current local state if a refresh is unavailable.
+        }
         // Start from current local store state to avoid desync
-        const current: Array<{ id: string; name: string }> = Array.isArray(
-          (configStore.config as any)?.playnite_exclude_games,
-        )
-          ? ((configStore.config as any).playnite_exclude_games as any)
+        const excluded = getValue(configStore.config, 'playnite_exclude_games');
+        const current = Array.isArray(excluded)
+          ? excluded.filter(isRecord).map((entry) => ({
+              id: getStringValue(entry, 'id'),
+              name: getStringValue(entry, 'name'),
+            }))
           : [];
         const map = new Map(current.map((e) => [String(e.id), String(e.name || '')] as const));
         const name = playniteOptions.value.find((o) => o.value === String(pid))?.label || '';
@@ -2797,21 +2853,29 @@ async function del() {
 
     const r = await http.delete(`./api/apps/${form.value.index}`, { validateStatus: () => true });
     try {
-      if (r && (r as any).data && (r as any).data.playniteFullscreenDisabled) {
+      if (isRecord(r.data) && r.data['playniteFullscreenDisabled'] === true) {
         try {
           configStore.updateOption('playnite_fullscreen_entry_enabled', false);
-        } catch {}
+        } catch {
+          // The local config store may not be ready during deletion.
+        }
         try {
           message?.info(
             'Playnite Fullscreen entry removed. The Playnite Desktop option was turned off in Settings -> Playnite.',
           );
-        } catch {}
+        } catch {
+          // Notifications are optional during teardown.
+        }
       }
-    } catch {}
+    } catch {
+      // The app has already been deleted even if response metadata is unavailable.
+    }
     // Best-effort force sync on Windows environments
     try {
       await http.post('./api/playnite/force_sync', {}, { validateStatus: () => true });
-    } catch (_) {}
+    } catch {
+      // Force-sync is best effort after an application deletion.
+    }
     emit('deleted');
     close();
   } finally {

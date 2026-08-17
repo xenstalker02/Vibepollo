@@ -57,7 +57,7 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
-function inferDurationUnit(key: string): ConfigFieldDefinition['durationUnit'] | undefined {
+function inferDurationUnit(key: string) {
   if (key === 'update_check_interval') return 'seconds';
   if (key.endsWith('_seconds') || key.endsWith('_secs')) return 'seconds';
   return undefined;
@@ -120,7 +120,7 @@ export function getConfigFieldDefinition(
         ? getConfigSelectOptions(key, {
             t: ctx.t,
             platform: ctx.platform,
-            metadata: ctx.metadata,
+            metadata: ctx.metadata as unknown,
             currentValue: ctx.currentValue,
           })
         : undefined);
@@ -142,7 +142,7 @@ export function getConfigFieldDefinition(
     getConfigSelectOptions(key, {
       t: ctx.t,
       platform: ctx.platform,
-      metadata: ctx.metadata,
+      metadata: ctx.metadata as unknown,
       currentValue: ctx.currentValue,
     });
 
@@ -162,10 +162,7 @@ export function getConfigFieldDefinition(
 
   const sampleValue = kindSampleValue(ctx);
 
-  if (
-    Object.prototype.hasOwnProperty.call(NUMBER_FIELD_OVERRIDES, key) ||
-    isFiniteNumber(sampleValue)
-  ) {
+  if (Object.prototype.hasOwnProperty.call(NUMBER_FIELD_OVERRIDES, key)) {
     return withNumberMetadata(key);
   }
 
@@ -174,6 +171,10 @@ export function getConfigFieldDefinition(
       kind: 'checkbox',
       localePrefix: 'config',
     };
+  }
+
+  if (isFiniteNumber(sampleValue)) {
+    return withNumberMetadata(key);
   }
 
   return {

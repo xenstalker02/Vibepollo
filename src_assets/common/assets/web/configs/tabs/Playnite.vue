@@ -32,7 +32,7 @@
             })
           }}
         </n-alert>
-        <div class="text-xs opacity-80" v-if="diagnosticText">
+        <div v-if="diagnosticText" class="text-xs opacity-80">
           {{ diagnosticText }}
         </div>
         <div class="flex items-center gap-2">
@@ -54,7 +54,7 @@
         </div>
 
         <!-- Merged maintenance details -->
-        <div class="text-sm flex items-center gap-2 inline-info" v-if="status.extensions_dir">
+        <div v-if="status.extensions_dir" class="text-sm flex items-center gap-2 inline-info">
           <b class="shrink-0">{{ $t('playnite.extensions_dir') }}:</b>
           <code
             class="text-xs whitespace-nowrap overflow-x-auto px-1 rounded bg-black/5 dark:bg-white/5"
@@ -65,7 +65,7 @@
             <span class="ml-1">{{ $t('playnite.copy_path') || 'Copy' }}</span>
           </n-button>
         </div>
-        <div class="text-sm flex items-center gap-2 inline-info" v-if="status.plugin_version">
+        <div v-if="status.plugin_version" class="text-sm flex items-center gap-2 inline-info">
           <b>{{ $t('playnite.plugin_version') || 'Plugin' }}:</b>
           <n-tag size="small" type="default">v{{ status.plugin_version }}</n-tag>
           <template v-if="status.plugin_latest">
@@ -85,11 +85,12 @@
               :label="
                 status.installed
                   ? pluginOutdated
-                    ? ($t('playnite.upgrade_button') as any) || 'Upgrade Plugin'
-                    : ($t('playnite.reinstall_button') as any) ||
-                      ($t('playnite.repair_button') as any) ||
-                      'Reinstall Plugin'
-                  : ($t('playnite.install_button') as any) || 'Install Plugin'
+                    ? translate('playnite.upgrade_button', 'Upgrade Plugin')
+                    : translate(
+                        'playnite.reinstall_button',
+                        translate('playnite.repair_button', 'Reinstall Plugin'),
+                      )
+                  : translate('playnite.install_button', 'Install Plugin')
               "
               @done="onReinstallDone"
             />
@@ -144,10 +145,10 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3 items-start">
             <div>
               <Checkbox
-                v-model="config.playnite_auto_sync"
                 id="playnite_auto_sync"
+                v-model="config.playnite_auto_sync"
                 :default="store.defaults.playnite_auto_sync"
-                :localePrefix="'playnite'"
+                locale-prefix="playnite"
                 label="playnite.auto_sync"
                 :desc="''"
               />
@@ -159,10 +160,10 @@
             </div>
             <div>
               <Checkbox
-                v-model="config.playnite_sync_all_installed"
                 id="playnite_sync_all_installed"
+                v-model="config.playnite_sync_all_installed"
                 :default="store.defaults.playnite_sync_all_installed"
-                :localePrefix="'playnite'"
+                locale-prefix="playnite"
                 label="playnite.sync_all_installed"
                 desc="playnite.sync_all_installed_desc"
                 :disabled="!autoSyncEnabled"
@@ -223,8 +224,8 @@
                     "
                     :loading="categoriesLoading"
                     :disabled="disablePlayniteSelection || !autoSyncEnabled"
-                    @focus="() => loadCategories()"
                     class="w-full"
+                    @focus="() => loadCategories()"
                   />
                 </template>
                 <span>{{
@@ -254,8 +255,8 @@
                     "
                     :loading="pluginsLoading"
                     :disabled="disablePlayniteSelection || !autoSyncEnabled"
-                    @focus="() => loadPlugins()"
                     class="w-full"
+                    @focus="() => loadPlugins()"
                   />
                 </template>
                 <span
@@ -318,16 +319,16 @@
               </div>
               <div class="md:col-span-2">
                 <Checkbox
-                  v-model="config.playnite_autosync_remove_uninstalled"
                   id="playnite_autosync_remove_uninstalled"
+                  v-model="config.playnite_autosync_remove_uninstalled"
                   :default="store.defaults.playnite_autosync_remove_uninstalled"
-                  :localePrefix="'playnite'"
+                  locale-prefix="playnite"
                   label="playnite.remove_uninstalled"
                   desc="playnite.remove_uninstalled_desc"
                   :disabled="!autoSyncEnabled"
                 />
               </div>
-              <div class="md:col-span-2 form-text" v-if="autoSyncEnabled">{{ policySummary }}</div>
+              <div v-if="autoSyncEnabled" class="md:col-span-2 form-text">{{ policySummary }}</div>
             </div>
           </div>
         </div>
@@ -350,10 +351,10 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3 items-start">
             <div class="md:col-span-2">
               <Checkbox
-                v-model="config.playnite_fullscreen_entry_enabled"
                 id="playnite_fullscreen_entry_enabled"
+                v-model="config.playnite_fullscreen_entry_enabled"
                 :default="store.defaults.playnite_fullscreen_entry_enabled"
-                :localePrefix="'playnite'"
+                locale-prefix="playnite"
                 label="Add 'Playnite (Fullscreen)' to Applications"
                 desc="When enabled, Vibepollo adds a launcher entry that opens Playnite in fullscreen desktop mode."
               />
@@ -397,10 +398,10 @@
             </div>
             <div class="md:col-span-2">
               <Checkbox
-                v-model="config.playnite_focus_exit_on_first"
                 id="playnite_focus_exit_on_first"
+                v-model="config.playnite_focus_exit_on_first"
                 :default="store.defaults.playnite_focus_exit_on_first"
-                :localePrefix="'playnite'"
+                locale-prefix="playnite"
                 label="playnite.focus_exit_on_first"
                 desc="playnite.focus_exit_on_first_help"
               />
@@ -443,8 +444,8 @@
                     "
                     :loading="categoriesLoading"
                     :disabled="disablePlayniteSelection || !autoSyncEnabled"
-                    @focus="() => loadCategories()"
                     class="w-full"
+                    @focus="() => loadCategories()"
                   />
                 </template>
                 <span
@@ -477,8 +478,8 @@
                     "
                     :loading="pluginsLoading"
                     :disabled="disablePlayniteSelection || !autoSyncEnabled"
-                    @focus="() => loadPlugins()"
                     class="w-full"
+                    @focus="() => loadPlugins()"
                   />
                 </template>
                 <span
@@ -522,8 +523,8 @@
                         size="small"
                         type="default"
                         strong
-                        @click="openAddExclusions"
                         :disabled="disablePlayniteSelection"
+                        @click="openAddExclusions"
                       >
                         <i class="fas fa-plus" />
                         <span class="ml-1">{{ $t('playnite.add_exclusions') || 'Add' }}</span>
@@ -532,8 +533,8 @@
                         size="small"
                         type="default"
                         strong
-                        @click="clearAllExclusions"
                         :disabled="!excludedIds.length"
+                        @click="clearAllExclusions"
                       >
                         <i class="fas fa-times" />
                         <span class="ml-1">{{ $t('_common.clear_all') || 'Clear All' }}</span>
@@ -718,8 +719,37 @@ const platform = computed(() =>
 );
 const { t } = useI18n();
 
+function translate(
+  key: string,
+  fallback: string,
+  params?: Record<string, number | string>,
+): string {
+  const value = params ? t(key, params) : t(key);
+  return typeof value === 'string' && value ? value : fallback;
+}
+
+type ApiRecord = Record<string, unknown>;
+
+function isApiRecord(value: unknown): value is ApiRecord {
+  return typeof value === 'object' && value !== null;
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+function textValue(value: unknown): string {
+  return value === undefined || value === null ? '' : String(value);
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
+}
+
 const status = reactive<{
-  installed: boolean | null;
+  installed?: boolean;
   installed_unknown?: boolean;
   active: boolean;
   enabled?: boolean;
@@ -727,7 +757,7 @@ const status = reactive<{
   extensions_dir: string;
   plugin_version?: string;
   plugin_latest?: string;
-}>({ installed: null, active: false, extensions_dir: '' });
+}>({ active: false, extensions_dir: '' });
 const launching = ref(false);
 const uninstalling = ref(false);
 const deletingAutosync = ref(false);
@@ -755,7 +785,7 @@ type GameRow = {
 };
 const gamesList = ref<GameRow[]>([]);
 const gamesSource = ref<'live' | 'cache' | 'none'>('none');
-const gamesCacheTime = ref<number | null>(null);
+const gamesCacheTime = ref<number>();
 // Dual-list transfer value mirrors the excluded IDs
 const transferValue = ref<string[]>([]);
 
@@ -858,47 +888,50 @@ const hasCachedGames = computed(
 const limitedNoCache = computed(() => limitedConnectivity.value && !hasCachedGames.value);
 const limitedWithCache = computed(() => limitedConnectivity.value && hasCachedGames.value);
 
-// Transfer options include all games and any excluded items not in games (so right list always shows)
-const transferOptions = computed(() => {
-  const map = new Map<string, string>();
-  for (const g of gamesList.value)
-    map.set(g.id, g.name || (t('playnite.unknown_game') as any) || 'Unknown');
-  for (const g of excludedDisplayList.value)
-    if (!map.has(g.id)) map.set(g.id, g.name || (t('playnite.unknown_game') as any) || 'Unknown');
-  const arr = Array.from(map.entries()).map(([value, label]) => ({ value, label }));
-  return arr.sort((a, b) => a.label.localeCompare(b.label));
-});
-
 async function refreshStatus() {
   if (platform.value !== 'windows') return;
   try {
     const r = await http.get('/api/playnite/status');
-    if (r.status === 200 && r.data) {
-      const d = r.data as any;
-      status.installed = typeof d.installed === 'boolean' ? d.installed : null;
-      status.active = !!d.active;
+    if (r.status === 200 && isApiRecord(r.data)) {
+      const d = r.data;
+      if (typeof d['installed'] === 'boolean') {
+        status.installed = d['installed'];
+      } else {
+        delete status.installed;
+      }
+      status.active = Boolean(d['active']);
       // 'enabled' is no longer a config; presence is indicated by 'installed'
-      if (typeof d.playnite_running === 'boolean') status.playnite_running = !!d.playnite_running;
-      status.extensions_dir = d.extensions_dir || '';
-      status.plugin_version =
-        d.installed_version || d.plugin_version || d.version || status.plugin_version;
-      status.plugin_latest =
-        d.packaged_version || d.plugin_latest || d.latest_version || status.plugin_latest;
+      if (typeof d['playnite_running'] === 'boolean') {
+        status.playnite_running = d['playnite_running'];
+      }
+      status.extensions_dir = stringValue(d['extensions_dir']);
+      const installedVersion =
+        stringValue(d['installed_version']) ||
+        stringValue(d['plugin_version']) ||
+        stringValue(d['version']);
+      if (installedVersion) status.plugin_version = installedVersion;
+      const packagedVersion =
+        stringValue(d['packaged_version']) ||
+        stringValue(d['plugin_latest']) ||
+        stringValue(d['latest_version']);
+      if (packagedVersion) status.plugin_latest = packagedVersion;
     }
-  } catch (_) {}
+  } catch (error) {
+    void error;
+  }
 }
 
-const diagnosticText = computed<string | ''>(() => {
+const diagnosticText = computed<string>(() => {
   switch (statusKind.value) {
     case 'uninstalled':
-      return (
-        (t('playnite.diagnostic_not_installed') as any) ||
-        'Playnite plugin is not installed in the Extensions directory.'
+      return translate(
+        'playnite.diagnostic_not_installed',
+        'Playnite plugin is not installed in the Extensions directory.',
       );
     case 'waiting':
-      return (
-        (t('playnite.diagnostic_not_running') as any) ||
-        'Playnite is not running. Launch it to resume syncing.'
+      return translate(
+        'playnite.diagnostic_not_running',
+        'Playnite is not running. Launch it to resume syncing.',
       );
     case 'active':
       return '';
@@ -916,33 +949,39 @@ async function loadCategories() {
     try {
       const rc = await http.get('/api/playnite/categories', { validateStatus: () => true });
       if (rc.status >= 200 && rc.status < 300 && Array.isArray(rc.data) && rc.data.length) {
-        const cats = (rc.data as any[])
+        const cats = rc.data
           .map((c) => {
-            if (c && typeof c === 'object') {
-              const id = String((c as any).id || '');
-              const name = String((c as any).name || id);
+            if (isApiRecord(c)) {
+              const id = textValue(c['id']);
+              const name = textValue(c['name']) || id;
               return { label: name, value: id || name };
             }
-            const s = String(c || '');
-            return s ? { label: s, value: s } : null;
+            const value = textValue(c);
+            return value ? { label: value, value } : undefined;
           })
-          .filter((x): x is { label: string; value: string } => !!x)
+          .filter((option): option is { label: string; value: string } => option !== undefined)
           .sort((a, b) => a.label.localeCompare(b.label));
-        categoryOptions.value = cats as { label: string; value: string }[];
+        categoryOptions.value = cats;
         categoriesLoading.value = false;
         return;
       }
-    } catch {}
+    } catch (error) {
+      void error;
+    }
     // Fallback: derive from games list
     const rg = await http.get('/api/playnite/games');
-    const games: any[] = Array.isArray(rg.data) ? rg.data : [];
+    const games: unknown[] = Array.isArray(rg.data) ? rg.data : [];
     const set = new Set<string>();
-    for (const g of games)
-      for (const c of g?.categories || []) if (c && typeof c === 'string') set.add(c);
+    for (const game of games) {
+      if (!isApiRecord(game)) continue;
+      for (const category of stringArray(game['categories'])) if (category) set.add(category);
+    }
     categoryOptions.value = Array.from(set)
       .sort((a, b) => a.localeCompare(b))
       .map((c) => ({ label: c, value: c }));
-  } catch (_) {}
+  } catch (error) {
+    void error;
+  }
   categoriesLoading.value = false;
 }
 
@@ -950,8 +989,8 @@ function ensurePluginOptionsIncludeSelection() {
   const current = pluginOptions.value.slice();
   const byValue = new Map(current.map((o) => [o.value, o] as const));
   const selected = [
-    ...((config.value?.playnite_exclude_plugins || []) as Array<{ id: string; name: string }>),
-    ...((config.value?.playnite_sync_plugins || []) as Array<{ id: string; name: string }>),
+    ...normalizeIdNameEntries(config.value?.playnite_exclude_plugins),
+    ...normalizeIdNameEntries(config.value?.playnite_sync_plugins),
   ];
   let changed = false;
   for (const entry of selected || []) {
@@ -1005,16 +1044,11 @@ async function loadPlugins() {
       try {
         const rg = await http.get('/api/playnite/games', { validateStatus: () => true });
         if (rg.status >= 200 && rg.status < 300 && Array.isArray(rg.data)) {
-          ingestGames(
-            (rg.data as any[]).map((g) => ({
-              id: String(g?.id || ''),
-              name: String(g?.name || g?.id || ''),
-              pluginId: g?.pluginId ? String(g.pluginId) : '',
-              pluginName: g?.pluginName ? String(g.pluginName) : '',
-            })),
-          );
+          ingestGames(rg.data.map(gameRow));
         }
-      } catch {}
+      } catch (error) {
+        void error;
+      }
     }
     const opts = Array.from(map.entries())
       .map(([value, label]) => ({ value, label: label || value }))
@@ -1041,27 +1075,38 @@ function saveGamesCache(list: GameRow[]) {
       })),
     };
     localStorage.setItem(GAMES_CACHE_KEY, JSON.stringify(payload));
-  } catch {}
+  } catch (error) {
+    void error;
+  }
 }
-function loadGamesCache(): { t: number; games: GameRow[] } | null {
+function gameRow(value: unknown): GameRow {
+  const game = isApiRecord(value) ? value : {};
+  const id = textValue(game['id']);
+  return {
+    id,
+    name: textValue(game['name']) || id,
+    installed: Boolean(game['installed']),
+    categories: stringArray(game['categories']),
+    pluginId: textValue(game['pluginId']),
+    pluginName: textValue(game['pluginName']),
+  };
+}
+
+type GamesCache = { t: number; games: GameRow[] };
+
+function loadGamesCache(): GamesCache | false {
   try {
     const raw = localStorage.getItem(GAMES_CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed || !Array.isArray(parsed.games)) return null;
+    if (!raw) return false;
+    const parsed: unknown = JSON.parse(raw);
+    if (!isApiRecord(parsed) || !Array.isArray(parsed['games'])) return false;
     return {
-      t: Number(parsed.t) || Date.now(),
-      games: (parsed.games as any[]).map((g) => ({
-        id: String(g?.id || ''),
-        name: String(g?.name || g?.id || ''),
-        installed: !!g?.installed,
-        categories: Array.isArray(g?.categories) ? g.categories : [],
-        pluginId: g?.pluginId ? String(g.pluginId) : '',
-        pluginName: g?.pluginName ? String(g.pluginName) : '',
-      })) as GameRow[],
+      t: Number(parsed['t']) || Date.now(),
+      games: parsed['games'].map(gameRow),
     };
-  } catch {
-    return null;
+  } catch (error) {
+    void error;
+    return false;
   }
 }
 
@@ -1080,17 +1125,9 @@ async function loadGames(useCacheFirst = true) {
   try {
     const r = await http.get('/api/playnite/games', { validateStatus: () => true });
     if (r.status >= 200 && r.status < 300 && Array.isArray(r.data)) {
-      const games: any[] = r.data as any[];
-      const list: GameRow[] = games
-        .filter((g) => !!g.installed)
-        .map((g) => ({
-          id: String(g.id),
-          name: String(g.name || g.id),
-          installed: !!g.installed,
-          categories: Array.isArray(g.categories) ? g.categories : [],
-          pluginId: g.pluginId ? String(g.pluginId) : '',
-          pluginName: g.pluginName ? String(g.pluginName) : '',
-        }))
+      const list = r.data
+        .map(gameRow)
+        .filter((game) => game.installed)
         .sort((a, b) => a.name.localeCompare(b.name));
       gamesList.value = list;
       gamesSource.value = 'live';
@@ -1121,11 +1158,11 @@ async function loadGames(useCacheFirst = true) {
 
 async function onReinstallDone(res: { ok: boolean; error?: string }) {
   if (res.ok) {
-    notify('success', (t('playnite.install_success') as any) || 'Plugin installed successfully.');
+    notify('success', translate('playnite.install_success', 'Plugin installed successfully.'));
     await refreshStatus();
   } else {
     const msg =
-      ((t('playnite.install_error') as any) || 'Failed to install plugin.') +
+      translate('playnite.install_error', 'Failed to install plugin.') +
       (res.error ? `: ${res.error}` : '');
     notify('error', msg);
   }
@@ -1139,27 +1176,27 @@ async function confirmDeleteAutosync() {
   deletingAutosync.value = true;
   try {
     const r = await http.post('/api/apps/purge_autosync', {}, { validateStatus: () => true });
-    let body: any = null;
-    try {
-      body = r.data;
-    } catch {}
-    const ok = r.status >= 200 && r.status < 300 && body && body.status === true;
+    const body = isApiRecord(r.data) ? r.data : undefined;
+    const ok = r.status >= 200 && r.status < 300 && body?.['status'] === true;
     if (ok) {
       notify(
         'success',
-        (t('playnite.delete_autosync_success') as any) || 'Removed auto-synced Playnite games.',
+        translate('playnite.delete_autosync_success', 'Removed auto-synced Playnite games.'),
       );
       showDeleteAutosyncConfirm.value = false;
     } else {
       const msg =
-        ((t('playnite.delete_autosync_error') as any) ||
-          'Failed to delete auto-synced Playnite games.') + (body?.error ? `: ${body.error}` : '');
+        translate(
+          'playnite.delete_autosync_error',
+          'Failed to delete auto-synced Playnite games.',
+        ) + (typeof body?.['error'] === 'string' ? `: ${body['error']}` : '');
       notify('error', msg);
     }
-  } catch (e: any) {
+  } catch (error) {
+    const detail = isApiRecord(error) ? stringValue(error['message']) : '';
     const msg =
-      ((t('playnite.delete_autosync_error') as any) ||
-        'Failed to delete auto-synced Playnite games.') + (e?.message ? `: ${e.message}` : '');
+      translate('playnite.delete_autosync_error', 'Failed to delete auto-synced Playnite games.') +
+      (detail ? `: ${detail}` : '');
     notify('error', msg);
   }
   deletingAutosync.value = false;
@@ -1178,28 +1215,25 @@ async function confirmUninstall() {
       { restart: true },
       { validateStatus: () => true },
     );
-    let ok = false;
-    let body: any = null;
-    try {
-      body = r.data;
-    } catch {}
-    ok = r.status >= 200 && r.status < 300 && body && body.status === true;
+    const body = isApiRecord(r.data) ? r.data : undefined;
+    const ok = r.status >= 200 && r.status < 300 && body?.['status'] === true;
     if (ok) {
       notify(
         'success',
-        (t('playnite.uninstall_success') as any) || 'Plugin uninstalled successfully.',
+        translate('playnite.uninstall_success', 'Plugin uninstalled successfully.'),
       );
       await refreshStatus();
     } else {
       const msg =
-        ((t('playnite.uninstall_error') as any) || 'Failed to uninstall plugin.') +
-        (body && body.error ? `: ${body.error}` : '');
+        translate('playnite.uninstall_error', 'Failed to uninstall plugin.') +
+        (typeof body?.['error'] === 'string' ? `: ${body['error']}` : '');
       notify('error', msg);
     }
-  } catch (e: any) {
+  } catch (error) {
+    const detail = isApiRecord(error) ? stringValue(error['message']) : '';
     const msg =
-      ((t('playnite.uninstall_error') as any) || 'Failed to uninstall plugin.') +
-      (e?.message ? `: ${e.message}` : '');
+      translate('playnite.uninstall_error', 'Failed to uninstall plugin.') +
+      (detail ? `: ${detail}` : '');
     notify('error', msg);
   }
   uninstalling.value = false;
@@ -1210,14 +1244,14 @@ onMounted(async () => {
   if (!config.value) await store.fetchConfig();
   await refreshStatus();
   // Preload lists so existing selections display with names immediately
-  loadGames();
-  loadCategories();
-  loadPlugins();
+  void loadGames();
+  void loadCategories();
+  void loadPlugins();
   ensurePluginOptionsIncludeSelection();
   // Periodically refresh Playnite status while on Windows
   if (platform.value === 'windows') {
     statusTimer.value = window.setInterval(() => {
-      refreshStatus();
+      void refreshStatus();
     }, 3000);
   }
   // Initialize transfer value from current exclusions and stay in sync
@@ -1279,7 +1313,10 @@ const statusText = computed<string>(() => {
     case 'uninstalled':
       return t('playnite.status_uninstalled');
     case 'unknown':
-      return (t('playnite.status_unknown') as any) || t('playnite.status_not_running_unknown');
+      return translate(
+        'playnite.status_unknown',
+        translate('playnite.status_not_running_unknown', ''),
+      );
     default:
       return '';
   }
@@ -1316,24 +1353,26 @@ const canLaunch = computed(() => {
   return !!(status.extensions_dir && status.installed === true && !status.active);
 });
 
-const statusTimer = ref<number | undefined>();
+const statusTimer = ref<number>();
 
 const autoSyncEnabled = computed<boolean>(() => !!config.value?.playnite_auto_sync);
 
 // Disable category/game selection when Playnite is not fully connected
 const disablePlayniteSelection = computed<boolean>(() => statusKind.value !== 'active');
 const disabledHint = computed<string>(() => {
-  return (
-    (t('playnite.selects_disabled_hint') as any) ||
-    'Cannot modify without Playnite connectivity. Start Playnite to continue.'
+  return translate(
+    'playnite.selects_disabled_hint',
+    'Cannot modify without Playnite connectivity. Start Playnite to continue.',
   );
 });
 
 function copyExtensionsPath() {
   try {
-    if (status.extensions_dir) navigator.clipboard?.writeText(status.extensions_dir);
-    notify('success', (t('playnite.copied_path') as any) || 'Copied path to clipboard.');
-  } catch {}
+    if (status.extensions_dir) void navigator.clipboard?.writeText(status.extensions_dir);
+    notify('success', translate('playnite.copied_path', 'Copied path to clipboard.'));
+  } catch (error) {
+    void error;
+  }
 }
 
 // old table-based exclusion code removed in favor of action list UI
@@ -1349,45 +1388,65 @@ const policySummary = computed<string>(() => {
   const removeUninstalled = config.value?.playnite_autosync_remove_uninstalled !== false;
   const parts: string[] = [];
   parts.push(
-    (t('playnite.summary_recent_limit', { n }) as any) ||
+    translate(
+      'playnite.summary_recent_limit',
       `Up to ${n} most-recently played games will be auto-synced.`,
+      { n },
+    ),
   );
   parts.push(
     days > 0
-      ? (t('playnite.summary_activity_window', { days }) as any) ||
-          `Activity window: last ${days} days.`
-      : (t('playnite.summary_activity_ignored') as any) || 'Activity window is ignored.',
+      ? translate('playnite.summary_activity_window', `Activity window: last ${days} days.`, {
+          days,
+        })
+      : translate('playnite.summary_activity_ignored', 'Activity window is ignored.'),
   );
   parts.push(
     keepUntilReplaced
-      ? (t('playnite.summary_keep_until_replaced') as any) ||
-          'Games stay until a newer game replaces them.'
-      : (t('playnite.summary_prune_immediately') as any) ||
+      ? translate(
+          'playnite.summary_keep_until_replaced',
+          'Games stay until a newer game replaces them.',
+        )
+      : translate(
+          'playnite.summary_prune_immediately',
           'Games are pruned when they no longer qualify.',
+        ),
   );
   if (syncAll) {
     parts.push(
-      (t('playnite.summary_all_installed') as any) ||
+      translate(
+        'playnite.summary_all_installed',
         'All installed Playnite games will be kept in Vibepollo.',
+      ),
     );
   } else if (includePluginCount > 0) {
     parts.push(
-      (t('playnite.summary_plugin_include', { count: includePluginCount }) as any) ||
+      translate(
+        'playnite.summary_plugin_include',
         `Includes every game from ${includePluginCount} selected library plugins.`,
+        { count: includePluginCount },
+      ),
     );
   }
   if (pruneDays > 0) {
     parts.push(
-      (t('playnite.summary_delete_after', { days: pruneDays }) as any) ||
+      translate(
+        'playnite.summary_delete_after',
         `Also remove games never launched after ${pruneDays} days.`,
+        { days: pruneDays },
+      ),
     );
   }
   parts.push(
     removeUninstalled
-      ? (t('playnite.summary_remove_uninstalled_on') as any) ||
-          'Uninstalled games are removed automatically.'
-      : (t('playnite.summary_remove_uninstalled_off') as any) ||
+      ? translate(
+          'playnite.summary_remove_uninstalled_on',
+          'Uninstalled games are removed automatically.',
+        )
+      : translate(
+          'playnite.summary_remove_uninstalled_off',
           'Uninstalled games remain until removed manually.',
+        ),
   );
   const excluded = (
     (config.value?.playnite_exclude_categories || []) as Array<{
@@ -1403,15 +1462,20 @@ const policySummary = computed<string>(() => {
     const more = excluded.length > shown.length ? excluded.length - shown.length : 0;
     if (more > 0) {
       parts.push(
-        (t('playnite.summary_excluded_categories_more', {
-          categories: sample,
-          count: more,
-        }) as any) || `Excluded categories: ${sample} (+${more} more).`,
+        translate(
+          'playnite.summary_excluded_categories_more',
+          `Excluded categories: ${sample} (+${more} more).`,
+          {
+            categories: sample,
+            count: more,
+          },
+        ),
       );
     } else {
       parts.push(
-        (t('playnite.summary_excluded_categories', { categories: sample }) as any) ||
-          `Excluded categories: ${sample}.`,
+        translate('playnite.summary_excluded_categories', `Excluded categories: ${sample}.`, {
+          categories: sample,
+        }),
       );
     }
   }
@@ -1423,20 +1487,18 @@ async function launchPlaynite() {
   launching.value = true;
   try {
     await http.post('/api/playnite/launch', {}, { validateStatus: () => true });
-    window.setTimeout(() => refreshStatus(), 1000);
-  } catch (_) {}
+    window.setTimeout(() => {
+      void refreshStatus();
+    }, 1000);
+  } catch (error) {
+    void error;
+  }
   launching.value = false;
 }
 
 // --- Exclusions update helpers --------------------------------------------
 function handleTransferUpdate(next: string[]) {
-  const prev = new Set(excludedIds.value);
   const nextSet = new Set(next);
-  const added: string[] = [];
-  const removed: string[] = [];
-  for (const v of nextSet) if (!prev.has(v)) added.push(v);
-  for (const v of prev) if (!nextSet.has(v)) removed.push(v);
-
   const final = Array.from(nextSet);
   excludedIds.value = final;
   transferValue.value = final;
@@ -1446,7 +1508,7 @@ function handleTransferUpdate(next: string[]) {
 
 // --- Reset to defaults (per section) ---------------------------------------
 function resetAutoSyncSection() {
-  const d = store.defaults as any;
+  const d = store.defaults;
   store.updateOption('playnite_auto_sync', d.playnite_auto_sync);
   store.updateOption('playnite_sync_all_installed', d.playnite_sync_all_installed);
   store.updateOption('playnite_recent_games', d.playnite_recent_games);
@@ -1462,42 +1524,42 @@ function resetAutoSyncSection() {
   );
   store.updateOption('playnite_sync_categories', d.playnite_sync_categories);
   store.updateOption('playnite_sync_plugins', d.playnite_sync_plugins);
-  notify('success', (t('playnite.reset_done') as any) || 'Section reset to defaults.');
+  notify('success', translate('playnite.reset_done', 'Section reset to defaults.'));
 }
 
 function resetLaunchSection() {
-  const d = store.defaults as any;
+  const d = store.defaults;
   store.updateOption('playnite_focus_attempts', d.playnite_focus_attempts);
   store.updateOption('playnite_focus_timeout_secs', d.playnite_focus_timeout_secs);
   store.updateOption('playnite_focus_exit_on_first', d.playnite_focus_exit_on_first);
-  notify('success', (t('playnite.reset_done') as any) || 'Section reset to defaults.');
+  notify('success', translate('playnite.reset_done', 'Section reset to defaults.'));
 }
 
 function resetFiltersSection() {
-  const d = store.defaults as any;
+  const d = store.defaults;
   store.updateOption('playnite_exclude_categories', d.playnite_exclude_categories);
   store.updateOption('playnite_exclude_plugins', d.playnite_exclude_plugins);
   store.updateOption('playnite_exclude_games', d.playnite_exclude_games);
-  notify('success', (t('playnite.reset_done') as any) || 'Section reset to defaults.');
+  notify('success', translate('playnite.reset_done', 'Section reset to defaults.'));
 }
 
 // Data table columns and actions
 type ExcludedRow = { id: string; name: string };
 const exclusionsColumns = computed(() => [
-  { title: (t('playnite.table_game') as any) || 'Game', key: 'name' },
+  { title: translate('playnite.table_game', 'Game'), key: 'name' },
   {
-    title: (t('playnite.table_actions') as any) || 'Actions',
+    title: translate('playnite.table_actions', 'Actions'),
     key: 'actions',
     width: 120,
     render: (row: ExcludedRow) =>
       h('div', { class: 'flex items-center gap-2 justify-end' }, [
         h(
-          NButton as any,
+          NButton,
           { type: 'error', size: 'tiny', strong: true, onClick: () => removeExclusion(row.id) },
           {
             default: () => [
               h('i', { class: 'fas fa-trash' }),
-              h('span', { class: 'ml-1' }, (t('_common.remove') as any) || 'Remove'),
+              h('span', { class: 'ml-1' }, translate('_common.remove', 'Remove')),
             ],
           },
         ),
@@ -1522,7 +1584,7 @@ const addOptions = computed(() => {
   return gamesList.value
     .filter((g) => !excluded.has(g.id))
     .map((g) => ({
-      label: g.name || (t('playnite.unknown_game') as any) || 'Unknown',
+      label: g.name || translate('playnite.unknown_game', 'Unknown'),
       value: g.id,
     }))
     .sort((a, b) => a.label.localeCompare(b.label));
@@ -1531,7 +1593,7 @@ const addOptions = computed(() => {
 function openAddExclusions() {
   addSelection.value = [];
   showAddModal.value = true;
-  loadGames();
+  void loadGames();
 }
 function confirmAddExclusions() {
   const merged = Array.from(new Set([...transferValue.value, ...addSelection.value]));

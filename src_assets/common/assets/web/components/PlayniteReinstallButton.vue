@@ -89,9 +89,7 @@ async function confirm() {
   let error = '';
   try {
     const r = await http.post('/api/playnite/install', { restart }, { validateStatus: () => true });
-    try {
-      body = r.data;
-    } catch {}
+    body = r.data;
     ok =
       r.status >= 200 &&
       r.status < 300 &&

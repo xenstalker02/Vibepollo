@@ -28,13 +28,13 @@ export type AppVirtualDisplayLayout =
   'exclusive' | 'extended' | 'extended_primary' | 'extended_isolated' | 'extended_primary_isolated';
 
 export interface LosslessProfileOverrides {
-  performanceMode: boolean | null;
-  flowScale: number | null;
-  resolutionScale: number | null;
-  scalingMode: LosslessScalingMode | null;
-  sharpening: number | null;
-  anime4kSize: Anime4kSize | null;
-  anime4kVrs: boolean | null;
+  performanceMode: Nullable<boolean>;
+  flowScale: Nullable<number>;
+  resolutionScale: Nullable<number>;
+  scalingMode: Nullable<LosslessScalingMode>;
+  sharpening: Nullable<number>;
+  anime4kSize: Nullable<Anime4kSize>;
+  anime4kVrs: Nullable<boolean>;
 }
 
 export interface LosslessProfileDefaults {
@@ -75,21 +75,22 @@ export interface AppForm {
   virtualScreen: boolean;
   gen1FramegenFix: boolean;
   gen2FramegenFix: boolean;
-  virtualDisplayMode: AppVirtualDisplayMode | null;
-  virtualDisplayLayout: AppVirtualDisplayLayout | null;
+  virtualDisplayMode: Nullable<AppVirtualDisplayMode>;
+  virtualDisplayLayout: Nullable<AppVirtualDisplayLayout>;
   frameGenerationProvider: FrameGenerationProvider;
   frameGenerationMode: FrameGenerationMode;
   losslessScalingEnabled: boolean;
-  losslessScalingTargetFps: number | null;
-  losslessScalingRtssLimit: number | null;
+  losslessScalingTargetFps: Nullable<number>;
+  losslessScalingRtssLimit: Nullable<number>;
   losslessScalingRtssTouched: boolean;
   losslessScalingProfile: LosslessProfileKey;
   losslessScalingProfiles: Record<LosslessProfileKey, LosslessProfileOverrides>;
-  losslessScalingLaunchDelay: number | null;
+  losslessScalingLaunchDelay: Nullable<number>;
   playniteId?: string;
   playniteManaged?: string;
-  ddConfigurationOption:
-    'disabled' | 'verify_only' | 'ensure_active' | 'ensure_primary' | 'ensure_only_display' | null;
+  ddConfigurationOption: Nullable<
+    'disabled' | 'verify_only' | 'ensure_active' | 'ensure_primary' | 'ensure_only_display'
+  >;
 }
 
 export interface ServerApp {
@@ -118,8 +119,8 @@ export interface ServerApp {
   'prep-cmd'?: Array<{ do?: string; undo?: string; elevated?: boolean }>;
   detached?: string[];
   'virtual-screen'?: boolean;
-  'playnite-id'?: string | undefined;
-  'playnite-managed'?: 'manual' | string | undefined;
+  'playnite-id'?: string;
+  'playnite-managed'?: string;
   'gen1-framegen-fix'?: boolean;
   'gen2-framegen-fix'?: boolean;
   'dlss-framegen-capture-fix'?: boolean;
@@ -127,12 +128,12 @@ export interface ServerApp {
   'frame-generation-mode'?: string;
   'lossless-scaling-enabled'?: boolean;
   'lossless-scaling-framegen'?: boolean;
-  'lossless-scaling-target-fps'?: number | string | null;
-  'lossless-scaling-rtss-limit'?: number | string | null;
+  'lossless-scaling-target-fps'?: Nullable<number | string>;
+  'lossless-scaling-rtss-limit'?: Nullable<number | string>;
   'lossless-scaling-profile'?: string;
   'lossless-scaling-recommended'?: Record<string, unknown>;
   'lossless-scaling-custom'?: Record<string, unknown>;
-  'lossless-scaling-launch-delay'?: number | string | null;
+  'lossless-scaling-launch-delay'?: Nullable<number | string>;
   'virtual-display-mode'?: string;
   'virtual-display-layout'?: string;
   'dd-configuration-option'?: string;
@@ -143,7 +144,7 @@ export type FrameGenRequirementStatus = 'pass' | 'warn' | 'fail' | 'unknown';
 export interface FrameGenDisplayTarget {
   fps: number;
   requiredHz: number;
-  supported: boolean | null;
+  supported: Nullable<boolean>;
 }
 
 export interface FrameGenHealth {
@@ -164,14 +165,24 @@ export interface FrameGenHealth {
     status: FrameGenRequirementStatus;
     deviceLabel: string;
     deviceId: string;
-    currentHz: number | null;
+    currentHz: Nullable<number>;
     targets: FrameGenDisplayTarget[];
     virtualActive: boolean;
     message: string;
-    error?: string | null;
+    error?: Nullable<string>;
   };
   suggestion?: {
     message: string;
     emphasis: 'info' | 'warning';
   };
+}
+const nullValue = () => null;
+
+/** Runtime null sentinel used by the application configuration protocol. */
+export type Nullish = ReturnType<typeof nullValue>;
+
+export type Nullable<T> = T | Nullish;
+
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

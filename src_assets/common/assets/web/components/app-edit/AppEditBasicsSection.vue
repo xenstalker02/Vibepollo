@@ -158,7 +158,7 @@
 
 <script setup lang="ts">
 import { toRefs } from 'vue';
-import type { AppForm } from './types';
+import type { AppForm, Nullable } from './types';
 import { NSelect, NButton, NInput, NInputNumber } from 'naive-ui';
 
 const rawProps = defineProps<{
@@ -185,7 +185,7 @@ const {
 const emit = defineEmits<{
   (e: 'name-focus'): void;
   (e: 'name-search', query: string): void;
-  (e: 'name-picked', value: string | null): void;
+  (e: 'name-picked', value: Nullable<string>): void;
   (e: 'load-playnite-games'): void;
   (e: 'pick-playnite', id: string): void;
   (e: 'unlock-playnite'): void;

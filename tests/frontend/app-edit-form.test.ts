@@ -5,14 +5,16 @@ import { createPinia } from '../../src_assets/common/assets/web/node_modules/pin
 import { createI18n } from '../../src_assets/common/assets/web/node_modules/vue-i18n';
 import AppEditModal from '@web/components/AppEditModal.vue';
 import AppEditBasicsSection from '@web/components/app-edit/AppEditBasicsSection.vue';
-import type { AppForm } from '@web/components/app-edit/types';
+import type { AppForm, FrameGenHealth, ServerApp } from '@web/components/app-edit/types';
 
 describe('AppEditModal', () => {
-  test('omits unavailable application identifiers from a new form', () => {
+  function formFromModal(app?: ServerApp): AppForm {
     const wrapper = mount(
       defineComponent({
         components: { AppEditModal, NMessageProvider },
-        template: '<n-message-provider><AppEditModal :model-value="true" /></n-message-provider>',
+        props: { app: { type: Object, required: false } },
+        template:
+          '<n-message-provider><AppEditModal :app="app" :model-value="true" /></n-message-provider>',
       }),
       {
         global: {
@@ -24,13 +26,50 @@ describe('AppEditModal', () => {
         },
       },
     );
-    const form = wrapper
+    return wrapper
       .getComponent(AppEditModal)
       .getComponent(AppEditBasicsSection)
       .props('form') as AppForm;
+  }
+
+  test('omits unavailable application identifiers from a new form', () => {
+    const form = formFromModal();
 
     expect('uuid' in form).toBe(false);
     expect('playniteId' in form).toBe(false);
     expect('playniteManaged' in form).toBe(false);
+  });
+
+  test('omits unavailable application identifiers when loading a server app', () => {
+    const form = formFromModal({ name: 'Saved app', cmd: 'run.exe' });
+
+    expect('uuid' in form).toBe(false);
+    expect('playniteId' in form).toBe(false);
+    expect('playniteManaged' in form).toBe(false);
+  });
+
+  test('keeps a passing frame-generation health result free of a suggestion', () => {
+    const health: FrameGenHealth = {
+      checkedAt: Date.now(),
+      capture: { status: 'pass', method: 'wgc', message: 'Capture is compatible.' },
+      rtss: {
+        status: 'pass',
+        installed: true,
+        running: true,
+        hooksDetected: true,
+        message: 'RTSS is ready.',
+      },
+      display: {
+        status: 'pass',
+        deviceLabel: 'Virtual display',
+        deviceId: 'virtual',
+        currentHz: 240,
+        targets: [],
+        virtualActive: true,
+        message: 'Display is compatible.',
+      },
+    };
+
+    expect('suggestion' in health).toBe(false);
   });
 });

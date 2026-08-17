@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, h, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { $tp } from '@/platform-i18n';
 import { useI18n } from 'vue-i18n';
 import PlatformLayout from '@/PlatformLayout.vue';
 import { NInput, NSelect } from 'naive-ui';
+import type { SelectOption, SelectRenderLabel, SelectRenderOption } from 'naive-ui/es/select';
 import { useConfigStore } from '@/stores/config';
 import { http } from '@/http';
 
@@ -55,9 +56,9 @@ async function loadDisplayDevices() {
     });
     const arr = Array.isArray(res.data) ? res.data : [];
     devices.value = arr;
-  } catch (e: any) {
+  } catch (error: unknown) {
     // Non-fatal: keep manual entry available as fallback
-    loadError.value = e?.message || 'Failed to load display devices';
+    loadError.value = error instanceof Error ? error.message : 'Failed to load display devices';
     devices.value = [];
   } finally {
     loading.value = false;
@@ -88,7 +89,24 @@ const outputNamePlaceholder = computed(() =>
   platform.value === 'windows' ? '{de9bb7e2-186e-505b-9e93-f48793333810}' : '0',
 );
 
-function toOptions() {
+function displayOptionText(option: Record<string, unknown>, key: string): string {
+  const value = option[key];
+  return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
+}
+
+const renderDisplayLabel: SelectRenderLabel = (option) => {
+  const displayName =
+    displayOptionText(option, 'displayName') || displayOptionText(option, 'label') || 'Display';
+  const identifier = displayOptionText(option, 'id') || displayOptionText(option, 'value');
+  return h('div', { class: 'leading-tight' }, [
+    h('div', displayName),
+    h('div', { class: 'text-[12px] opacity-60 font-mono' }, identifier),
+  ]);
+};
+
+const renderDisplayOption: SelectRenderOption = ({ node }) => h('div', { class: 'py-0.5' }, node);
+
+function toOptions(): SelectOption[] {
   // First option represents default behavior (primary display)
   const opts: Array<{
     label: string;
@@ -110,7 +128,6 @@ function toOptions() {
     // For the ID line prefer device_id, fall back to the raw display_name
     const guid = d.device_id || '';
     const dispName = d.display_name || '';
-    const id = guid || dispName;
     // Compose label to include identifying info even if slots are not applied
     const parts: string[] = [displayName];
     if (guid) parts.push(guid);
@@ -143,14 +160,16 @@ function toOptions() {
           v-model:value="config.output_name"
           :options="toOptions()"
           :loading="loading"
+          clearable
+          filterable
+          :placeholder="outputNameLabel"
+          :render-label="renderDisplayLabel"
+          :render-option="renderDisplayOption"
           @focus="
             () => {
               if (!loading && devices.length === 0) void loadDisplayDevices();
             }
           "
-          clearable
-          filterable
-          :placeholder="outputNameLabel"
         />
       </template>
       <template #freebsd>
