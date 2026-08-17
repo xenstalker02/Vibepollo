@@ -1,7 +1,15 @@
-import { mount, type VueWrapper } from '@vue/test-utils';
+import {
+  mount,
+  type VueWrapper,
+} from '../../src_assets/common/assets/web/node_modules/@vue/test-utils';
+import { describe, expect, test } from '../../src_assets/common/assets/web/node_modules/vitest';
 import { createPinia } from '../../src_assets/common/assets/web/node_modules/pinia';
 import { createI18n } from '../../src_assets/common/assets/web/node_modules/vue-i18n';
-import { defineComponent, h, type PropType } from '../../src_assets/common/assets/web/node_modules/vue';
+import {
+  defineComponent,
+  h,
+  type PropType,
+} from '../../src_assets/common/assets/web/node_modules/vue';
 import {
   NMessageProvider,
   NSelect,
@@ -79,23 +87,27 @@ function expectBothStates(wrapper: VueWrapper, includesStatus: boolean) {
 
 describe('display select renderers', () => {
   test('mounts AppEditModal renderer callbacks for selected and dropdown states', () => {
-    const wrapper = mount(
-      defineComponent({
-        components: { AppEditModal, NMessageProvider },
-        template:
-          '<n-message-provider><AppEditModal :app="{ output: \'display-guid\' }" :model-value="true" /></n-message-provider>',
-      }),
-      { global: rendererGlobal() },
-    );
+    const wrapper = mount(NMessageProvider, {
+      slots: {
+        default: () => h(AppEditModal, { app: { output: 'display-guid' }, modelValue: true }),
+      },
+      global: rendererGlobal(),
+    });
 
-    expectBothStates(rendererFrom(wrapper), true);
+    expectBothStates(rendererFrom(wrapper.getComponent(AppEditModal)), true);
   });
 
   test('mounts DisplayDeviceOptions renderer callbacks for both states', () => {
-    expectBothStates(rendererFrom(mount(DisplayDeviceOptions, { global: rendererGlobal() })), false);
+    expectBothStates(
+      rendererFrom(mount(DisplayDeviceOptions, { global: rendererGlobal() })),
+      false,
+    );
   });
 
   test('mounts DisplayOutputSelector renderer callbacks for both states', () => {
-    expectBothStates(rendererFrom(mount(DisplayOutputSelector, { global: rendererGlobal() })), false);
+    expectBothStates(
+      rendererFrom(mount(DisplayOutputSelector, { global: rendererGlobal() })),
+      false,
+    );
   });
 });
