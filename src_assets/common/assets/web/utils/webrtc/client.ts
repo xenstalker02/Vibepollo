@@ -22,6 +22,32 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object';
 }
 
+type MediaPlayTarget = { play: () => unknown };
+type CatchablePlayResult = { catch: (handler: (error: unknown) => void) => unknown };
+
+function isCatchablePlayResult(value: unknown): value is CatchablePlayResult {
+  return isRecord(value) && typeof value['catch'] === 'function';
+}
+
+export function playMediaElement(
+  element: MediaPlayTarget,
+  onError?: (error: unknown) => void,
+): void {
+  let result: unknown;
+  try {
+    result = element.play();
+  } catch (error) {
+    onError?.(error);
+    return;
+  }
+  if (!isCatchablePlayResult(result)) return;
+  try {
+    result.catch((error) => onError?.(error));
+  } catch (error) {
+    onError?.(error);
+  }
+}
+
 function readNumber(
   value: Record<string, unknown> | UndefinedValue,
   key: string,

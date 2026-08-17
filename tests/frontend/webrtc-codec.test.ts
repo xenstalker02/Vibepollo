@@ -1,8 +1,5 @@
-import { describe, expect, test } from '../../src_assets/common/assets/web/node_modules/vitest';
-import {
-  hasPacketizationMode1,
-  rewriteFmtp,
-} from '@web/utils/webrtc/client';
+import { describe, expect, test, vi } from '../../src_assets/common/assets/web/node_modules/vitest';
+import { hasPacketizationMode1, playMediaElement, rewriteFmtp } from '@web/utils/webrtc/client';
 import { toRtcIceCandidateInit } from '@web/services/webrtcApi';
 
 describe('WebRTC codec and candidate helpers', () => {
@@ -28,5 +25,32 @@ describe('WebRTC codec and candidate helpers', () => {
       sdpMLineIndex: 0,
     });
     expect('sdpMid' in candidate).toBe(false);
+  });
+
+  test('guards media play calls that return void', () => {
+    const onError = vi.fn();
+
+    expect(() => playMediaElement({ play: () => undefined }, onError)).not.toThrow();
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  test('routes synchronous and asynchronous media play failures to the handler', async () => {
+    const synchronousError = new Error('sync play failure');
+    const asynchronousError = new Error('async play failure');
+    const onError = vi.fn();
+
+    playMediaElement(
+      {
+        play: () => {
+          throw synchronousError;
+        },
+      },
+      onError,
+    );
+    playMediaElement({ play: () => Promise.reject(asynchronousError) }, onError);
+    await Promise.resolve();
+
+    expect(onError).toHaveBeenNthCalledWith(1, synchronousError);
+    expect(onError).toHaveBeenNthCalledWith(2, asynchronousError);
   });
 });

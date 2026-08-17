@@ -490,7 +490,8 @@ import { useI18n } from 'vue-i18n';
 import { NCard, NAlert, useMessage, useDialog } from 'naive-ui';
 import ResourceCard from '@/ResourceCard.vue';
 import PlayniteReinstallButton from '@/components/PlayniteReinstallButton.vue';
-import VibepolloVersion, { GitHubRelease } from '@/sunshine_version';
+import VibepolloVersion from '@/sunshine_version';
+import { parseGitHubRelease, type DashboardRelease } from '@/utils/githubRelease';
 import { useConfigStore } from '@/stores/config';
 import { useAuthStore } from '@/stores/auth';
 import { useAppsStore } from '@/stores/apps';
@@ -502,7 +503,6 @@ import { isCrashDumpEligible, sanitizeCrashDumpStatus } from '@/utils/crashDump'
 const installedVersion = ref<VibepolloVersion>(new VibepolloVersion('0.0.0'));
 const NULL_VALUE = null;
 type NullValue = typeof NULL_VALUE;
-type DashboardRelease = GitHubRelease & { draft?: boolean };
 const githubRelease = ref<DashboardRelease | NullValue>(null);
 const preReleaseRelease = ref<DashboardRelease | NullValue>(null);
 
@@ -586,27 +586,7 @@ const startupErrorSegments = computed(() => {
 });
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object';
-}
-
-function parseGitHubRelease(value: unknown): DashboardRelease | NullValue {
-  if (!isRecord(value)) return null;
-  if (
-    typeof value['tag_name'] !== 'string' ||
-    typeof value['name'] !== 'string' ||
-    typeof value['html_url'] !== 'string' ||
-    typeof value['body'] !== 'string'
-  ) {
-    return null;
-  }
-  return {
-    tag_name: value['tag_name'],
-    name: value['name'],
-    html_url: value['html_url'],
-    body: value['body'],
-    ...(typeof value['prerelease'] === 'boolean' ? { prerelease: value['prerelease'] } : {}),
-    ...(typeof value['draft'] === 'boolean' ? { draft: value['draft'] } : {}),
-  };
+  return value !== null && typeof value === 'object';
 }
 
 async function fetchJson(url: string): Promise<unknown> {

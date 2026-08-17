@@ -510,7 +510,7 @@ import { ref, reactive, onBeforeUnmount, onMounted, watch, computed, nextTick } 
 import { useI18n } from 'vue-i18n';
 import { NSwitch, NInputNumber, NAlert, useDialog } from 'naive-ui';
 import { WebRtcHttpApi } from '@/services/webrtcApi';
-import { WebRtcClient } from '@/utils/webrtc/client';
+import { playMediaElement, WebRtcClient } from '@/utils/webrtc/client';
 import {
   applyGamepadFeedback,
   attachInputCapture,
@@ -770,14 +770,14 @@ const config = reactive<StreamConfig>({
 const bitrateKbps = computed<number | NullValue>({
   get: () => config.bitrateKbps ?? null,
   set: (value) => {
-    if (value === null) delete config.bitrateKbps;
+    if (value === null) Reflect.set(config, 'bitrateKbps', value);
     else config.bitrateKbps = value;
   },
 });
 const videoPacingSlackMs = computed<number | NullValue>({
   get: () => config.videoPacingSlackMs ?? null,
   set: (value) => {
-    if (value === null) delete config.videoPacingSlackMs;
+    if (value === null) Reflect.set(config, 'videoPacingSlackMs', value);
     else config.videoPacingSlackMs = value;
   },
 });
@@ -1863,7 +1863,7 @@ function resetVideoElement(): void {
   if (!element || !videoStream) return;
   element.srcObject = null;
   element.srcObject = videoStream;
-  void element.play().catch(() => {});
+  playMediaElement(element);
 }
 
 let serverSessionTimer: number | NullValue = null;
@@ -2637,7 +2637,7 @@ async function startConnect() {
               videoStartupDrainReleaseSince = null;
               const baseTargetMs = resolveVideoBaseTargetMs();
               setVideoDrainMode('startup', baseTargetMs, resolveVideoStartupTargetMs());
-              void videoElement.play().catch((error: unknown) => {
+              playMediaElement(videoElement, (error) => {
                 const name = errorName(error);
                 pushVideoEvent(`play-error${name ? `:${name}` : ''}`);
               });

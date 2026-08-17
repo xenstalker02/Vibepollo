@@ -907,13 +907,21 @@ const renderDisplayOption: SelectRenderOption = ({ option }) => {
   const display = displaySelectOption(option);
   const status =
     display.active === null
-      ? ''
+      ? null
       : display.active
-        ? ` (${t('config.app_display_status_active')})`
-        : ` (${t('config.app_display_status_inactive')})`;
+        ? h(
+            'span',
+            { class: 'ml-1 text-green-600 dark:text-green-400' },
+            ` (${t('config.app_display_status_active')})`,
+          )
+        : h('span', { class: 'ml-1 opacity-70' }, ` (${t('config.app_display_status_inactive')})`);
   return h('div', { class: 'leading-tight' }, [
     h('div', display.displayName),
-    h('div', { class: 'text-[12px] opacity-60 font-mono' }, [display.id, status]),
+    h(
+      'div',
+      { class: 'text-[12px] opacity-60 font-mono' },
+      status === null ? display.id : [display.id, status],
+    ),
   ]);
 };
 

@@ -1,8 +1,15 @@
 import {
+  flushPromises,
   mount,
   type VueWrapper,
 } from '../../src_assets/common/assets/web/node_modules/@vue/test-utils';
-import { describe, expect, test } from '../../src_assets/common/assets/web/node_modules/vitest';
+import {
+  afterEach,
+  describe,
+  expect,
+  test,
+  vi,
+} from '../../src_assets/common/assets/web/node_modules/vitest';
 import { createPinia } from '../../src_assets/common/assets/web/node_modules/pinia';
 import { createI18n } from '../../src_assets/common/assets/web/node_modules/vue-i18n';
 import {
@@ -20,6 +27,9 @@ import {
 import AppEditModal from '@web/components/AppEditModal.vue';
 import DisplayDeviceOptions from '@web/configs/tabs/audiovideo/DisplayDeviceOptions.vue';
 import DisplayOutputSelector from '@web/configs/tabs/audiovideo/DisplayOutputSelector.vue';
+import ClientManagementView from '@web/views/ClientManagementView.vue';
+import { http } from '@web/http';
+import { useAuthStore } from '@web/stores/auth';
 import { useConfigStore } from '@web/stores/config';
 
 const representativeOption: SelectOption = {
@@ -34,13 +44,14 @@ const NSelectRendererHarness = defineComponent({
   props: {
     renderLabel: { type: Function as PropType<SelectRenderLabel>, required: true },
     renderOption: { type: Function as PropType<SelectRenderOption>, required: true },
+    option: { type: Object as PropType<SelectOption>, required: true },
   },
   setup(props) {
     return () => {
-      const selected = props.renderLabel(representativeOption, true);
+      const selected = props.renderLabel(props.option, true);
       const dropdown = props.renderOption({
-        node: h('span', [props.renderLabel(representativeOption, false)]),
-        option: representativeOption,
+        node: h('span', [props.renderLabel(props.option, false)]),
+        option: props.option,
         selected: false,
       });
       return h('div', [
@@ -61,7 +72,7 @@ function rendererGlobal() {
   };
 }
 
-function rendererFrom(wrapper: VueWrapper) {
+function rendererFrom(wrapper: VueWrapper, option: SelectOption = representativeOption) {
   const select = wrapper
     .findAllComponents(NSelect)
     .find(
@@ -74,6 +85,7 @@ function rendererFrom(wrapper: VueWrapper) {
     props: {
       renderLabel: select.props('renderLabel') as SelectRenderLabel,
       renderOption: select.props('renderOption') as SelectRenderOption,
+      option,
     },
   });
 }
@@ -86,6 +98,10 @@ function expectBothStates(wrapper: VueWrapper, includesStatus: boolean) {
 }
 
 describe('display select renderers', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   test('mounts AppEditModal renderer callbacks for selected and dropdown states', () => {
     const wrapper = mount(NMessageProvider, {
       slots: {
@@ -109,5 +125,58 @@ describe('display select renderers', () => {
       rendererFrom(mount(DisplayOutputSelector, { global: rendererGlobal() })),
       false,
     );
+  });
+
+  test('preserves active and inactive status styling in client display options', async () => {
+    const pinia = createPinia();
+    const configStore = useConfigStore(pinia);
+    configStore.metadata = { platform: 'windows' };
+    vi.spyOn(configStore, 'fetchConfig').mockResolvedValue({} as never);
+    const authStore = useAuthStore(pinia);
+    authStore.isAuthenticated = true;
+    vi.spyOn(authStore, 'waitForAuthentication').mockResolvedValue();
+    vi.spyOn(http, 'get').mockResolvedValue({
+      status: 200,
+      data: {
+        status: true,
+        platform: 'windows',
+        named_certs: [
+          {
+            uuid: 'client-guid',
+            name: 'Living Room',
+            output_name_override: 'display-guid',
+          },
+        ],
+      },
+    } as never);
+
+    const wrapper = mount(NMessageProvider, {
+      slots: { default: () => h(ClientManagementView) },
+      global: {
+        plugins: [pinia, createI18n({ legacy: false, locale: 'en', messages: { en: {} } })],
+        mocks: { $t: (key: string) => key },
+        stubs: {
+          AppEditConfigOverridesSection: true,
+          Teleport: true,
+          TrustedDevicesCard: true,
+        },
+      },
+    });
+    await flushPromises();
+    await vi.waitFor(() => {
+      expect(wrapper.find('.fa-edit').exists()).toBe(true);
+    });
+    await wrapper.get('.fa-edit').trigger('click');
+    await flushPromises();
+
+    const clientView = wrapper.getComponent(ClientManagementView);
+    const inactive = rendererFrom(clientView, representativeOption);
+    const active = rendererFrom(clientView, { ...representativeOption, active: true });
+
+    expect(inactive.get('.dropdown-option .font-mono span').classes()).toContain('opacity-70');
+    expect(active.get('.dropdown-option .font-mono span').classes()).toEqual(
+      expect.arrayContaining(['text-green-600', 'dark:text-green-400']),
+    );
+    wrapper.unmount();
   });
 });
