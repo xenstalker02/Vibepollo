@@ -1,4 +1,13 @@
 # ensure Linux specific files are checked out with LF line endings
+*.cjs text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.mjs text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.vue text eol=lf
 Dockerfile text eol=lf
 *.dockerfile text eol=lf
 *flatpak-lint-*.json text eol=lf

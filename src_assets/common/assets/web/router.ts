@@ -10,7 +10,7 @@ const TroubleshootingView = () => import('@/views/TroubleshootingView.vue');
 const ClientManagementView = () => import('@/views/ClientManagementView.vue');
 const WebRtcClientView = () => import('@/views/WebRtcClientView.vue');
 
-const routes = [
+export const routes = [
   { path: '/', component: DashboardView },
   { path: '/applications', component: ApplicationsView },
   { path: '/settings', component: SettingsView, meta: { container: 'lg' } },

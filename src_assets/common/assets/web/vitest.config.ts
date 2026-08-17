@@ -6,17 +6,23 @@ const repoRoot = resolve(__dirname, '../../../..');
 
 export default defineConfig({
   plugins: [vue()],
+  server: {
+    fs: {
+      allow: [repoRoot],
+    },
+  },
   resolve: {
     alias: {
       '@web': __dirname,
       '@': __dirname,
+      '@vue/test-utils': resolve(__dirname, 'node_modules/@vue/test-utils'),
     },
   },
   test: {
     environment: 'jsdom',
     globals: true,
     setupFiles: [resolve(repoRoot, 'tests/frontend/setup.ts')],
-    include: [resolve(repoRoot, 'tests/frontend/**/*.test.ts')],
+    include: ['../../../../tests/frontend/**/*.test.ts'],
     css: true,
   },
 });
