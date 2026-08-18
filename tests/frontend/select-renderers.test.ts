@@ -39,6 +39,12 @@ const representativeOption: SelectOption = {
   id: 'display-guid',
   active: false,
 };
+const wrappers: VueWrapper[] = [];
+
+function trackWrapper<T extends VueWrapper>(wrapper: T): T {
+  wrappers.push(wrapper);
+  return wrapper;
+}
 
 const NSelectRendererHarness = defineComponent({
   props: {
@@ -66,8 +72,21 @@ function rendererGlobal() {
   const pinia = createPinia();
   useConfigStore(pinia).metadata = { platform: 'windows' };
   return {
-    plugins: [pinia, createI18n({ legacy: false, locale: 'en', messages: { en: {} } })],
+    plugins: [
+      pinia,
+      createI18n({
+        legacy: false,
+        locale: 'en',
+        messages: { en: {} },
+        missingWarn: false,
+        fallbackWarn: false,
+      }),
+    ],
     mocks: { $t: (key: string) => key },
+    provide: {
+      i18n: { t: (key: string) => key },
+      platform: 'windows',
+    },
     stubs: { Teleport: true },
   };
 }
@@ -81,50 +100,63 @@ function rendererFrom(wrapper: VueWrapper, option: SelectOption = representative
         typeof candidate.props('renderOption') === 'function',
     );
   if (select === undefined) throw new Error('display select renderer was not mounted');
-  return mount(NSelectRendererHarness, {
-    props: {
-      renderLabel: select.props('renderLabel') as SelectRenderLabel,
-      renderOption: select.props('renderOption') as SelectRenderOption,
-      option,
-    },
-  });
+  return trackWrapper(
+    mount(NSelectRendererHarness, {
+      props: {
+        renderLabel: select.props('renderLabel') as SelectRenderLabel,
+        renderOption: select.props('renderOption') as SelectRenderOption,
+        option,
+      },
+    }),
+  );
 }
 
 function expectBothStates(wrapper: VueWrapper, includesStatus: boolean) {
   expect(wrapper.get('.selected-value').text()).toContain('Primary Display');
   expect(wrapper.get('.dropdown-option').text()).toContain('Primary Display');
   expect(wrapper.get('.dropdown-option').text()).toContain('display-guid');
-  if (includesStatus) expect(wrapper.get('.dropdown-option').text()).toContain('Inactive');
+  if (includesStatus) {
+    expect(wrapper.get('.selected-value').text()).toContain('display-guid');
+    expect(wrapper.get('.selected-value').text()).toContain('Inactive');
+    expect(wrapper.get('.dropdown-option').text()).toContain('Inactive');
+  }
 }
 
 describe('display select renderers', () => {
   afterEach(() => {
+    for (const wrapper of wrappers.splice(0)) wrapper.unmount();
     vi.restoreAllMocks();
   });
 
   test('mounts AppEditModal renderer callbacks for selected and dropdown states', () => {
-    const wrapper = mount(NMessageProvider, {
-      slots: {
-        default: () => h(AppEditModal, { app: { output: 'display-guid' }, modelValue: true }),
-      },
-      global: rendererGlobal(),
-    });
+    vi.spyOn(http, 'get').mockResolvedValue({ status: 200, data: {} } as never);
+    const wrapper = trackWrapper(
+      mount(NMessageProvider, {
+        slots: {
+          default: () => h(AppEditModal, { app: { output: 'display-guid' }, modelValue: true }),
+        },
+        global: rendererGlobal(),
+      }),
+    );
 
     expectBothStates(rendererFrom(wrapper.getComponent(AppEditModal)), true);
   });
 
   test('mounts DisplayDeviceOptions renderer callbacks for both states', () => {
-    expectBothStates(
-      rendererFrom(mount(DisplayDeviceOptions, { global: rendererGlobal() })),
-      false,
-    );
+    vi.spyOn(http, 'get').mockResolvedValue({ status: 200, data: [] } as never);
+    const source = trackWrapper(mount(DisplayDeviceOptions, { global: rendererGlobal() }));
+
+    expect(source.text()).toContain('Checking…');
+    expect(source.text()).toContain('troubleshooting.dd_golden_create');
+    expect(source.text()).not.toContain('troubleshooting.dd_golden_recreate');
+    expectBothStates(rendererFrom(source), false);
   });
 
   test('mounts DisplayOutputSelector renderer callbacks for both states', () => {
-    expectBothStates(
-      rendererFrom(mount(DisplayOutputSelector, { global: rendererGlobal() })),
-      false,
-    );
+    vi.spyOn(http, 'get').mockResolvedValue({ status: 200, data: [] } as never);
+    const source = trackWrapper(mount(DisplayOutputSelector, { global: rendererGlobal() }));
+
+    expectBothStates(rendererFrom(source), false);
   });
 
   test('preserves active and inactive status styling in client display options', async () => {
@@ -150,18 +182,30 @@ describe('display select renderers', () => {
       },
     } as never);
 
-    const wrapper = mount(NMessageProvider, {
-      slots: { default: () => h(ClientManagementView) },
-      global: {
-        plugins: [pinia, createI18n({ legacy: false, locale: 'en', messages: { en: {} } })],
-        mocks: { $t: (key: string) => key },
-        stubs: {
-          AppEditConfigOverridesSection: true,
-          Teleport: true,
-          TrustedDevicesCard: true,
+    const wrapper = trackWrapper(
+      mount(NMessageProvider, {
+        slots: { default: () => h(ClientManagementView) },
+        global: {
+          plugins: [
+            pinia,
+            createI18n({
+              legacy: false,
+              locale: 'en',
+              messages: { en: {} },
+              missingWarn: false,
+              fallbackWarn: false,
+            }),
+          ],
+          mocks: { $t: (key: string) => key },
+          stubs: {
+            ApiTokenManager: true,
+            AppEditConfigOverridesSection: true,
+            Teleport: true,
+            TrustedDevicesCard: true,
+          },
         },
-      },
-    });
+      }),
+    );
     await flushPromises();
     await vi.waitFor(() => {
       expect(wrapper.find('.fa-edit').exists()).toBe(true);
@@ -177,6 +221,5 @@ describe('display select renderers', () => {
     expect(active.get('.dropdown-option .font-mono span').classes()).toEqual(
       expect.arrayContaining(['text-green-600', 'dark:text-green-400']),
     );
-    wrapper.unmount();
   });
 });

@@ -1,6 +1,7 @@
 import {
   flushPromises,
   mount,
+  type VueWrapper,
 } from '../../src_assets/common/assets/web/node_modules/@vue/test-utils';
 import {
   afterEach,
@@ -21,12 +22,16 @@ import { WebRtcClient } from '@web/utils/webrtc/client';
 import { http } from '@web/http';
 import type { StreamConfig } from '@web/types/webrtc';
 
+let wrapper: VueWrapper | undefined;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object';
 }
 
 describe('WebRTC session form serialization', () => {
   afterEach(() => {
+    wrapper?.unmount();
+    wrapper = undefined;
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
@@ -44,7 +49,7 @@ describe('WebRTC session form serialization', () => {
       return window.setTimeout(() => callback(performance.now()), 0);
     });
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
-    vi.spyOn(http, 'get').mockResolvedValue({
+    const get = vi.spyOn(http, 'get').mockResolvedValue({
       status: 200,
       data: { apps: [], status: true, activeSessions: 0, appRunning: false, paused: false },
     } as never);
@@ -55,10 +60,19 @@ describe('WebRTC session form serialization', () => {
       return 'session-from-client';
     });
 
-    const wrapper = mount(NDialogProvider, {
+    wrapper = mount(NDialogProvider, {
       slots: { default: WebRtcClientView },
       global: {
-        plugins: [createPinia(), createI18n({ legacy: false, locale: 'en', messages: { en: {} } })],
+        plugins: [
+          createPinia(),
+          createI18n({
+            legacy: false,
+            locale: 'en',
+            messages: { en: {} },
+            missingWarn: false,
+            fallbackWarn: false,
+          }),
+        ],
         mocks: { $t: (key: string) => key },
         stubs: { Teleport: true },
       },
@@ -81,8 +95,6 @@ describe('WebRTC session form serialization', () => {
     await vi.waitFor(() => {
       expect(submittedConfig).toBeDefined();
     });
-    wrapper.unmount();
-
     if (submittedConfig === undefined) throw new Error('WebRTC config was not submitted');
     const post = vi.spyOn(http, 'post').mockResolvedValue({
       status: 200,
@@ -97,5 +109,11 @@ describe('WebRTC session form serialization', () => {
     expect(serialized['video_pacing_slack_ms']).toBeNull();
     expect(Object.keys(serialized)).toContain('bitrate_kbps');
     expect(Object.keys(serialized)).toContain('video_pacing_slack_ms');
+
+    const requestsBeforeUnmount = get.mock.calls.length;
+    wrapper.unmount();
+    wrapper = undefined;
+    await flushPromises();
+    expect(get).toHaveBeenCalledTimes(requestsBeforeUnmount);
   });
 });

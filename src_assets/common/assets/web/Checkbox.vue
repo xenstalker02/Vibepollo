@@ -113,11 +113,14 @@ const isChecked = computed<boolean>({
 });
 
 // For helper text showing what the default resolves to (enabled/disabled)
-const parsedDefaultPropValue = (() => {
-  const boolValues = mapToBoolRepresentation(props.default);
-  if (boolValues) return boolValues.value === boolValues.possibleValues[0];
-  return false;
-})();
+const parsedDefaultPropValue: { recognized: true; value: boolean } | { recognized: false } =
+  (() => {
+    const boolValues = mapToBoolRepresentation(props.default);
+    if (boolValues) {
+      return { recognized: true, value: boolValues.value === boolValues.possibleValues[0] };
+    }
+    return { recognized: false };
+  })();
 
 const labelField = props.label === MISSING_PROP ? `${props.localePrefix}.${props.id}` : props.label;
 const descField =
@@ -125,8 +128,11 @@ const descField =
 const showDesc = computed(() => props.desc !== '' || Boolean(slots['default']));
 const showActions = computed(() => Boolean(slots['actions']));
 const showMeta = computed(() => Boolean(slots['meta']));
-const showDefValue = parsedDefaultPropValue !== false;
-const defValue = parsedDefaultPropValue ? '_common.enabled_def_cbox' : '_common.disabled_def_cbox';
+const showDefValue = parsedDefaultPropValue.recognized;
+const defValue =
+  parsedDefaultPropValue.recognized && parsedDefaultPropValue.value
+    ? '_common.enabled_def_cbox'
+    : '_common.disabled_def_cbox';
 </script>
 
 <template>

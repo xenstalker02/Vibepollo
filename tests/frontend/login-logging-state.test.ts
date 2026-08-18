@@ -1,6 +1,7 @@
 import {
   flushPromises,
   mount,
+  type VueWrapper,
 } from '../../src_assets/common/assets/web/node_modules/@vue/test-utils';
 import { createPinia } from '../../src_assets/common/assets/web/node_modules/pinia';
 import { createI18n } from '../../src_assets/common/assets/web/node_modules/vue-i18n';
@@ -9,6 +10,8 @@ import LoginModal from '@web/components/LoginModal.vue';
 import { http } from '@web/http';
 import { useAuthStore } from '@web/stores/auth';
 import { useConnectivityStore } from '@web/stores/connectivity';
+
+const wrappers: VueWrapper[] = [];
 
 function mountLoginModal() {
   const pinia = createPinia();
@@ -43,12 +46,14 @@ function mountLoginModal() {
       stubs: { Teleport: true },
     },
   });
+  wrappers.push(wrapper);
 
   return { auth, connectivity, wrapper };
 }
 
 describe('login logging state', () => {
   afterEach(() => {
+    for (const wrapper of wrappers.splice(0)) wrapper.unmount();
     vi.useRealTimers();
     vi.restoreAllMocks();
   });

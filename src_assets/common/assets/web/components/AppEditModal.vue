@@ -476,6 +476,7 @@ import {
   NCard,
   NButton,
   NCheckbox,
+  NInput,
   NRadioGroup,
   NRadio,
   NSelect,
@@ -614,6 +615,12 @@ function getValue(source: unknown, key: string): unknown {
 function getStringValue(source: unknown, key: string): string {
   const value = getValue(source, key);
   return typeof value === 'string' ? value : '';
+}
+
+function getStringOrNumberValue(source: unknown, key: string): string {
+  const value = getValue(source, key);
+  if (typeof value === 'string') return value.trim();
+  return typeof value === 'number' && Number.isFinite(value) ? String(value) : '';
 }
 
 function asDisplayDevice(value: unknown): DisplayDevice {
@@ -1371,7 +1378,8 @@ function resetActiveLosslessProfile(): void {
 }
 // Unified name combobox state (supports Playnite suggestions + free-form)
 const nameSelectValue = ref<string>('');
-const nameOptions = ref<{ label: string; value: string }[]>([]);
+type AppNameOption = { label: string; value: string; disabled?: boolean };
+const nameOptions = ref<AppNameOption[]>([]);
 const fallbackOption = (value: unknown) => {
   const v = String(value ?? '');
   const label = String(form.value.name || '').trim() || v;
@@ -1394,7 +1402,9 @@ const nameSelectOptions = computed(() => {
 function onNameFocus() {
   // Show a friendly placeholder immediately to avoid "No Data"
   if (!playniteOptions.value.length) {
-    nameOptions.value = [{ label: 'Loading Playnite games…', value: '__loading__' }];
+    nameOptions.value = [
+      { label: 'Loading Playnite games…', value: '__loading__', disabled: true },
+    ];
   }
   // Kick off loading (don’t block the UI), then refresh list
   loadPlayniteGames()
@@ -1487,7 +1497,7 @@ async function searchCovers(name: string): Promise<CoverCandidate[]> {
     const cover = isRecord(game) ? game['cover'] : undefined;
     const thumb = getStringValue(cover, 'url');
     const gameName = getStringValue(game, 'name');
-    const gameId = getStringValue(game, 'id');
+    const gameId = getStringOrNumberValue(game, 'id');
     if (!thumb || !gameName || !gameId) continue;
     const dotIndex = thumb.lastIndexOf('.');
     const slashIndex = thumb.lastIndexOf('/');
@@ -1829,12 +1839,7 @@ const displayDeviceOptions = computed(() => {
   return opts;
 });
 
-function renderDisplayDeviceLabel(option: SelectOption) {
-  const device = option as DisplayDeviceOption;
-  return h('span', device.displayName || String(device.label || device.value || 'Display'));
-}
-
-const renderDisplayDeviceOption: SelectRenderOption = ({ option }) => {
+function renderDisplayDeviceContent(option: unknown) {
   const device = option as DisplayDeviceOption;
   const label = device.displayName || String(device.label || device.value || 'Display');
   const status = device.active === null ? '' : device.active ? 'Active' : 'Inactive';
@@ -1846,6 +1851,14 @@ const renderDisplayDeviceOption: SelectRenderOption = ({ option }) => {
       [device.id || '', status].filter(Boolean).join(' · '),
     ),
   ]);
+}
+
+function renderDisplayDeviceLabel(option: SelectOption) {
+  return renderDisplayDeviceContent(option);
+}
+
+const renderDisplayDeviceOption: SelectRenderOption = ({ option }) => {
+  return renderDisplayDeviceContent(option);
 };
 
 function onDisplaySelectFocus() {

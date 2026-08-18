@@ -713,7 +713,7 @@ import ConfigSelectField from '@/ConfigSelectField.vue';
 import { computed, nextTick, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useI18n } from 'vue-i18n';
-import { NButton, NInput } from 'naive-ui';
+import { NButton, NInput, NTag } from 'naive-ui';
 import { useConfigStore } from '@/stores/config';
 import {
   buildOverrideOptionsText,

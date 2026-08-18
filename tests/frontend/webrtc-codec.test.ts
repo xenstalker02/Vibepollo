@@ -9,9 +9,18 @@ describe('WebRTC codec and candidate helpers', () => {
   });
 
   test('preserves existing FMTP parameters while applying a bitrate hint', () => {
-    expect(rewriteFmtp(['apt=96', 'x-google-start-bitrate=1000'])).toEqual(
-      expect.arrayContaining(['apt=96', 'x-google-start-bitrate=1000']),
-    );
+    expect(rewriteFmtp(['profile-level-id=42e01f'], 2500)).toEqual([
+      'profile-level-id=42e01f',
+      'x-google-start-bitrate=2500',
+    ]);
+    expect(rewriteFmtp(['profile-level-id=42e01f', 'x-google-start-bitrate=1000'], 2500)).toEqual([
+      'profile-level-id=42e01f',
+      'x-google-start-bitrate=2500',
+    ]);
+    expect(rewriteFmtp(['apt=96', 'x-google-start-bitrate=1000'], 2500)).toEqual([
+      'apt=96',
+      'x-google-start-bitrate=1000',
+    ]);
   });
 
   test('omits missing optional ICE candidate fields', () => {

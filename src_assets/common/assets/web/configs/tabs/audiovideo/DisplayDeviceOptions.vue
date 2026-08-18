@@ -168,7 +168,7 @@ async function loadGoldenStatus(): Promise<void> {
 }
 
 const createOrRecreateLabel = computed(() =>
-  goldenExists.value
+  goldenExists.value === true
     ? t('troubleshooting.dd_golden_recreate')
     : t('troubleshooting.dd_golden_create'),
 );

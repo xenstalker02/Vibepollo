@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils';
+import { mount, type VueWrapper } from '@vue/test-utils';
 import Checkbox from '@web/Checkbox.vue';
 
 describe('Checkbox.vue', () => {
@@ -8,11 +8,19 @@ describe('Checkbox.vue', () => {
     default?: CheckboxValue;
   };
 
-  const mountWith = (model: CheckboxValue, props: CheckboxProps = {}) =>
-    mount(Checkbox, {
+  const wrappers: VueWrapper[] = [];
+  const mountWith = (model: CheckboxValue, props: CheckboxProps = {}) => {
+    const wrapper = mount(Checkbox, {
       props: { id: 'flag', localePrefix: 'playnite', label: 'Label', modelValue: model, ...props },
       global: { mocks: { $t: (k: string) => k } },
     });
+    wrappers.push(wrapper);
+    return wrapper;
+  };
+
+  afterEach(() => {
+    for (const wrapper of wrappers.splice(0)) wrapper.unmount();
+  });
 
   test('maps boolean model to true/false values', async () => {
     const w = mountWith(true);
@@ -43,5 +51,21 @@ describe('Checkbox.vue', () => {
   test('shows default value hint based on `default` prop', () => {
     const w = mountWith(true, { default: 'enabled' });
     expect(w.text()).toContain('_common.enabled_def_cbox');
+  });
+
+  test.each([false, 0, 'disabled'] as const)(
+    'shows the disabled default helper for %p',
+    (defaultValue) => {
+      const w = mountWith(true, { default: defaultValue });
+
+      expect(w.text()).toContain('_common.disabled_def_cbox');
+    },
+  );
+
+  test('hides the default helper for an unrecognized value', () => {
+    const w = mountWith(true, { default: 'sometimes' });
+
+    expect(w.text()).not.toContain('_common.enabled_def_cbox');
+    expect(w.text()).not.toContain('_common.disabled_def_cbox');
   });
 });

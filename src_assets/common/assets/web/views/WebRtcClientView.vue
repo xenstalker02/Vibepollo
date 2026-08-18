@@ -948,6 +948,7 @@ const resumeOnConnect = ref(true);
 const terminatePending = ref(false);
 const sessionStatus = ref<SessionStatus | NullValue>(null);
 let sessionStatusTimer: number | NullValue = null;
+let componentMounted = false;
 
 function appKey(app: App): string {
   return `${app.uuid || ''}-${app.name || 'app'}`;
@@ -2077,7 +2078,7 @@ async function fetchSessionStatus(): Promise<void> {
 
 function startSessionStatusPolling(): void {
   stopSessionStatusPolling();
-  if (isConnected.value) return;
+  if (!componentMounted || isConnected.value) return;
   void fetchSessionStatus();
   sessionStatusTimer = window.setInterval(() => void fetchSessionStatus(), 5000);
 }
@@ -2898,6 +2899,7 @@ watch(videoEl, (el) => {
 });
 
 onBeforeUnmount(() => {
+  componentMounted = false;
   setWebRtcActive(false);
   document.removeEventListener('fullscreenchange', onFullscreenChange);
   document.removeEventListener('webkitfullscreenchange', onFullscreenChange as EventListener);
@@ -2938,6 +2940,7 @@ onBeforeUnmount(() => {
 });
 
 onMounted(async () => {
+  componentMounted = true;
   loadCachedConfig();
   document.addEventListener('fullscreenchange', onFullscreenChange);
   document.addEventListener('webkitfullscreenchange', onFullscreenChange as EventListener);
