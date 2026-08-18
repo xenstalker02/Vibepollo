@@ -15,6 +15,7 @@ import type {
   FrameGenRequirementStatus,
   FrameGenerationMode,
   LosslessProfileKey,
+  Nullable,
 } from './types';
 import { FRAME_GENERATION_PROVIDERS, LOSSLESS_FLOW_MIN, LOSSLESS_FLOW_MAX } from './lossless';
 
@@ -24,22 +25,22 @@ const gen2Model = defineModel<boolean>('gen2', { default: false });
 const losslessProfileModel = defineModel<LosslessProfileKey>('losslessProfile', {
   default: 'recommended',
 });
-const losslessTargetModel = defineModel<number | null>('losslessTargetFps', { default: null });
-const losslessRtssModel = defineModel<number | null>('losslessRtssLimit', { default: null });
-const losslessFlowModel = defineModel<number | null>('losslessFlowScale', { default: null });
-const losslessLaunchDelayModel = defineModel<number | null>('losslessLaunchDelay', {
+const losslessTargetModel = defineModel<Nullable<number>>('losslessTargetFps', { default: null });
+const losslessRtssModel = defineModel<Nullable<number>>('losslessRtssLimit', { default: null });
+const losslessFlowModel = defineModel<Nullable<number>>('losslessFlowScale', { default: null });
+const losslessLaunchDelayModel = defineModel<Nullable<number>>('losslessLaunchDelay', {
   default: null,
 });
 
 const props = defineProps<{
-  health: FrameGenHealth | null;
+  health: Nullable<FrameGenHealth>;
   healthLoading: boolean;
-  healthError: string | null;
+  healthError: Nullable<string>;
   losslessActive: boolean;
   nvidiaActive: boolean;
   usingVirtualDisplay: boolean;
   hasActiveLosslessOverrides: boolean;
-  onLosslessRtssLimitChange: (value: number | null) => void;
+  onLosslessRtssLimitChange: (value: Nullable<number>) => void;
   resetActiveLosslessProfile: () => void;
 }>();
 
@@ -162,22 +163,16 @@ function statusLabel(status: FrameGenRequirementStatus) {
   }
 }
 
-function targetIconClass(supported: boolean | null) {
+function targetIconClass(supported: Nullable<boolean>) {
   if (supported === true) return 'fas fa-check-circle text-emerald-500';
   if (supported === false) return 'fas fa-times-circle text-rose-500';
   return 'fas fa-question-circle text-amber-500';
 }
 
-function targetStatusLabel(supported: boolean | null) {
+function targetStatusLabel(supported: Nullable<boolean>) {
   if (supported === true) return 'Supported';
   if (supported === false) return 'Not supported';
   return 'Unknown';
-}
-
-function formatHz(hz: number | null) {
-  if (hz === null || Number.isNaN(hz)) return 'Unknown refresh rate';
-  if (hz >= 200) return `${Math.round(hz)} Hz`;
-  return `${Math.round(hz * 10) / 10} Hz`;
 }
 
 const showSuggestion = computed(() => {

@@ -1,7 +1,26 @@
-const plugin = require('tailwindcss/plugin');
+import type { Config } from 'tailwindcss';
+import plugin from 'tailwindcss/plugin';
 
-/** @type {import('tailwindcss').Config} */
-module.exports = {
+interface SemanticColorTokens {
+  primary: string;
+  secondary: string;
+  success: string;
+  warning: string;
+  danger: string;
+  info: string;
+  light: string;
+  dark: string;
+  surface: string;
+  accent: string;
+  onPrimary: string;
+  onSecondary: string;
+  onAccent: string;
+  onLight: string;
+  onDark: string;
+  brand: string;
+}
+
+export default {
   darkMode: 'class',
   // Limit scanning to source files; avoid node_modules for performance
   content: [
@@ -95,10 +114,12 @@ module.exports = {
   },
   plugins: [
     // Emit CSS variables for semantic tokens from theme.semanticColors
-    plugin(function ({ addBase, theme }) {
-      const light = theme('semanticColors.light') || {};
-      const dark = theme('semanticColors.dark') || {};
-      const toVars = (src) => ({
+    plugin(function (api) {
+      const lightValue: unknown = api.theme('semanticColors.light');
+      const darkValue: unknown = api.theme('semanticColors.dark');
+      const light = lightValue as SemanticColorTokens;
+      const dark = darkValue as SemanticColorTokens;
+      const toVars = (src: SemanticColorTokens) => ({
         '--color-primary': src.primary,
         '--color-secondary': src.secondary,
         '--color-success': src.success,
@@ -116,10 +137,10 @@ module.exports = {
         '--color-on-dark': src.onDark,
         '--color-brand': src.brand,
       });
-      addBase({
+      api.addBase({
         ':root': toVars(light),
         '.dark': toVars(dark),
       });
     }),
   ],
-};
+} satisfies Config;

@@ -87,6 +87,8 @@ router.onError((error) => {
       return;
     }
     storage?.removeItem(CHUNK_RELOAD_FLAG);
-  } catch {}
+  } catch {
+    // Session storage is best-effort in restricted browser contexts.
+  }
   window.location.replace(window.location.origin);
 });

@@ -120,7 +120,7 @@ export function getConfigFieldDefinition(
         ? getConfigSelectOptions(key, {
             t: ctx.t,
             platform: ctx.platform,
-            metadata: ctx.metadata as unknown,
+            metadata: ctx.metadata,
             currentValue: ctx.currentValue,
           })
         : undefined);
@@ -142,7 +142,7 @@ export function getConfigFieldDefinition(
     getConfigSelectOptions(key, {
       t: ctx.t,
       platform: ctx.platform,
-      metadata: ctx.metadata as unknown,
+      metadata: ctx.metadata,
       currentValue: ctx.currentValue,
     });
 

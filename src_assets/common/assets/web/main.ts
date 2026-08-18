@@ -22,7 +22,9 @@ const chunkReloadFlag = 'sunshine:chunk-reload';
 if (typeof window !== 'undefined') {
   try {
     window.sessionStorage.removeItem(chunkReloadFlag);
-  } catch {}
+  } catch {
+    // Session storage is best-effort in restricted browser contexts.
+  }
 }
 
 // Core application instance & stores
@@ -34,7 +36,7 @@ app.use(pinia);
 // Enable Vue devtools when building with Vite mode "debug"
 if (import.meta.env.MODE === 'debug') {
   // Requires __VUE_PROD_DEVTOOLS__ to be true at build time
-  app.config.devtools = true;
+  Reflect.set(app.config, 'devtools', true);
 }
 
 // Expose platform ref early (updated after config load)
@@ -45,7 +47,7 @@ app.provide('platform', platformRef);
 // config & apps exactly once. Subsequent logouts (401) will re-trigger login modal
 // and a later successful login will re-load fresh data.
 initApp(app, async () => {
-  await initHttpLayer();
+  initHttpLayer();
   // Start connectivity heartbeat early so we can detect server loss
   const connectivity = useConnectivityStore();
   connectivity.start();
@@ -66,7 +68,7 @@ initApp(app, async () => {
   // Initialize auth status from server
   await auth.init();
 
-  auth.waitForAuthentication().then(async () => {
+  void auth.waitForAuthentication().then(async () => {
     await configStore.fetchConfig(true);
     // React to locale setting changes by switching i18n at runtime
     watch(
@@ -84,12 +86,12 @@ initApp(app, async () => {
   try {
     const prefetch = () => {
       // Trigger dynamic imports; browser caches chunks for next navigation
-      import('@/views/SettingsView.vue');
-      import('@/views/ApplicationsView.vue');
+      void import('@/views/SettingsView.vue');
+      void import('@/views/ApplicationsView.vue');
     };
     // Use requestIdleCallback when available to avoid competing with critical work
-    if (typeof (window as any).requestIdleCallback === 'function') {
-      (window as any).requestIdleCallback(prefetch, { timeout: 2000 });
+    if (typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(prefetch, { timeout: 2000 });
     } else {
       setTimeout(prefetch, 1500);
     }

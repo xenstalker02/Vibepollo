@@ -1,34 +1,33 @@
 <script setup lang="ts">
 defineOptions({ inheritAttrs: false });
 
-import { computed, ref, useAttrs, watch } from 'vue';
+import { computed, ref, useAttrs, watch, type PropType } from 'vue';
 import { NInputNumber } from 'naive-ui';
 import ConfigFieldShell from './ConfigFieldShell.vue';
 
-const model = defineModel<number | null>({ required: true });
+const nullValue = () => null;
+type Nullable<T> = T | ReturnType<typeof nullValue>;
+
+const model = defineModel<Nullable<number>>({ required: true });
 const attrs = useAttrs();
 
-const props = withDefaults(
-  defineProps<{
-    id: string;
-    label: string;
-    desc?: string;
-    size?: 'small' | 'medium' | 'large';
-    min?: number;
-    max?: number;
-  }>(),
-  {
-    desc: '',
-    size: 'medium',
-    min: 0,
+const props = defineProps({
+  id: { type: String, required: true },
+  label: { type: String, required: true },
+  desc: { type: String, default: '' },
+  size: {
+    type: String as PropType<'small' | 'medium' | 'large'>,
+    default: 'medium',
   },
-);
+  min: { type: Number, default: 0 },
+  max: { type: Number, default: undefined },
+});
 
-const hoursPart = ref<number | null>(null);
-const minutesPart = ref<number | null>(null);
-const secondsPart = ref<number | null>(null);
+const hoursPart = ref<Nullable<number>>(null);
+const minutesPart = ref<Nullable<number>>(null);
+const secondsPart = ref<Nullable<number>>(null);
 
-function sanitizePart(value: number | null, max?: number): number | null {
+function sanitizePart(value: Nullable<number>, max?: number): Nullable<number> {
   if (value === null || value === undefined || !Number.isFinite(value)) return null;
   const normalized = Math.max(0, Math.floor(value));
   return max !== undefined ? Math.min(max, normalized) : normalized;
@@ -39,7 +38,7 @@ function clampTotalSeconds(value: number): number {
   return props.max !== undefined ? Math.min(props.max, withMin) : withMin;
 }
 
-function syncFromModel(value: number | null) {
+function syncFromModel(value: Nullable<number>) {
   if (value === null || value === undefined || !Number.isFinite(value)) {
     hoursPart.value = null;
     minutesPart.value = null;
@@ -59,7 +58,7 @@ watch(
   { immediate: true },
 );
 
-function updateDurationPart(part: 'hours' | 'minutes' | 'seconds', value: number | null) {
+function updateDurationPart(part: 'hours' | 'minutes' | 'seconds', value: Nullable<number>) {
   const normalized = sanitizePart(value, part === 'hours' ? undefined : 59);
   if (part === 'hours') hoursPart.value = normalized;
   else if (part === 'minutes') minutesPart.value = normalized;

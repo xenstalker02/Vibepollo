@@ -9,7 +9,7 @@ export function initApp(
   // Wait for locale initialization, then run optional app-level setup (like loading config)
   // If a `config` callback is provided it may be async — run it before mounting so
   // stores and components see the runtime config immediately.
-  i18n().then(async (i18n) => {
+  void i18n().then(async (i18n) => {
     app.use(i18n);
     app.provide('i18n', i18n.global);
     // expose i18n instance for runtime locale switching

@@ -194,7 +194,6 @@
 </template>
 
 <script setup lang="ts">
-// @ts-nocheck
 import {
   ref,
   computed,
@@ -202,8 +201,8 @@ import {
   onUnmounted,
   watch,
   markRaw,
-  defineAsyncComponent,
   nextTick,
+  type ComponentPublicInstance,
 } from 'vue';
 import { NInput, NButton, useMessage } from 'naive-ui';
 import { useRoute, useRouter } from 'vue-router';
@@ -219,6 +218,21 @@ import { useConfigStore } from '@/stores/config';
 import { useAuthStore } from '@/stores/auth';
 import { http } from '@/http';
 import { storeToRefs } from 'pinia';
+
+const nullValue = () => null;
+type Nullable<T> = T | ReturnType<typeof nullValue>;
+
+type SearchOption = { text: string; value: string };
+type SearchItem = {
+  sectionId: Nullable<string>;
+  label: string;
+  path: string;
+  el: Element;
+  desc?: string;
+  options?: SearchOption[];
+  optionsText?: string;
+  key?: string;
+};
 
 const store = useConfigStore();
 const { config, metadata } = storeToRefs(store);
@@ -244,15 +258,15 @@ const unsavedLabel = computed(() =>
     : 'Unsaved changes',
 );
 
-const mainEl = ref(null);
+const mainEl = ref<Nullable<HTMLElement>>(null);
 const searchQuery = ref('');
 const searchOpen = ref(false);
-const searchResults = ref([]);
-const searchIndex = ref([]); // { sectionId, label, path, el }
-const sectionRefs = new Map();
+const searchResults = ref<SearchItem[]>([]);
+const searchIndex = ref<SearchItem[]>([]);
+const sectionRefs = new Map<string, Element>();
 
-function setSectionRef(id, el) {
-  if (el) sectionRefs.set(id, el);
+function setSectionRef(id: string, el: Nullable<Element | ComponentPublicInstance>) {
+  if (el instanceof Element) sectionRefs.set(id, el);
   else sectionRefs.delete(id);
 }
 
@@ -271,9 +285,9 @@ const tabsFiltered = computed(() =>
   tabs.filter((t) => (t.id === 'rtss' ? platform.value === 'windows' : true)),
 );
 
-const openSections = ref(new Set(['general']));
-const isOpen = (id) => openSections.value.has(id);
-const toggle = (id) => {
+const openSections = ref(new Set<string>(['general']));
+const isOpen = (id: string) => openSections.value.has(id);
+const toggle = (id: string) => {
   const s = new Set(openSections.value);
   s.has(id) ? s.delete(id) : s.add(id);
   openSections.value = s;
@@ -299,7 +313,8 @@ async function runRouteJump(rawJump: unknown) {
   await nextTick();
 
   if (searchResults.value.length) {
-    await goTo(searchResults.value[0]);
+    const firstResult = searchResults.value[0];
+    if (firstResult) await goTo(firstResult);
   }
 }
 
@@ -316,10 +331,11 @@ onMounted(async () => {
   if (config.value) queueBuildIndex();
 
   // If a target section is in the URL, scroll once ready/rendered
-  if (typeof route.query.sec === 'string') {
+  if (typeof route.query['sec'] === 'string') {
+    const sectionId = route.query['sec'];
     if (isReady.value) {
       await nextTick();
-      setTimeout(() => scrollToOpen(route.query.sec as string), 0);
+      setTimeout(() => void scrollToOpen(sectionId), 0);
     } else {
       const stop = watch(
         () => isReady.value,
@@ -327,7 +343,7 @@ onMounted(async () => {
           if (ready) {
             stop();
             await nextTick();
-            setTimeout(() => scrollToOpen(route.query.sec as string), 0);
+            setTimeout(() => void scrollToOpen(sectionId), 0);
           }
         },
         { immediate: false },
@@ -335,16 +351,17 @@ onMounted(async () => {
     }
   }
 
-  if (typeof route.query.jump === 'string') {
+  if (typeof route.query['jump'] === 'string') {
+    const routeJump = route.query['jump'];
     if (isReady.value) {
-      await runRouteJump(route.query.jump);
+      await runRouteJump(routeJump);
     } else {
       const stop = watch(
         () => isReady.value,
         async (ready) => {
           if (ready) {
             stop();
-            await runRouteJump(route.query.jump);
+            await runRouteJump(routeJump);
           }
         },
         { immediate: false },
@@ -354,7 +371,7 @@ onMounted(async () => {
 });
 
 // When auth becomes ready or authenticated, rebuild index (debounced a bit)
-let authTimer = null;
+let authTimer: ReturnType<typeof setTimeout>;
 watch(
   () => ({ ready: auth.ready, authed: auth.isAuthenticated }),
   () => {
@@ -380,7 +397,9 @@ async function save() {
       message.error(store.validationError || 'Save failed. Check fields for errors.', {
         duration: 5000,
       });
-    } catch {}
+    } catch {
+      // Notifications are best effort.
+    }
   }
 }
 
@@ -419,38 +438,42 @@ watch(
   },
 );
 
-const goSection = (id) => {
+const goSection = (id: string) => {
   const dest = { path: '/settings', query: { sec: id } };
-  route.path === '/settings' ? router.replace(dest) : router.push(dest);
+  if (route.path === '/settings') {
+    void router.replace(dest);
+  } else {
+    void router.push(dest);
+  }
 };
 
-async function ensureSectionOpen(id) {
+async function ensureSectionOpen(id: string) {
   if (!id) return;
   if (!isOpen(id)) toggle(id);
   await nextTick();
   await new Promise((resolve) => requestAnimationFrame(resolve));
 }
 
-async function scrollToOpen(id) {
+async function scrollToOpen(id: string) {
   if (!id) return;
   await ensureSectionOpen(id);
   const el = sectionRefs.get(id);
   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 watch(
-  () => route.query.sec,
+  () => route.query['sec'],
   (id) => {
     if (typeof id !== 'string') return;
     if (suppressRouteScroll) return;
     if (isReady.value) {
-      scrollToOpen(id);
+      void scrollToOpen(id);
     } else {
       const stop = watch(
         () => isReady.value,
         (ready) => {
           if (ready) {
             stop();
-            scrollToOpen(id);
+            void scrollToOpen(id);
           }
         },
         { immediate: false },
@@ -460,7 +483,7 @@ watch(
 );
 
 watch(
-  () => route.query.jump,
+  () => route.query['jump'],
   async (jump) => {
     if (!isReady.value) return;
     await runRouteJump(jump);
@@ -470,25 +493,17 @@ watch(
 function buildSearchIndex() {
   const root = mainEl.value;
   if (!root) return;
-  const items = [] as Array<{
-    sectionId: string | null;
-    label: string;
-    path: string;
-    el: Element;
-    desc?: string;
-    options?: Array<{ text: string; value: string }>;
-    optionsText?: string;
-  }>;
+  const items: SearchItem[] = [];
   const seen = new Set<string>();
   const selectorTargets =
     'input,select,textarea,.form-control,.n-input,.n-select,.n-input-number,.n-checkbox input,.n-switch input,[contenteditable="true"]';
 
-  const sections = Array.from(root.querySelectorAll('section[id]')) as HTMLElement[];
+  const sections = Array.from(root.querySelectorAll<HTMLElement>('section[id]'));
 
-  const isDescClass = (cls?: string | null) =>
+  const isDescClass = (cls?: Nullable<string>) =>
     !!cls && (cls.includes('text-[11px]') || cls.includes('form-text') || cls.includes('text-xs'));
 
-  const extractDescription = (sourceEl: Element | null, explicit?: string) => {
+  const extractDescription = (sourceEl: Nullable<Element>, explicit?: string) => {
     if (explicit && explicit.trim().length) return explicit.trim();
     if (!sourceEl) return '';
     let descText = '';
@@ -496,9 +511,10 @@ function buildSearchIndex() {
       const container = sourceEl.parentElement;
       if (container) {
         const candidate = Array.from(container.querySelectorAll('div,p,small')).find(
-          (d) => d !== sourceEl && isDescClass(d.className) && d.textContent.trim().length > 0,
+          (d) =>
+            d !== sourceEl && isDescClass(d.className) && (d.textContent ?? '').trim().length > 0,
         );
-        if (candidate) descText = candidate.textContent.trim();
+        if (candidate) descText = (candidate.textContent ?? '').trim();
       }
       if (!descText) {
         let sib = sourceEl.nextElementSibling;
@@ -520,13 +536,13 @@ function buildSearchIndex() {
 
   const resolveTarget = (
     sectionEl: HTMLElement,
-    sourceEl: Element | null,
-    forId?: string | null,
-    targetOverride?: Element | null,
+    sourceEl: Nullable<Element>,
+    forId?: Nullable<string>,
+    targetOverride?: Nullable<Element>,
   ) => {
     if (targetOverride) return targetOverride;
-    let target: Element | null = null;
-    const lookupId = forId || sourceEl?.getAttribute?.('data-search-target') || null;
+    let target: Nullable<Element> = null;
+    const lookupId = forId || sourceEl?.getAttribute('data-search-target') || null;
     if (lookupId) {
       try {
         target = sectionEl.querySelector('#' + CSS.escape(lookupId));
@@ -535,35 +551,35 @@ function buildSearchIndex() {
       }
     }
     if (!target && sourceEl) {
-      const container = sourceEl.closest?.('div') || sourceEl.parentElement;
+      const container = sourceEl.closest('div') || sourceEl.parentElement;
       if (container) {
         target = container.querySelector(selectorTargets);
         if (!target) target = container.querySelector('.n-checkbox, .n-switch');
       }
-      if (!target) target = sourceEl.querySelector?.(selectorTargets) || null;
+      if (!target) target = sourceEl.querySelector(selectorTargets);
     }
     if (!target && lookupId) {
       target = sectionEl.querySelector(selectorTargets + `[name="${lookupId}"]`);
     }
     if (!target && sourceEl) {
-      target = sourceEl.closest?.('.n-checkbox, .n-switch') || null;
+      target = sourceEl.closest('.n-checkbox, .n-switch');
     }
     return target;
   };
 
-  const extractOptions = (target: Element | null, sourceEl: Element | null) => {
-    let optionsList: Array<{ text: string; value: string }> = [];
+  const extractOptions = (target: Nullable<Element>, sourceEl: Nullable<Element>) => {
+    let optionsList: SearchOption[] = [];
     let optionsText = '';
-    const optionSource = target?.closest?.('[data-search-options]') || target || sourceEl;
+    const optionSource = target?.closest('[data-search-options]') || target || sourceEl;
     try {
       if (target && target.tagName && target.tagName.toLowerCase() === 'select') {
-        optionsList = Array.from(target.querySelectorAll('option')).map((o) => ({
+        optionsList = Array.from(target.querySelectorAll<HTMLOptionElement>('option')).map((o) => ({
           text: (o.textContent || '').trim(),
-          value: (o as HTMLInputElement).value?.trim() || '',
+          value: o.value.trim(),
         }));
       }
       if ((!optionsList || optionsList.length === 0) && optionSource) {
-        const ds = optionSource.getAttribute?.('data-search-options') || '';
+        const ds = optionSource.getAttribute('data-search-options') || '';
         if (ds && typeof ds === 'string') {
           optionsList = ds
             .split('|')
@@ -594,19 +610,19 @@ function buildSearchIndex() {
 
   const register = (
     sectionEl: HTMLElement,
-    sectionId: string | null,
+    sectionId: Nullable<string>,
     sectionTitle: string,
     labelText: string,
-    sourceEl: Element | null,
+    sourceEl: Nullable<Element>,
     explicitDesc?: string,
-    targetOverride?: Element | null,
+    targetOverride?: Nullable<Element>,
   ) => {
     const label = (labelText || '').trim();
     if (!label) return;
     const target = resolveTarget(
       sectionEl,
       sourceEl,
-      sourceEl?.getAttribute?.('for'),
+      sourceEl?.getAttribute('for'),
       targetOverride,
     );
     if (!target) return;
@@ -637,7 +653,7 @@ function buildSearchIndex() {
       const desc = proxy.getAttribute('data-search-desc') || '';
       const defText = proxy.getAttribute('data-search-default') || '';
       const combinedDesc = [desc, defText].filter((part) => part && part.trim().length).join(' ');
-      let target: Element | null = null;
+      let target: Nullable<Element> = null;
       const targetId = proxy.getAttribute('data-search-target');
       if (targetId) {
         try {
@@ -673,7 +689,7 @@ watch(searchQuery, (q) => {
   }
 
   // Score matches: require all terms to match one of the fields. Label highest, options, path, then desc.
-  const scoreFor = (it) => {
+  const scoreFor = (it: SearchItem) => {
     const lv = it.label.toLowerCase();
     const pv = it.path.toLowerCase();
     const dv = (it.desc || '').toLowerCase();
@@ -711,9 +727,10 @@ watch(searchQuery, (q) => {
     .map((x) => x.it);
 });
 async function jumpFirstResult() {
-  if (searchResults.value.length) await goTo(searchResults.value[0]);
+  const firstResult = searchResults.value[0];
+  if (firstResult) await goTo(firstResult);
 }
-async function goTo(item) {
+async function goTo(item: SearchItem) {
   if (!item) return;
   searchOpen.value = false;
   let suppressing = false;
@@ -728,14 +745,16 @@ async function goTo(item) {
     await nextTick();
     await new Promise((resolve) => requestAnimationFrame(resolve));
 
-    let target = (item.el || null) as HTMLElement | null;
+    let target: Element = item.el;
     if (target) {
       try {
         const wrapper = target.closest(
           '.n-input, .n-select, .n-input-number, .n-checkbox, .n-switch, .form-control',
-        ) as HTMLElement | null;
+        );
         if (wrapper) target = wrapper;
-      } catch {}
+      } catch {
+        // Keep the original target when wrapper lookup fails.
+      }
       target.scrollIntoView({ behavior: 'smooth', block: 'center' });
       flash(target);
     }
@@ -745,7 +764,7 @@ async function goTo(item) {
     if (suppressing) suppressRouteScroll = false;
   }
 }
-function flash(el: HTMLElement | null) {
+function flash(el: Nullable<Element>) {
   // Flash on wrapper if available so the ring isn't hidden by internal structure
   let target = el;
   try {
@@ -753,7 +772,9 @@ function flash(el: HTMLElement | null) {
       '.n-input, .n-select, .n-input-number, .n-checkbox, .n-switch, .form-control',
     );
     if (wrapper) target = wrapper;
-  } catch {}
+  } catch {
+    // Keep the original target when wrapper lookup fails.
+  }
   target?.classList.add('flash-highlight');
   // Let the CSS animation run to completion before cleanup
   setTimeout(() => target?.classList.remove('flash-highlight'), 5200);

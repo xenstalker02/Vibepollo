@@ -6,6 +6,7 @@ packaging/
 **/dist/
 coverage/
 .cpack_artifacts/
+public/assets/js/qrcode.min.js
 
 # Exclude Markdown and YAML from formatting
 *.md

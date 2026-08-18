@@ -711,6 +711,7 @@ import ConfigFieldRenderer from '@/ConfigFieldRenderer.vue';
 import ConfigInputField from '@/ConfigInputField.vue';
 import ConfigSelectField from '@/ConfigSelectField.vue';
 import { computed, nextTick, ref, watch } from 'vue';
+import { storeToRefs } from 'pinia';
 import { useI18n } from 'vue-i18n';
 import { NButton, NInput } from 'naive-ui';
 import { useConfigStore } from '@/stores/config';
@@ -719,6 +720,7 @@ import {
   getOverrideSelectOptions,
   type OverrideSelectOption,
 } from './configOverrideOptions';
+import { isRecord, type Nullable } from './types';
 
 type Entry = {
   key: string;
@@ -787,9 +789,7 @@ const scopeSummaryLabel = computed(() =>
 );
 
 const configStore = useConfigStore();
-const configRef = (configStore as any).config;
-const tabsRef = (configStore as any).tabs;
-const metadataRef = (configStore as any).metadata;
+const { config: configRef, tabs: tabsRef, metadata: metadataRef } = storeToRefs(configStore);
 
 const DD_KEYS = {
   configurationOption: 'dd_configuration_option',
@@ -815,7 +815,7 @@ function normalizeOverrideRecord(value: unknown): Record<string, unknown> {
   }
 
   const normalized: Record<string, unknown> = {};
-  for (const [rawKey, rawValue] of Object.entries(value as Record<string, unknown>)) {
+  for (const [rawKey, rawValue] of Object.entries(value)) {
     const key = normalizeOverrideKey(rawKey);
     if (rawKey !== key && Object.prototype.hasOwnProperty.call(normalized, key)) {
       continue;
@@ -847,24 +847,24 @@ function isHiddenOverrideKey(key: string): boolean {
   return HIDDEN_OVERRIDE_KEYS.has(key);
 }
 
-function getConfigState(): any {
-  return (configRef as any)?.value ?? configRef;
+function getConfigState(): Record<string, unknown> {
+  const state: unknown = configRef.value;
+  return isRecord(state) ? state : {};
 }
 
-function getTabsState(): any[] {
-  const v = (tabsRef as any)?.value ?? tabsRef;
-  return Array.isArray(v) ? v : [];
+function getTabsState() {
+  return tabsRef.value;
 }
 
-function getMetadataState(): any {
-  return (metadataRef as any)?.value ?? metadataRef;
+function getMetadataState() {
+  return metadataRef.value;
 }
 
 function platformKey(): string {
   try {
     const meta = getMetadataState();
     const cfg = getConfigState();
-    return String(meta?.platform ?? cfg?.platform ?? '')
+    return String(meta.platform ?? cfg['platform'] ?? '')
       .toLowerCase()
       .trim();
   } catch {
@@ -1004,9 +1004,10 @@ function cloneValue(v: unknown): unknown {
 function getGlobalValue(key: string): unknown {
   try {
     const state = getConfigState();
-    const cur = state?.[key];
+    const cur = state[key];
     if (cur !== undefined) return cur;
-    return (configStore as any)?.defaults?.[key];
+    const defaults: unknown = configStore.defaults;
+    return isRecord(defaults) ? defaults[key] : undefined;
   } catch {
     return undefined;
   }
@@ -1017,7 +1018,7 @@ function getOverridesSource(target: EditTarget): Record<string, unknown> {
   if (!source || typeof source !== 'object' || Array.isArray(source)) {
     return {};
   }
-  return source as Record<string, unknown>;
+  return source;
 }
 
 function ensureOverridesObjectFor(target: EditTarget): void {
@@ -1045,7 +1046,7 @@ function replaceOverridesFor(target: EditTarget, nextValue: unknown): void {
   }
 
   ensureOverridesObjectFor('live');
-  const current = overrides.value as Record<string, unknown>;
+  const current = overrides.value;
   for (const key of Object.keys(current)) {
     if (!Object.prototype.hasOwnProperty.call(next, key)) {
       delete current[key];
@@ -1060,10 +1061,10 @@ function setOverrideKeyFor(target: EditTarget, key: string, value: unknown): voi
   ensureOverridesObjectFor(target);
   const normalizedKey = normalizeOverrideKey(key);
   if (target === 'draft') {
-    (draftOverrides.value as any)[normalizedKey] = value;
+    draftOverrides.value[normalizedKey] = value;
     return;
   }
-  (overrides.value as any)[normalizedKey] = value;
+  overrides.value[normalizedKey] = value;
 }
 
 function clearOverrideKeyFor(target: EditTarget, key: string): void {
@@ -1071,16 +1072,14 @@ function clearOverrideKeyFor(target: EditTarget, key: string): void {
   const normalizedKey = normalizeOverrideKey(key);
   try {
     if (target === 'draft') {
-      delete (draftOverrides.value as any)[normalizedKey];
+      delete draftOverrides.value[normalizedKey];
     } else {
-      delete (overrides.value as any)[normalizedKey];
+      delete overrides.value[normalizedKey];
     }
-  } catch {}
+  } catch {
+    // Clearing an absent or immutable key is a no-op.
+  }
   clearJsonStateFor(target, normalizedKey);
-}
-
-function setOverrideKey(key: string, value: unknown): void {
-  setOverrideKeyFor('live', key, value);
 }
 
 function clearOverrideKey(key: string): void {
@@ -1121,9 +1120,8 @@ function isWindowsPlatform(): boolean {
   return platformKey() === 'windows';
 }
 
-function getOverrideStringFor(target: EditTarget, key: string): string | null {
-  const o = getOverridesSource(target) as any;
-  if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
+function getOverrideStringFor(target: EditTarget, key: string): Nullable<string> {
+  const o = getOverridesSource(target);
   const v = o[key];
   if (v === undefined || v === null) return null;
   return String(v);
@@ -1144,8 +1142,7 @@ function ensureDdEnabledForDisplayOverrides(target: EditTarget): void {
 
 function cleanupDdConfigurationOptionIfUnused(target: EditTarget): void {
   if (!globalDdConfigDisabled()) return;
-  const o = getOverridesSource(target) as any;
-  if (!o || typeof o !== 'object' || Array.isArray(o)) return;
+  const o = getOverridesSource(target);
   const ddKeys = Object.keys(o).filter((k) => k.startsWith('dd_'));
   const hasOtherDdKeys = ddKeys.some((k) => k !== DD_KEYS.configurationOption);
   if (!hasOtherDdKeys && o[DD_KEYS.configurationOption] === 'verify_only') {
@@ -1157,20 +1154,16 @@ function isForcedResolutionActiveFor(target: EditTarget): boolean {
   if (!isWindowsPlatform()) return false;
   const opt = getOverrideStringFor(target, DD_KEYS.resolutionOption);
   if (opt === 'manual') return true;
-  const o = getOverridesSource(target) as any;
-  return (
-    !!o && typeof o === 'object' && !Array.isArray(o) && o[DD_KEYS.manualResolution] !== undefined
-  );
+  const o = getOverridesSource(target);
+  return o[DD_KEYS.manualResolution] !== undefined;
 }
 
 function isForcedRefreshRateActiveFor(target: EditTarget): boolean {
   if (!isWindowsPlatform()) return false;
   const opt = getOverrideStringFor(target, DD_KEYS.refreshRateOption);
   if (opt === 'manual') return true;
-  const o = getOverridesSource(target) as any;
-  return (
-    !!o && typeof o === 'object' && !Array.isArray(o) && o[DD_KEYS.manualRefreshRate] !== undefined
-  );
+  const o = getOverridesSource(target);
+  return o[DD_KEYS.manualRefreshRate] !== undefined;
 }
 
 function isForcedHdrActiveFor(target: EditTarget): boolean {
@@ -1192,7 +1185,7 @@ const draftForcedRefreshRate = computed<string>(
   () => getOverrideStringFor('draft', DD_KEYS.manualRefreshRate) ?? '',
 );
 
-const forcedHdrOptions = [
+const forcedHdrOptions: OverrideSelectOption[] = [
   { label: 'On', value: 'on' },
   { label: 'Off', value: 'off' },
 ];
@@ -1321,10 +1314,9 @@ const allEntries = computed<Entry[]>(() => {
   const tabList = getTabsState();
   const platform = platformKey();
   for (const tab of tabList) {
-    const groupId = String((tab as any)?.id ?? '');
-    const groupName = String((tab as any)?.name ?? groupId);
-    const options = (tab as any)?.options ?? {};
-    if (!options || typeof options !== 'object') continue;
+    const groupId = String(tab.id ?? '');
+    const groupName = String(tab.name ?? groupId);
+    const options = tab.options;
     for (const key of Object.keys(options)) {
       if (!isAllowedKey(key)) continue;
       const globalValue = getGlobalValue(key);
@@ -1385,8 +1377,8 @@ const allEntries = computed<Entry[]>(() => {
         groupName,
         synthetic: true,
         globalValue: undefined,
-        options: forcedHdrOptions as any,
-        optionsText: buildOverrideOptionsText(forcedHdrOptions as any),
+        options: forcedHdrOptions,
+        optionsText: buildOverrideOptionsText(forcedHdrOptions),
       },
     );
   }
@@ -1549,7 +1541,7 @@ const filteredAvailableCount = computed(() =>
 );
 
 const browseHasMultipleGroups = computed(() => availableGroups.value.length > 1);
-const browseResultsScrollRef = ref<HTMLElement | null>(null);
+const browseResultsScrollRef = ref<Nullable<HTMLElement>>(null);
 
 const hasFilterControls = computed(
   () => searchTerms.value.length > 0 || selectedGroupId.value !== ALL_GROUPS_ID,
@@ -1632,9 +1624,9 @@ function addOverrideToDraft(key: string) {
   }
   if (!isAllowedKey(key)) return;
   ensureOverridesObjectFor('draft');
-  if ((draftOverrides.value as any)[key] !== undefined) return;
+  if (draftOverrides.value[key] !== undefined) return;
   const current = getGlobalValue(key);
-  (draftOverrides.value as any)[key] = cloneValue(current);
+  draftOverrides.value[key] = cloneValue(current);
 }
 
 function queueOverrideAddition(key: string) {
@@ -1680,7 +1672,7 @@ function clearAll() {
 function mapEntries(keys: string[]): Entry[] {
   const byKey = new Map(allEntries.value.map((e) => [e.key, e] as const));
   return Array.from(new Set(keys))
-    .map((k) => {
+    .map((k): Entry => {
       const base = byKey.get(k);
       return {
         key: k,
@@ -1689,11 +1681,11 @@ function mapEntries(keys: string[]): Entry[] {
         path: base?.path ?? k,
         groupId: base?.groupId ?? 'unknown',
         groupName: base?.groupName ?? 'Unknown',
-        synthetic: base?.synthetic,
+        ...(base?.synthetic !== undefined ? { synthetic: base.synthetic } : {}),
         globalValue: base?.globalValue,
         options: base?.options ?? [],
         optionsText: base?.optionsText ?? '',
-      } as Entry;
+      };
     })
     .sort((a, b) => a.path.localeCompare(b.path));
 }
@@ -1728,7 +1720,7 @@ function formatValueForKey(key: string, value: unknown): string {
     currentValue: value,
   });
   if (options.length) {
-    const found = options.find((o) => o.value === (value as any));
+    const found = options.find((o) => o.value === value);
     if (found) {
       const raw = String(found.value ?? '');
       if (raw === '') return found.label || raw;
@@ -1740,7 +1732,7 @@ function formatValueForKey(key: string, value: unknown): string {
 }
 
 function rawOverrideValueFor(target: EditTarget, key: string): unknown {
-  return (getOverridesSource(target) as any)?.[key];
+  return getOverridesSource(target)[key];
 }
 
 function rawOverrideValue(key: string): unknown {
@@ -1774,7 +1766,7 @@ function filterNavClass(active: boolean): string[] {
 
 // --- Editors ---------------------------------------------------------------
 
-type BoolPair = { truthy: any; falsy: any; truthyNorm?: string; falsyNorm?: string };
+type BoolPair = { truthy: unknown; falsy: unknown; truthyNorm?: string; falsyNorm?: string };
 const BOOL_STRING_PAIRS = [
   ['enabled', 'disabled'],
   ['enable', 'disable'],
@@ -1786,7 +1778,7 @@ const BOOL_STRING_PAIRS = [
 
 const NUMERIC_OVERRIDE_KEYS = new Set<string>(['frame_limiter_fps_limit']);
 
-function boolPairFromValue(value: unknown): BoolPair | null {
+function boolPairFromValue(value: unknown): Nullable<BoolPair> {
   if (value === true || value === false) return { truthy: true, falsy: false };
   if (value === 1 || value === 0) return { truthy: 1, falsy: 0 };
   if (typeof value !== 'string') return null;
@@ -1901,10 +1893,6 @@ function clearJsonStateFor(target: EditTarget, key: string) {
   errors.value = e;
 }
 
-function clearJsonState(key: string) {
-  clearJsonStateFor('live', key);
-}
-
 function jsonDraftFor(target: EditTarget, key: string): string {
   const drafts = target === 'draft' ? draftJsonDrafts : jsonDrafts;
   if (Object.prototype.hasOwnProperty.call(drafts.value, key)) {
@@ -1957,13 +1945,13 @@ function commitJsonFor(target: EditTarget, key: string) {
     return;
   }
   try {
-    const parsed = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
     setOverrideKeyFor(target, key, parsed);
     errors.value = { ...errors.value, [key]: '' };
-  } catch (e: any) {
+  } catch (e: unknown) {
     errors.value = {
       ...errors.value,
-      [key]: e?.message ? String(e.message) : 'Invalid JSON',
+      [key]: e instanceof Error && e.message ? e.message : 'Invalid JSON',
     };
   }
 }

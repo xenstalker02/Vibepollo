@@ -1,6 +1,6 @@
 {
   "extends": "./tsconfig.base.json",
-  "include": ["**/*.ts", "**/*.tsx", "**/*.vue", "*.ts"],
+  "include": ["**/*.js", "**/*.ts", "**/*.tsx", "**/*.vue", "*.ts"],
   "exclude": ["node_modules", "dist", "build"],
   "compilerOptions": {
     "strict": true,

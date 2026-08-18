@@ -1,9 +1,23 @@
 export type ConfigSelectOption = { label: string; value: string | number; disabled?: boolean };
 
+type GpuMetadata = {
+  vendor_id?: number | string;
+  vendorId?: number | string;
+};
+
+type ConfigMetadata = {
+  gpus?: GpuMetadata[];
+  has_nvidia_gpu?: boolean;
+  has_intel_gpu?: boolean;
+  has_amd_gpu?: boolean;
+};
+
+const NO_METADATA = undefined;
+
 export type ConfigSelectOptionsContext = {
   t: (key: string) => string;
   platform: string;
-  metadata?: any;
+  metadata?: ConfigMetadata | typeof NO_METADATA;
   currentValue?: unknown;
 };
 
@@ -26,10 +40,10 @@ function ensureIncludesCurrentValue(
   return options.concat([{ label: String(currentValue), value: currentValue }]);
 }
 
-function gpuFlags(metadata: any) {
+function gpuFlags(metadata?: ConfigMetadata | typeof NO_METADATA) {
   const gpus = Array.isArray(metadata?.gpus) ? metadata.gpus : [];
   const hasVendor = (vendorId: number) =>
-    gpus.some((gpu: any) => Number(gpu?.vendor_id ?? gpu?.vendorId ?? 0) === vendorId);
+    gpus.some((gpu) => Number(gpu?.vendor_id ?? gpu?.vendorId ?? 0) === vendorId);
 
   const metaNvidia = metadata?.has_nvidia_gpu;
   const metaIntel = metadata?.has_intel_gpu;
@@ -43,7 +57,7 @@ function gpuFlags(metadata: any) {
     typeof metaAmd === 'boolean'
       ? metaAmd
       : gpus.length
-        ? gpus.some((gpu: any) => {
+        ? gpus.some((gpu) => {
             const vendor = Number(gpu?.vendor_id ?? gpu?.vendorId ?? 0);
             return vendor === 0x1002 || vendor === 0x1022;
           })
@@ -174,7 +188,7 @@ export function getConfigSelectOptions(
       ];
       const seen = new Set<string>(options.map((option) => String(option.value)));
 
-      const addOption = (value: string | undefined) => {
+      const addOption = (value?: string) => {
         if (!value || seen.has(value)) return;
         const labelKey = labelMap[value] || `config.gamepad_${value}`;
         options.push({ label: translateOr(t, labelKey, value), value });

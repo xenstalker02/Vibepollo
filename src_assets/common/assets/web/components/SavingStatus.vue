@@ -39,7 +39,7 @@ const countdown = computed(() => {
   return Math.ceil(ms / 1000);
 });
 
-let timer: any = null;
+let timer: ReturnType<typeof setInterval>;
 onMounted(() => {
   timer = setInterval(() => (nowMs.value = Date.now()), 250);
 });
@@ -125,7 +125,9 @@ async function onClick() {
           message.error(validationError.value || 'Save failed. Check fields for errors.', {
             duration: 5000,
           });
-        } catch {}
+        } catch {
+          // Notifications are best effort.
+        }
       }
       return;
     }
@@ -135,9 +137,13 @@ async function onClick() {
         message.error(validationError.value || 'Save failed. Check fields for errors.', {
           duration: 5000,
         });
-      } catch {}
+      } catch {
+        // Notifications are best effort.
+      }
     }
-  } catch {}
+  } catch {
+    // Save and restart errors are reflected by the store state.
+  }
 }
 </script>
 

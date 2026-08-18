@@ -6,6 +6,7 @@ import type {
   LosslessProfileKey,
   LosslessProfileOverrides,
   LosslessScalingMode,
+  Nullable,
 } from './types';
 
 export const LOSSLESS_FLOW_MIN = 0;
@@ -112,7 +113,7 @@ export function normalizeFrameGenerationProvider(value: unknown): FrameGeneratio
   return 'lossless-scaling';
 }
 
-export function parseFrameGenerationMode(value: unknown): FrameGenerationMode | null {
+export function parseFrameGenerationMode(value: unknown): Nullable<FrameGenerationMode> {
   if (typeof value !== 'string') {
     return null;
   }
@@ -136,7 +137,7 @@ export function parseFrameGenerationMode(value: unknown): FrameGenerationMode | 
   return null;
 }
 
-export function parseNumeric(value: unknown): number | null {
+export function parseNumeric(value: unknown): Nullable<number> {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
   }
@@ -151,25 +152,25 @@ export function parseNumeric(value: unknown): number | null {
   return null;
 }
 
-export function clampFlow(value: number | null): number | null {
+export function clampFlow(value: Nullable<number>): Nullable<number> {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null;
   const rounded = Math.round(value);
   return Math.min(LOSSLESS_FLOW_MAX, Math.max(LOSSLESS_FLOW_MIN, rounded));
 }
 
-export function clampResolution(value: number | null): number | null {
+export function clampResolution(value: Nullable<number>): Nullable<number> {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null;
   const rounded = Math.round(value);
   return Math.min(LOSSLESS_RESOLUTION_MAX, Math.max(LOSSLESS_RESOLUTION_MIN, rounded));
 }
 
-export function clampSharpness(value: number | null): number | null {
+export function clampSharpness(value: Nullable<number>): Nullable<number> {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null;
   const rounded = Math.round(value);
   return Math.min(LOSSLESS_SHARPNESS_MAX, Math.max(LOSSLESS_SHARPNESS_MIN, rounded));
 }
 
-export function defaultRtssFromTarget(target: number | null): number | null {
+export function defaultRtssFromTarget(target: Nullable<number>): Nullable<number> {
   if (typeof target !== 'number' || !Number.isFinite(target) || target <= 0) {
     return null;
   }
@@ -196,7 +197,7 @@ export function parseLosslessOverrides(input: unknown): LosslessProfileOverrides
   }
   const source = input as Record<string, unknown>;
   if (typeof source['performance-mode'] === 'boolean') {
-    overrides.performanceMode = source['performance-mode'] as boolean;
+    overrides.performanceMode = source['performance-mode'];
   }
   const rawFlow = clampFlow(parseNumeric(source['flow-scale']));
   if (rawFlow !== null) {
@@ -223,7 +224,7 @@ export function parseLosslessOverrides(input: unknown): LosslessProfileOverrides
     overrides.anime4kSize = animeSizeRaw as Anime4kSize;
   }
   if (typeof source['anime4k-vrs'] === 'boolean') {
-    overrides.anime4kVrs = source['anime4k-vrs'] as boolean;
+    overrides.anime4kVrs = source['anime4k-vrs'];
   }
   return overrides;
 }

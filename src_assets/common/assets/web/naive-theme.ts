@@ -61,7 +61,7 @@ export function useNaiveThemeOverrides() {
     const success = cssVarRgb('--color-success', '76, 175, 80');
     const warning = cssVarRgb('--color-warning', '245, 124, 0');
     const danger = cssVarRgb('--color-danger', '220, 38, 38');
-    overrides.value = {
+    const nextOverrides: GlobalThemeOverrides = {
       common: {
         primaryColor: primary,
         primaryColorHover: darken(primary, 0.08),
@@ -96,7 +96,8 @@ export function useNaiveThemeOverrides() {
         borderColor: `rgba(${cssVarRgbComma('--color-dark', '0, 0, 0')}, 0.10)`,
         dividerColor: `rgba(${cssVarRgbComma('--color-dark', '0, 0, 0')}, 0.10)`,
       },
-    } as GlobalThemeOverrides;
+    };
+    overrides.value = nextOverrides;
   };
 
   onMounted(compute);
@@ -111,7 +112,9 @@ export function useNaiveThemeOverrides() {
 // Usage: const isDark = useDarkModeClass();
 export function useDarkModeClassRef() {
   const isDark = ref<boolean>(false);
-  let observer: MutationObserver | null = null;
+  const NULL_OBSERVER = null;
+  type NullObserver = typeof NULL_OBSERVER;
+  let observer: MutationObserver | NullObserver = null;
 
   const update = () => {
     if (typeof document !== 'undefined') {

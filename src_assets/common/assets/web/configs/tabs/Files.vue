@@ -9,50 +9,50 @@ const config = store.config;
 <template>
   <div id="files" class="config-page">
     <ConfigFieldRenderer
-      setting-key="file_apps"
       v-model="config.file_apps"
+      setting-key="file_apps"
       class="mb-6"
       placeholder="apps.json"
     />
 
     <ConfigFieldRenderer
-      setting-key="credentials_file"
       v-model="config.credentials_file"
+      setting-key="credentials_file"
       class="mb-6"
       placeholder="sunshine_state.json"
     />
 
     <ConfigFieldRenderer
-      setting-key="log_path"
       v-model="config.log_path"
+      setting-key="log_path"
       class="mb-6"
       placeholder="sunshine.log"
     />
 
     <ConfigFieldRenderer
-      setting-key="pkey"
       v-model="config.pkey"
+      setting-key="pkey"
       class="mb-6"
       placeholder="/dir/pkey.pem"
     />
 
     <ConfigFieldRenderer
-      setting-key="cert"
       v-model="config.cert"
+      setting-key="cert"
       class="mb-6"
       placeholder="/dir/cert.pem"
     />
 
     <ConfigFieldRenderer
-      setting-key="file_state"
       v-model="config.file_state"
+      setting-key="file_state"
       class="mb-6"
       placeholder="sunshine_state.json"
     />
 
     <ConfigFieldRenderer
-      setting-key="vibeshine_file_state"
       v-model="config.vibeshine_file_state"
+      setting-key="vibeshine_file_state"
       class="mb-6"
       placeholder="vibeshine_state.json"
     />

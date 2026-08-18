@@ -9,8 +9,8 @@ const config = store.config;
 <template>
   <div id="vaapi-encoder" class="config-page">
     <ConfigFieldRenderer
-      setting-key="vaapi_strict_rc_buffer"
       v-model="config.vaapi_strict_rc_buffer"
+      setting-key="vaapi_strict_rc_buffer"
       class="mb-3"
     />
   </div>

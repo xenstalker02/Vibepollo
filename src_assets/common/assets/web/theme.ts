@@ -1,6 +1,6 @@
 type Theme = 'light' | 'dark' | 'auto';
 
-const getStoredTheme = (): string | null => localStorage.getItem('theme');
+const getStoredTheme = () => localStorage.getItem('theme');
 const setStoredTheme = (theme: string): void => localStorage.setItem('theme', theme);
 
 export const getPreferredTheme = (): Theme => {

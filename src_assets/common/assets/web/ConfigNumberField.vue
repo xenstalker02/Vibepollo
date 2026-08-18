@@ -1,31 +1,30 @@
 <script setup lang="ts">
 defineOptions({ inheritAttrs: false });
 
-import { computed, useAttrs } from 'vue';
+import { computed, useAttrs, type PropType } from 'vue';
 import { NInputNumber } from 'naive-ui';
 import ConfigFieldShell from './ConfigFieldShell.vue';
 
-const model = defineModel<number | null>({ required: true });
+const nullValue = () => null;
+type Nullable<T> = T | ReturnType<typeof nullValue>;
+
+const model = defineModel<Nullable<number>>({ required: true });
 const attrs = useAttrs();
 
-const props = withDefaults(
-  defineProps<{
-    id: string;
-    label: string;
-    desc?: string;
-    placeholder?: string;
-    size?: 'small' | 'medium' | 'large';
-    min?: number;
-    max?: number;
-    step?: number;
-    precision?: number;
-  }>(),
-  {
-    desc: '',
-    placeholder: '',
-    size: 'medium',
+const props = defineProps({
+  id: { type: String, required: true },
+  label: { type: String, required: true },
+  desc: { type: String, default: '' },
+  placeholder: { type: String, default: '' },
+  size: {
+    type: String as PropType<'small' | 'medium' | 'large'>,
+    default: 'medium',
   },
-);
+  min: { type: Number, default: undefined },
+  max: { type: Number, default: undefined },
+  step: { type: Number, default: undefined },
+  precision: { type: Number, default: undefined },
+});
 
 const numberProps = computed(() => ({
   ...(props.min !== undefined ? { min: props.min } : {}),

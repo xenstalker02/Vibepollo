@@ -11,7 +11,10 @@ type SelectOption = {
   disabled?: boolean;
 };
 
-const model = defineModel<string | number | null>({ required: true });
+const nullValue = () => null;
+type Nullable<T> = T | ReturnType<typeof nullValue>;
+
+const model = defineModel<Nullable<string | number>>({ required: true });
 const attrs = useAttrs();
 
 const props = withDefaults(

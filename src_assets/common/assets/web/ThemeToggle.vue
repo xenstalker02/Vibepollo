@@ -14,6 +14,7 @@ const { t } = useI18n();
 
 const open = ref(false);
 const current = ref('auto');
+type ThemeKey = 'light' | 'dark' | 'auto';
 
 const options = computed(() => [
   {
@@ -30,21 +31,17 @@ const options = computed(() => [
 ]);
 
 const activeIcon = computed(() => {
-  const m = {
+  const m: Record<ThemeKey, string> = {
     light: 'fa-solid fa-sun',
     dark: 'fa-solid fa-moon',
     auto: 'fa-solid fa-circle-half-stroke',
-  } as Record<string, string>;
-  return m[current.value] || m['auto'];
+  };
+  const activeTheme = current.value;
+  if (activeTheme === 'light' || activeTheme === 'dark' || activeTheme === 'auto') {
+    return m[activeTheme];
+  }
+  return m['auto'];
 });
-
-type ThemeKey = 'light' | 'dark' | 'auto';
-
-interface ThemeOption {
-  key: ThemeKey;
-  label: string;
-  icon: () => ReturnType<typeof h>;
-}
 
 function onSelect(key: string | number): void {
   const v = String(key) as ThemeKey;

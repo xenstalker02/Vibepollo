@@ -1,5 +1,8 @@
 export type EncodingType = 'h264' | 'hevc' | 'av1';
 
+const NULL_VALUE = null;
+type NullValue = typeof NULL_VALUE;
+
 export interface StreamConfig {
   width: number;
   height: number;
@@ -43,26 +46,26 @@ export interface WebRtcSessionState {
   has_remote_offer?: boolean;
   has_local_answer?: boolean;
   ice_candidates?: number;
-  width?: number | null;
-  height?: number | null;
-  fps?: number | null;
-  bitrate_kbps?: number | null;
-  codec?: string | null;
-  hdr?: boolean | null;
-  audio_channels?: number | null;
-  audio_codec?: string | null;
-  profile?: string | null;
-  client_name?: string | null;
-  client_uuid?: string | null;
-  video_pacing_mode?: string | null;
-  video_pacing_slack_ms?: number | null;
-  video_max_frame_age_ms?: number | null;
+  width?: number | NullValue;
+  height?: number | NullValue;
+  fps?: number | NullValue;
+  bitrate_kbps?: number | NullValue;
+  codec?: string | NullValue;
+  hdr?: boolean | NullValue;
+  audio_channels?: number | NullValue;
+  audio_codec?: string | NullValue;
+  profile?: string | NullValue;
+  client_name?: string | NullValue;
+  client_uuid?: string | NullValue;
+  video_pacing_mode?: string | NullValue;
+  video_pacing_slack_ms?: number | NullValue;
+  video_max_frame_age_ms?: number | NullValue;
   last_audio_bytes?: number;
   last_video_bytes?: number;
   last_video_idr?: boolean;
   last_video_frame_index?: number;
-  last_audio_age_ms?: number | null;
-  last_video_age_ms?: number | null;
+  last_audio_age_ms?: number | NullValue;
+  last_video_age_ms?: number | NullValue;
 }
 
 export interface WebRtcOffer {

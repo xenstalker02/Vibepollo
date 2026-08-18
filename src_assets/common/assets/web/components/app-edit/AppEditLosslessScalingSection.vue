@@ -227,7 +227,7 @@
 
 <script setup lang="ts">
 import { computed, ref, toRef } from 'vue';
-import type { Anime4kSize, AppForm, LosslessScalingMode } from './types';
+import type { Anime4kSize, AppForm, LosslessScalingMode, Nullable } from './types';
 import {
   LOSSLESS_ANIME_SIZES,
   LOSSLESS_RESOLUTION_MAX,
@@ -252,7 +252,7 @@ const form = defineModel<AppForm>('form', { required: true });
 const losslessPerformanceModeModel = defineModel<boolean>('losslessPerformanceMode', {
   required: true,
 });
-const losslessResolutionScaleModel = defineModel<number | null>('losslessResolutionScale', {
+const losslessResolutionScaleModel = defineModel<Nullable<number>>('losslessResolutionScale', {
   required: true,
 });
 const losslessScalingModeModel = defineModel<LosslessScalingMode>('losslessScalingMode', {

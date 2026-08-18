@@ -3,21 +3,30 @@ import { ref, Ref, computed } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { http } from '@/http';
 
+declare global {
+  interface Window {
+    __sunshine_webrtc_active?: boolean;
+  }
+}
+
+const NULL_VALUE = null;
+type NullValue = typeof NULL_VALUE;
+
 export const useConnectivityStore = defineStore('connectivity', () => {
   const offline: Ref<boolean> = ref(false);
   const checking: Ref<boolean> = ref(false);
-  const lastOk: Ref<number | null> = ref(null);
+  const lastOk: Ref<number | NullValue> = ref(null);
   const retryMs: Ref<number> = ref(15000);
   const started: Ref<boolean> = ref(false);
 
-  let intervalId: number | null = null;
-  let quickRetryTimer: number | null = null;
-  let onBecameActiveHandler: ((this: Window, ev: Event) => any) | null = null;
+  let intervalId: number | NullValue = null;
+  let quickRetryTimer: number | NullValue = null;
+  let onBecameActiveHandler: ((this: Window, ev: Event) => unknown) | NullValue = null;
 
   let failCount = 0;
   const failThreshold = 2;
 
-  let offlineSince: number | null = null;
+  let offlineSince: number | NullValue = null;
   const overlayDelayMs = 0;
   const quickRetryMs = 1000;
 
@@ -31,11 +40,11 @@ export const useConnectivityStore = defineStore('connectivity', () => {
   };
   const isLogoutInitiated = () => {
     const auth = getAuth();
-    return !!(auth && (auth as any).logoutInitiated);
+    return Boolean(auth?.logoutInitiated);
   };
   const isLoggingIn = () => {
     const auth = getAuth();
-    return !!(auth && (auth as any).loggingIn && (auth as any).loggingIn.value === true);
+    return Boolean(auth?.loggingIn);
   };
   const isTabActive = () => {
     try {
@@ -66,7 +75,7 @@ export const useConnectivityStore = defineStore('connectivity', () => {
     try {
       const path = window.location?.pathname ?? '';
       if (path.startsWith('/webrtc')) return true;
-      if ((window as any).__sunshine_webrtc_active) return true;
+      if (window.__sunshine_webrtc_active) return true;
     } catch {
       /* ignore */
     }
@@ -114,7 +123,7 @@ export const useConnectivityStore = defineStore('connectivity', () => {
       if (failCount === 1 && !quickRetryTimer) {
         quickRetryTimer = later(() => {
           quickRetryTimer = null;
-          if (!checking.value) checkOnce();
+          if (!checking.value) void checkOnce();
         }, quickRetryMs);
       } else if (failCount >= failThreshold) {
         // Confirmed offline after threshold
@@ -135,18 +144,18 @@ export const useConnectivityStore = defineStore('connectivity', () => {
     if (started.value) return;
     started.value = true;
 
-    later(checkOnce, 500);
+    later(() => void checkOnce(), 500);
 
     intervalId = window.setInterval(() => {
-      if (isTabActive()) checkOnce();
+      if (isTabActive()) void checkOnce();
     }, retryMs.value);
 
-    window.addEventListener('online', () => later(checkOnce, 200));
+    window.addEventListener('online', () => later(() => void checkOnce(), 200));
     window.addEventListener('offline', () => setOffline(true));
 
     onBecameActiveHandler = () =>
       later(() => {
-        if (isTabActive()) checkOnce();
+        if (isTabActive()) void checkOnce();
       }, 100);
     window.addEventListener('visibilitychange', onBecameActiveHandler);
     window.addEventListener('focus', onBecameActiveHandler);
@@ -174,7 +183,9 @@ export const useConnectivityStore = defineStore('connectivity', () => {
       try {
         window.removeEventListener('visibilitychange', onBecameActiveHandler);
         window.removeEventListener('focus', onBecameActiveHandler);
-      } catch {}
+      } catch {
+        // Listener cleanup is best-effort during browser teardown.
+      }
       onBecameActiveHandler = null;
     }
     started.value = false;

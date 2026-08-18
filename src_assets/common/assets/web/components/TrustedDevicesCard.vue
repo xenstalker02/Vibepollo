@@ -120,7 +120,7 @@ function formatTimestamp(seconds?: number): string {
   return formatter.format(new Date(seconds * 1000));
 }
 
-function sessionExpiry(session: AuthSession): number | undefined {
+function sessionExpiry(session: AuthSession) {
   const refreshExpiry = session.refresh_expires_at;
   if (Number.isFinite(refreshExpiry)) {
     return refreshExpiry;

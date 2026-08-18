@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
-import { useI18n } from 'vue-i18n';
 import { NAlert, NButton, NModal, NRadio, NRadioGroup } from 'naive-ui';
 import ConfigFieldRenderer from '@/ConfigFieldRenderer.vue';
 import ConfigSwitchField from '@/ConfigSwitchField.vue';
@@ -14,32 +13,70 @@ import VAAPIEncoder from '@/configs/tabs/encoders/VAAPIEncoder.vue';
 import { useConfigStore } from '@/stores/config';
 import { http } from '@/http';
 
+type GpuInfo = {
+  vendor_id?: number | string;
+  vendorId?: number | string;
+};
+
+type CaptureMetadata = {
+  platform?: string;
+  gpus?: GpuInfo[];
+  has_nvidia_gpu?: boolean;
+  has_amd_gpu?: boolean;
+  has_intel_gpu?: boolean;
+};
+
+type CaptureConfig = {
+  platform?: string;
+  lossless_scaling_path: string;
+  lossless_scaling_legacy_auto_detect: boolean;
+};
+
+type LosslessScalingStatus = {
+  resolved_path?: string;
+  suggested_path?: string;
+  default_path?: string;
+  configured_path?: string;
+  checked_path?: string;
+  candidates?: unknown[];
+  checked_is_directory?: boolean;
+  checked_exists?: boolean;
+  configured_exists?: boolean;
+  configured_is_directory?: boolean;
+  default_exists?: boolean;
+  message?: string;
+};
+
+const NO_STATUS = null;
+const NO_ERROR = null;
+
 const props = defineProps({
   currentTab: { type: String, default: '' },
 });
 
 const store = useConfigStore();
 const { config, metadata } = storeToRefs(store);
-const { t } = useI18n();
+const captureConfig = computed(() => config.value as CaptureConfig);
+const captureMetadata = computed(() => metadata.value as CaptureMetadata);
 
 // Fallback: if no currentTab provided, show all stacked (modern single page mode)
 const showAll = () => !props.currentTab;
 
 const platform = computed(() =>
-  (metadata.value?.platform || config.value?.platform || '').toString().toLowerCase(),
+  (captureMetadata.value.platform || captureConfig.value.platform || '').toString().toLowerCase(),
 );
 
 const gpuList = computed(() => {
-  const raw = (metadata.value as any)?.gpus;
+  const raw = captureMetadata.value.gpus;
   return Array.isArray(raw) ? raw : [];
 });
 
 const LOSSLESS_DEFAULT_PATH =
   'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Lossless Scaling\\LosslessScaling.exe';
 
-function normalizeWindowsPath(raw: string | null | undefined): string {
-  if (!raw) return '';
-  let value = String(raw).replace(/\//g, '\\').trim();
+function normalizeWindowsPath(raw: unknown): string {
+  if (typeof raw !== 'string' || !raw) return '';
+  let value = raw.replace(/\//g, '\\').trim();
   if (!value) return '';
   let prefix = '';
   if (value.startsWith('\\\\?\\')) {
@@ -56,9 +93,9 @@ function normalizeWindowsPath(raw: string | null | undefined): string {
   return prefix + value;
 }
 
-const losslessStatus = ref<any | null>(null);
+const losslessStatus = ref<LosslessScalingStatus | typeof NO_STATUS>(NO_STATUS);
 const losslessLoading = ref(false);
-const losslessError = ref<string | null>(null);
+const losslessError = ref<string | typeof NO_ERROR>(NO_ERROR);
 const losslessBrowseVisible = ref(false);
 const losslessBrowseSelection = ref('');
 
@@ -71,32 +108,28 @@ const losslessResolvedPath = computed(() => {
 const losslessForceAdvanced = ref(false);
 
 const hasNvidia = computed(() => {
-  const metaFlag = (metadata.value as any)?.has_nvidia_gpu;
+  const metaFlag = captureMetadata.value.has_nvidia_gpu;
   if (typeof metaFlag === 'boolean') return metaFlag;
   if (gpuList.value.length) {
-    return gpuList.value.some(
-      (gpu: any) => Number(gpu?.vendor_id ?? gpu?.vendorId ?? 0) === 0x10de,
-    );
+    return gpuList.value.some((gpu) => Number(gpu?.vendor_id ?? gpu?.vendorId ?? 0) === 0x10de);
   }
   return true;
 });
 
 const hasIntel = computed(() => {
-  const metaFlag = (metadata.value as any)?.has_intel_gpu;
+  const metaFlag = captureMetadata.value.has_intel_gpu;
   if (typeof metaFlag === 'boolean') return metaFlag;
   if (gpuList.value.length) {
-    return gpuList.value.some(
-      (gpu: any) => Number(gpu?.vendor_id ?? gpu?.vendorId ?? 0) === 0x8086,
-    );
+    return gpuList.value.some((gpu) => Number(gpu?.vendor_id ?? gpu?.vendorId ?? 0) === 0x8086);
   }
   return true;
 });
 
 const hasAmd = computed(() => {
-  const metaFlag = (metadata.value as any)?.has_amd_gpu;
+  const metaFlag = captureMetadata.value.has_amd_gpu;
   if (typeof metaFlag === 'boolean') return metaFlag;
   if (gpuList.value.length) {
-    return gpuList.value.some((gpu: any) => {
+    return gpuList.value.some((gpu) => {
       const vendor = Number(gpu?.vendor_id ?? gpu?.vendorId ?? 0);
       return vendor === 0x1002 || vendor === 0x1022;
     });
@@ -104,16 +137,16 @@ const hasAmd = computed(() => {
   return true;
 });
 
-const losslessConfiguredPath = computed(() => (config.value as any)?.lossless_scaling_path ?? '');
+const losslessConfiguredPath = computed(() => captureConfig.value.lossless_scaling_path ?? '');
 const losslessLegacyAutoDetect = computed<boolean>({
-  get: () => !!(config.value as any)?.lossless_scaling_legacy_auto_detect,
+  get: () => captureConfig.value.lossless_scaling_legacy_auto_detect,
   set: (value) => {
-    (config.value as any).lossless_scaling_legacy_auto_detect = !!value;
+    captureConfig.value.lossless_scaling_legacy_auto_detect = value;
   },
 });
 const losslessSuggestedPath = computed(() => {
   if (losslessConfiguredPath.value) return normalizeWindowsPath(losslessConfiguredPath.value);
-  const suggested = losslessStatus.value?.suggested_path as string | undefined;
+  const suggested = losslessStatus.value?.suggested_path;
   return normalizeWindowsPath(suggested) || LOSSLESS_DEFAULT_PATH;
 });
 const losslessCandidates = computed(() => {
@@ -218,7 +251,7 @@ async function refreshLosslessStatus() {
     if (losslessConfiguredPath.value) {
       params['path'] = normalizeWindowsPath(String(losslessConfiguredPath.value));
     }
-    const response = await http.get('/api/lossless_scaling/status', {
+    const response = await http.get<LosslessScalingStatus>('/api/lossless_scaling/status', {
       params,
       validateStatus: () => true,
     });
@@ -252,7 +285,7 @@ async function refreshLosslessStatus() {
       losslessError.value = 'Unable to query Lossless Scaling status.';
       losslessStatus.value = null;
     }
-  } catch (err) {
+  } catch {
     losslessError.value = 'Unable to query Lossless Scaling status.';
     losslessStatus.value = null;
   } finally {
@@ -262,14 +295,14 @@ async function refreshLosslessStatus() {
 
 function applyLosslessSuggestion() {
   if (!config.value) return;
-  (config.value as any).lossless_scaling_path = losslessSuggestedPath.value;
+  captureConfig.value.lossless_scaling_path = losslessSuggestedPath.value;
 }
 
 function applyLosslessBrowseSelection() {
   if (!config.value) return;
   const selected = normalizeWindowsPath(losslessBrowseSelection.value);
   if (!selected) return;
-  (config.value as any).lossless_scaling_path = selected;
+  captureConfig.value.lossless_scaling_path = selected;
   losslessBrowseVisible.value = false;
 }
 
@@ -325,12 +358,12 @@ watch(
 );
 
 watch(
-  () => (config.value as any)?.lossless_scaling_path,
+  () => captureConfig.value.lossless_scaling_path,
   (value) => {
     if (typeof value !== 'string') return;
     const normalized = normalizeWindowsPath(value);
     if (normalized !== value) {
-      (config.value as any).lossless_scaling_path = normalized;
+      captureConfig.value.lossless_scaling_path = normalized;
     }
   },
 );
@@ -354,9 +387,9 @@ const shouldShowSoftware = computed(() => showAll() || props.currentTab === 'sw'
 <template>
   <div class="config-page space-y-6">
     <div class="space-y-4">
-      <ConfigFieldRenderer setting-key="capture" v-model="config.capture" />
-      <ConfigFieldRenderer setting-key="encoder" v-model="config.encoder" />
-      <ConfigFieldRenderer setting-key="prefer_10bit_sdr" v-model="config.prefer_10bit_sdr" />
+      <ConfigFieldRenderer v-model="config.capture" setting-key="capture" />
+      <ConfigFieldRenderer v-model="config.encoder" setting-key="encoder" />
+      <ConfigFieldRenderer v-model="config.prefer_10bit_sdr" setting-key="prefer_10bit_sdr" />
       <fieldset
         v-if="platform === 'windows'"
         class="space-y-4 rounded-xl border border-dark/35 p-4 dark:border-light/25"
@@ -430,8 +463,8 @@ const shouldShowSoftware = computed(() => showAll() || props.currentTab === 'sw'
 
         <div v-if="showLosslessAdvanced" class="space-y-2">
           <ConfigFieldRenderer
-            setting-key="lossless_scaling_path"
             v-model="config.lossless_scaling_path"
+            setting-key="lossless_scaling_path"
             label="Lossless Scaling executable"
             desc=""
             :placeholder="LOSSLESS_DEFAULT_PATH"
@@ -474,7 +507,7 @@ const shouldShowSoftware = computed(() => showAll() || props.currentTab === 'sw'
       title="Select Lossless Scaling Executable"
     >
       <div class="space-y-4">
-        <n-alert type="info" size="small" v-if="!losslessCandidates.length">
+        <n-alert v-if="!losslessCandidates.length" type="info" size="small">
           Vibepollo searched common Steam and program directories but could not locate
           LosslessScaling.exe. Install Lossless Scaling from Steam or set the full path manually.
         </n-alert>
@@ -503,8 +536,8 @@ const shouldShowSoftware = computed(() => showAll() || props.currentTab === 'sw'
           <n-button
             size="small"
             tertiary
-            @click="rescanLosslessCandidates"
             :loading="losslessLoading"
+            @click="rescanLosslessCandidates"
           >
             Rescan
           </n-button>

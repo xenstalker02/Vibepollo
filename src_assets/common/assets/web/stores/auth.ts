@@ -19,6 +19,15 @@ interface AuthStatusResponse {
   login_required?: boolean;
 }
 
+interface AuthSessionsResponse {
+  status?: boolean;
+  sessions?: AuthSession[];
+  error?: string;
+}
+
+const NULL_VALUE = null;
+type NullValue = typeof NULL_VALUE;
+
 export interface AuthSession {
   id: string;
   username: string;
@@ -58,7 +67,7 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated.value = v;
     if (becameAuthed) {
       logoutInitiated.value = false;
-      fetchSessions().catch(() => {});
+      void fetchSessions().catch(() => {});
       for (const cb of _listeners) {
         try {
           cb();
@@ -86,7 +95,7 @@ export const useAuthStore = defineStore('auth', () => {
     if (ready.value) return;
     const preferRemember = readRememberPreference();
 
-    const fetchStatus = async (): Promise<AuthStatusResponse | null> => {
+    const fetchStatus = async (): Promise<AuthStatusResponse | NullValue> => {
       try {
         const res = await http.get<AuthStatusResponse>('/api/auth/status', {
           validateStatus: () => true,
@@ -100,7 +109,7 @@ export const useAuthStore = defineStore('auth', () => {
       return null;
     };
 
-    const applyStatus = (payload: AuthStatusResponse | null): boolean => {
+    const applyStatus = (payload: AuthStatusResponse | NullValue): boolean => {
       if (!payload) return false;
       if (typeof payload.credentials_configured === 'boolean') {
         credentialsConfigured.value = payload.credentials_configured;
@@ -150,7 +159,9 @@ export const useAuthStore = defineStore('auth', () => {
       setTimeout(() => {
         try {
           cb();
-        } catch {}
+        } catch {
+          // Listener failures must not block the remaining subscribers.
+        }
       }, 0);
     return () => {
       const idx = _listeners.indexOf(cb);
@@ -179,7 +190,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  function currentSessionId(): string | undefined {
+  function currentSessionId() {
     return sessions.value.find((s) => s.current)?.id;
   }
 
@@ -188,7 +199,9 @@ export const useAuthStore = defineStore('auth', () => {
     sessionsLoading.value = true;
     sessionsError.value = '';
     try {
-      const res = await http.get('/api/auth/sessions', { validateStatus: () => true });
+      const res = await http.get<AuthSessionsResponse>('/api/auth/sessions', {
+        validateStatus: () => true,
+      });
       if (res.status === 200 && res.data && res.data.status && Array.isArray(res.data.sessions)) {
         sessions.value = res.data.sessions;
         sessionsError.value = '';
@@ -205,7 +218,9 @@ export const useAuthStore = defineStore('auth', () => {
   async function revokeSession(id: string): Promise<boolean> {
     if (!id) return false;
     try {
-      const res = await http.delete(`/api/auth/sessions/${id}`, { validateStatus: () => true });
+      const res = await http.delete<AuthSessionsResponse>(`/api/auth/sessions/${id}`, {
+        validateStatus: () => true,
+      });
       if (res.status === 200 && res.data && res.data.status) {
         sessions.value = sessions.value.filter((session) => session.id !== id);
         if (currentSessionId() === id) {

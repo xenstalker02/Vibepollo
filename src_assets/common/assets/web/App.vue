@@ -138,7 +138,7 @@ import {
 } from 'naive-ui';
 import { useNaiveThemeOverrides, useDarkModeClassRef } from '@/naive-theme';
 import { useI18n } from 'vue-i18n';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute, useRouter, type RouteLocationNormalizedLoaded } from 'vue-router';
 import ThemeToggle from '@/ThemeToggle.vue';
 import SavingStatus from '@/components/SavingStatus.vue';
 import LoginModal from '@/components/LoginModal.vue';
@@ -213,15 +213,21 @@ async function logout() {
     console.error('Logout failed:', e);
   }
   try {
-    (authStore as any).logoutInitiated = true;
-  } catch {}
+    authStore.logoutInitiated = true;
+  } catch {
+    // Continue local logout when store mutation fails.
+  }
   try {
     authStore.setAuthenticated(false);
-  } catch {}
+  } catch {
+    // Continue local logout when store mutation fails.
+  }
   // Stop background connectivity checks and any other background polling
   try {
     connectivity.stop();
-  } catch {}
+  } catch {
+    // Continue local logout when connectivity cleanup fails.
+  }
   loggedOut.value = true;
 }
 
@@ -253,21 +259,32 @@ function onMobileSelect(key: string | number): void {
     void logout();
     return;
   }
-  if (typeof key === 'string') router.push(key);
+  if (typeof key === 'string') void router.push(key);
 }
 
 // Layout container sizing via route meta: { container: 'sm'|'md'|'lg'|'xl'|'full' }
 const base = 'mx-auto px-4 sm:px-6 lg:px-8 py-4 md:py-6';
-const sizes: Record<string, string> = {
+type ContainerSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
+const sizes: Record<ContainerSize, string> = {
   sm: 'max-w-2xl',
   md: 'max-w-3xl',
   lg: 'max-w-5xl',
   xl: 'max-w-7xl',
   full: 'max-w-none px-0 sm:px-0 lg:px-0',
 };
-function containerClass(r: any) {
-  const routeSize = r?.meta?.container;
-  const size = routeSize ?? (metadata.value as any)?.container ?? 'lg';
-  return `${base} ${sizes[size] || sizes['lg']}`;
+function isContainerSize(value: unknown): value is ContainerSize {
+  return value === 'sm' || value === 'md' || value === 'lg' || value === 'xl' || value === 'full';
+}
+function recordContainer(value: unknown): unknown {
+  return typeof value === 'object' && value !== null && 'container' in value
+    ? value.container
+    : undefined;
+}
+function containerClass(r: RouteLocationNormalizedLoaded) {
+  const routeSize: unknown = r.meta['container'];
+  const metadataValue: unknown = metadata.value;
+  const requestedSize = routeSize ?? recordContainer(metadataValue);
+  const size = isContainerSize(requestedSize) ? requestedSize : 'lg';
+  return `${base} ${sizes[size]}`;
 }
 </script>

@@ -1,5 +1,5 @@
 // Axios HTTP client with centralized auth handling
-import axios, { AxiosResponse, AxiosError } from 'axios';
+import axios, { AxiosResponse, AxiosError, AxiosRequestConfig } from 'axios';
 import { useAuthStore } from '@/stores/auth';
 
 // Create a singleton axios instance
@@ -12,12 +12,25 @@ export const http = axios.create({
 });
 
 let authInitialized = false;
-let refreshPromise: Promise<boolean> | null = null;
+const NULL_VALUE = null;
+type NullValue = typeof NULL_VALUE;
+
+interface AuthRequestConfig extends AxiosRequestConfig {
+  __allowUnauthenticated?: boolean;
+  __isRetryRequest?: boolean;
+  __skipAuthRefresh?: boolean;
+}
+
+interface RefreshResponse {
+  status?: boolean;
+}
+
+let refreshPromise: Promise<boolean> | NullValue = null;
 
 export async function refreshSession(): Promise<boolean> {
   if (refreshPromise) return refreshPromise;
   const auth = useAuthStore();
-  const cfg: any = {
+  const cfg: AuthRequestConfig = {
     validateStatus: () => true,
     headers: {
       'X-Skip-Auth-Refresh': '1',
@@ -25,9 +38,9 @@ export async function refreshSession(): Promise<boolean> {
   };
   cfg.__skipAuthRefresh = true;
   refreshPromise = http
-    .post('/api/auth/refresh', {}, cfg)
+    .post<RefreshResponse>('/api/auth/refresh', {}, cfg)
     .then((res) => {
-      if (res?.status === 200 && res.data && (res.data as any).status) {
+      if (res.status === 200 && res.data && res.data.status) {
         auth.setAuthenticated(true);
         return true;
       }
@@ -56,21 +69,24 @@ function initAuthHandling(): void {
         // If it parses, prefer the pathname; else keep as-is for relative paths
         const u = new URL(urlRaw, window.location.origin);
         path = u.pathname;
-      } catch {}
+      } catch {
+        // Keep the relative URL when it cannot be parsed.
+      }
       // If user initiated logout, block all outgoing requests
-      if ((auth as any).logoutInitiated) {
-        const err: any = new Error('Request blocked: user logged out');
-        err.code = 'ERR_CANCELED';
+      if (auth.logoutInitiated) {
+        const err = new Error('Request blocked: user logged out');
+        Object.assign(err, { code: 'ERR_CANCELED' });
         return Promise.reject(err);
       }
       const allowWhenLoggedOut =
         /(\s*\/api\/auth\/(login|status|refresh)\b|\s*\/api\/password\b|\s*\/api\/configLocale\b)/.test(
           path,
         );
-      const allowUnauthenticated = (config as any)?.__allowUnauthenticated === true;
+      const allowUnauthenticated =
+        '__allowUnauthenticated' in config && config.__allowUnauthenticated === true;
       if (!auth.isAuthenticated && !allowWhenLoggedOut && !allowUnauthenticated) {
-        const err: any = new Error('Request blocked: unauthenticated');
-        err.code = 'ERR_CANCELED';
+        const err = new Error('Request blocked: unauthenticated');
+        Object.assign(err, { code: 'ERR_CANCELED' });
         return Promise.reject(err);
       }
       return config;
@@ -91,21 +107,23 @@ function initAuthHandling(): void {
 
   // Response interceptor to detect auth changes
   http.interceptors.response.use(
-    async (response: AxiosResponse) => {
+    (response: AxiosResponse) => {
       try {
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('sunshine:online'));
         }
-      } catch {}
+      } catch {
+        // Event dispatch is best-effort.
+      }
       return response;
     },
     async (error: AxiosError) => {
       // Network-level errors (no response) indicate possible server unavailability
       try {
         if (typeof window !== 'undefined') {
-          const isCanceled = (error as any)?.code === 'ERR_CANCELED';
+          const isCanceled = error.code === 'ERR_CANCELED';
           const auth = useAuthStore();
-          const userLoggedOut = (auth as any).logoutInitiated === true;
+          const userLoggedOut = auth.logoutInitiated === true;
           if (!error?.response) {
             // Only signal offline if it's not a client-side canceled request
             // and not during user-initiated logout
@@ -117,16 +135,17 @@ function initAuthHandling(): void {
             window.dispatchEvent(new CustomEvent('sunshine:online'));
           }
         }
-      } catch {}
+      } catch {
+        // Connectivity events are best-effort.
+      }
       const status = error?.response?.status;
-      const originalRequest: any = error.config || {};
-      const skipAuthRetry =
-        originalRequest?.__skipAuthRefresh === true ||
-        (originalRequest?.headers && originalRequest.headers['X-Skip-Auth-Refresh']);
+      const originalRequest: AuthRequestConfig = { ...(error.config ?? {}) };
+      const skipAuthHeader: unknown = originalRequest.headers?.['X-Skip-Auth-Refresh'];
+      const skipAuthRetry = originalRequest.__skipAuthRefresh === true || Boolean(skipAuthHeader);
       const isAuthRequest = /\/api\/auth\/(login|refresh)\b/.test(
         String(originalRequest?.url || ''),
       );
-      const userLoggedOut = (auth as any).logoutInitiated === true;
+      const userLoggedOut = auth.logoutInitiated === true;
 
       if (status === 401 && !skipAuthRetry && !isAuthRequest && !userLoggedOut) {
         const refreshed = await refreshSession();

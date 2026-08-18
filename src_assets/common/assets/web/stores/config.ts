@@ -2,6 +2,11 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { http } from '@/http';
 
+const NULL_VALUE = null;
+type NullValue = typeof NULL_VALUE;
+const undefinedValue = () => undefined;
+type UndefinedValue = ReturnType<typeof undefinedValue>;
+
 // Metadata describing build/runtime info returned by /api/meta
 export interface MetaInfo {
   platform?: string;
@@ -28,6 +33,12 @@ export interface MetaInfo {
   windows_minor_version?: number;
 }
 
+interface SaveResult {
+  appliedNow?: boolean;
+  deferred?: boolean;
+  restartRequired?: boolean;
+}
+
 // --- Defaults (flat) -------------------------------------------------------
 // Keep these separate from runtime state so reading defaults does NOT mutate
 // the actual config object that will be POSTed back to the server.
@@ -46,10 +57,10 @@ type WidenLiteral<T> = T extends string
     ? number
     : T extends boolean
       ? boolean
-      : T extends null
-        ? null
-        : T extends undefined
-          ? undefined
+      : T extends NullValue
+        ? NullValue
+        : T extends UndefinedValue
+          ? UndefinedValue
           : T extends ReadonlyArray<infer U>
             ? Array<WidenLiteral<U>>
             : T extends Record<string, unknown>
@@ -300,15 +311,15 @@ type DefaultGroups = typeof defaultGroups;
 type ConfigDefaults = WidenLiteral<UnionToIntersection<DefaultGroups[number]['options']>>;
 type ConfigKey = keyof ConfigDefaults;
 type ConfigData = Record<string, unknown>;
-export type ConfigState = ConfigDefaults & { platform: string } & Record<string, any>;
+export type ConfigState = ConfigDefaults & { platform: string } & Record<string, unknown>;
 
 function createDefaultMap<T extends readonly { options: Record<string, unknown> }[]>(groups: T) {
   type Result = WidenLiteral<UnionToIntersection<T[number]['options']>>;
-  const map = {} as Result;
+  const map: Partial<Result> = {};
   for (const g of groups) {
     Object.assign(map as Record<string, unknown>, g.options);
   }
-  return map;
+  return map as Result;
 }
 
 const defaultMap: ConfigDefaults = createDefaultMap(defaultGroups);
@@ -327,7 +338,7 @@ function deepEqual<T>(a: T, b: T): boolean {
 
 export const useConfigStore = defineStore('config', () => {
   const tabs = ref(defaultGroups); // keep existing export shape
-  const _data = ref<ConfigData | null>(null); // only user/server values
+  const _data = ref<ConfigData | NullValue>(null); // only user/server values
   // Single meta object kept completely separate from user config
   const metadata = ref<MetaInfo>({});
   const config = ref<ConfigState>(buildWrapper()); // wrapper with getters/setters for UI binding
@@ -344,26 +355,29 @@ export const useConfigStore = defineStore('config', () => {
   const manualDirty = ref(false);
   const savingState = ref<'idle' | 'dirty' | 'saving' | 'saved' | 'error'>('idle');
   const loading = ref(false);
-  const error = ref<string | null>(null);
-  const validationError = ref<string | null>(null);
+  const error = ref<string | NullValue>(null);
+  const validationError = ref<string | NullValue>(null);
 
   // --- Autosave (PATCH) queue ------------------------------------------------
   // Holds only non-manual changes since last flush. Keys are replaced with
   // the most recent value. Values equal to defaults are converted to null
   // so the server removes them to fall back to default behavior.
   const patchQueue = ref<Record<string, unknown>>({});
-  let flushTimer: any = null; // one-shot timer
+  let flushTimer: ReturnType<typeof setTimeout> | NullValue = null; // one-shot timer
   let flushInFlight = false;
   const autosaveIntervalMs = 3000;
-  const nextFlushAt = ref<number | null>(null); // when the current timer will fire
-  const lastSaveResult = ref<{
-    appliedNow?: boolean;
-    deferred?: boolean;
-    restartRequired?: boolean;
-  } | null>(null);
+  const nextFlushAt = ref<number | NullValue>(null); // when the current timer will fire
+  const lastSaveResult = ref<
+    | {
+        appliedNow?: boolean;
+        deferred?: boolean;
+        restartRequired?: boolean;
+      }
+    | NullValue
+  >(null);
 
   function buildWrapper(): ConfigState {
-    const target = {} as ConfigState;
+    const target: ConfigState = { ...defaultMap, platform: '' };
     // union of keys (defaults + current data)
     const keys = new Set<string>([
       ...Object.keys(defaultMap),
@@ -389,10 +403,10 @@ export const useConfigStore = defineStore('config', () => {
           if (hasDefaultKey(k)) {
             const dv = defaultMap[k];
             if (dv && typeof dv === 'object') {
-              if (!_data.value) _data.value = {} as ConfigData;
+              if (!_data.value) _data.value = {};
               const storeData = _data.value;
               if (storeData && !Object.prototype.hasOwnProperty.call(storeData, k)) {
-                (storeData as Record<string, unknown>)[k] = deepClone(dv);
+                storeData[k] = deepClone(dv);
               }
               return storeData ? storeData[k] : dv;
             }
@@ -401,7 +415,7 @@ export const useConfigStore = defineStore('config', () => {
           return undefined;
         },
         set(v) {
-          if (!_data.value) _data.value = {} as ConfigData;
+          if (!_data.value) _data.value = {};
           const prev = _data.value[k];
           if (deepEqual(prev, v)) return; // ignore no-op
           _data.value[k] = v;
@@ -458,7 +472,7 @@ export const useConfigStore = defineStore('config', () => {
         typeof data[key] === 'string'
       ) {
         try {
-          data[key] = JSON.parse(data[key] as string);
+          data[key] = JSON.parse(data[key]);
         } catch {
           /* ignore */
         }
@@ -536,7 +550,7 @@ export const useConfigStore = defineStore('config', () => {
       'dd_wa_dummy_plug_hdr10',
     ];
     const allBoolKeys = playniteBoolKeys.concat(otherBoolKeys);
-    const toBool = (v: any): boolean | null => {
+    const toBool = (v: unknown): boolean | NullValue => {
       if (v === true || v === false) return v;
       if (v === 1 || v === 0) return !!v;
       const s = String(v ?? '')
@@ -563,15 +577,16 @@ export const useConfigStore = defineStore('config', () => {
 
     // Normalize Playnite category/exclusion lists to arrays of {id,name}
     const normalizeIdNameArray = (
-      v: any,
+      v: unknown,
       treatStringsAsIds: boolean,
     ): Array<{ id: string; name: string }> => {
       const out: Array<{ id: string; name: string }> = [];
       if (Array.isArray(v)) {
         for (const el of v) {
           if (el && typeof el === 'object') {
-            const id = String((el as any).id || '');
-            const name = String((el as any).name || '');
+            const entry = el as Record<string, unknown>;
+            const id = String(entry['id'] || '');
+            const name = String(entry['name'] || '');
             if (id || name) out.push({ id, name });
           } else if (typeof el === 'string') {
             const s = el.trim();
@@ -584,9 +599,11 @@ export const useConfigStore = defineStore('config', () => {
       if (typeof v === 'string') {
         // Try JSON first
         try {
-          const parsed = JSON.parse(v);
+          const parsed: unknown = JSON.parse(v);
           return normalizeIdNameArray(parsed, treatStringsAsIds);
-        } catch {}
+        } catch {
+          // Fall through to the legacy CSV representation.
+        }
         // CSV fallback
         for (const s of v
           .split(',')
@@ -597,14 +614,14 @@ export const useConfigStore = defineStore('config', () => {
       }
       return out;
     };
-    const normalizeStringArray = (v: any): string[] => {
+    const normalizeStringArray = (v: unknown): string[] => {
       if (Array.isArray(v)) {
         return v.map((item) => String(item ?? '').trim()).filter((item) => item.length > 0);
       }
       if (typeof v === 'string') {
         // Try JSON first
         try {
-          const parsed = JSON.parse(v);
+          const parsed: unknown = JSON.parse(v);
           return normalizeStringArray(parsed);
         } catch {
           /* ignore */
@@ -672,7 +689,7 @@ export const useConfigStore = defineStore('config', () => {
     if (!manualDirty.value) return { ok: true };
     const data = (_data.value ?? {}) as Record<string, unknown>;
 
-    const resolutionOptionKey = 'dd_resolution_option' as const;
+    const resolutionOptionKey = 'dd_resolution_option';
     const defaultResolutionOption = hasDefaultKey(resolutionOptionKey)
       ? defaultMap[resolutionOptionKey]
       : undefined;
@@ -680,7 +697,7 @@ export const useConfigStore = defineStore('config', () => {
       ? data[resolutionOptionKey]
       : defaultResolutionOption;
     if (resOpt === 'manual') {
-      const manualResolutionKey = 'dd_manual_resolution' as const;
+      const manualResolutionKey = 'dd_manual_resolution';
       const raw = String(data[manualResolutionKey] ?? '').trim();
       const resolutionPattern = /^\d{2,5}\s*[xX]\s*\d{2,5}$/;
       if (!resolutionPattern.test(raw)) {
@@ -691,7 +708,7 @@ export const useConfigStore = defineStore('config', () => {
       }
     }
 
-    const refreshOptionKey = 'dd_refresh_rate_option' as const;
+    const refreshOptionKey = 'dd_refresh_rate_option';
     const defaultRefreshOption = hasDefaultKey(refreshOptionKey)
       ? defaultMap[refreshOptionKey]
       : undefined;
@@ -699,7 +716,7 @@ export const useConfigStore = defineStore('config', () => {
       ? data[refreshOptionKey]
       : defaultRefreshOption;
     if (rrOpt === 'manual') {
-      const manualRefreshKey = 'dd_manual_refresh_rate' as const;
+      const manualRefreshKey = 'dd_manual_refresh_rate';
       const raw = String(data[manualRefreshKey] ?? '').trim();
       const valid = /^\d+(?:\.\d+)?$/.test(raw) && Number(raw) > 0;
       if (!valid) {
@@ -814,18 +831,20 @@ export const useConfigStore = defineStore('config', () => {
       }
       savingState.value = 'saving';
       const body = serialize();
-      const res = await http.post('/api/config', body || {}, {
+      const res = await http.post<SaveResult>('/api/config', body || {}, {
         headers: { 'Content-Type': 'application/json' },
         validateStatus: () => true,
       });
       if (res.status === 200) {
         try {
           lastSaveResult.value = {
-            appliedNow: !!(res as any)?.data?.appliedNow,
-            deferred: !!(res as any)?.data?.deferred,
-            restartRequired: !!(res as any)?.data?.restartRequired,
+            appliedNow: Boolean(res.data.appliedNow),
+            deferred: Boolean(res.data.deferred),
+            restartRequired: Boolean(res.data.restartRequired),
           };
-        } catch {}
+        } catch {
+          // Save-result metadata is optional and must not fail persistence.
+        }
         savingState.value = 'saved';
         manualDirty.value = false;
         validationError.value = null;
@@ -845,9 +864,9 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
-  function serialize(): Record<string, unknown> | null {
+  function serialize(): Record<string, unknown> | NullValue {
     if (!_data.value) return null;
-    const out: Record<string, unknown> = JSON.parse(JSON.stringify(_data.value));
+    const out = deepClone(_data.value);
     // prune defaults (value exactly equals default)
     for (const k of Object.keys(out)) {
       if (hasDefaultKey(k) && deepEqual(out[k], defaultMap[k])) delete out[k];
@@ -862,20 +881,20 @@ export const useConfigStore = defineStore('config', () => {
     loading.value = true;
     error.value = null;
     try {
-      const r = await http.get('/api/config');
+      const r = await http.get<unknown>('/api/config');
       if (r.status !== 200) throw new Error('bad status ' + r.status);
       // Fetch metadata (non-fatal if it fails)
       try {
-        const mr = await http.get('/api/metadata');
+        const mr = await http.get<MetaInfo>('/api/metadata');
         if (mr.status === 200 && mr.data) {
-          const m = { ...mr.data } as MetaInfo;
+          const m: MetaInfo = { ...mr.data };
           // Normalize platform identifiers across build/runtime variations
-          const raw = String((m as any).platform || '').toLowerCase();
+          const raw = String(m.platform || '').toLowerCase();
           let norm = raw;
           if (raw.startsWith('win')) norm = 'windows';
           else if (raw === 'darwin' || raw.startsWith('mac')) norm = 'macos';
           else if (raw.startsWith('lin')) norm = 'linux';
-          (m as any).platform = norm;
+          m.platform = norm;
           metadata.value = m;
         }
       } catch (_) {
@@ -884,9 +903,9 @@ export const useConfigStore = defineStore('config', () => {
       // keep settings and metadata separate
       setConfig(r.data);
       return config.value;
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('fetchConfig failed', e);
-      error.value = e?.message || 'fetch failed';
+      error.value = e instanceof Error ? e.message : 'fetch failed';
       return null;
     } finally {
       loading.value = false;
@@ -906,18 +925,20 @@ export const useConfigStore = defineStore('config', () => {
     nextFlushAt.value = null;
     try {
       savingState.value = 'saving';
-      const res = await http.patch('/api/config', payload, {
+      const res = await http.patch<SaveResult>('/api/config', payload, {
         headers: { 'Content-Type': 'application/json' },
         validateStatus: () => true,
       });
       if (res.status === 200) {
         try {
           lastSaveResult.value = {
-            appliedNow: !!(res as any)?.data?.appliedNow,
-            deferred: !!(res as any)?.data?.deferred,
-            restartRequired: !!(res as any)?.data?.restartRequired,
+            appliedNow: Boolean(res.data.appliedNow),
+            deferred: Boolean(res.data.deferred),
+            restartRequired: Boolean(res.data.restartRequired),
           };
-        } catch {}
+        } catch {
+          // Save-result metadata is optional and must not fail persistence.
+        }
         savingState.value = 'saved';
         setTimeout(() => {
           if (

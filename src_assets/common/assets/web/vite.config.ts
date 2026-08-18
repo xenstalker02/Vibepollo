@@ -27,7 +27,7 @@ function resolveAssetsSrcPath(): string {
   let src = CONFIG_DIR; // default to the folder containing this config
 
   if (!process.env['SUNSHINE_BUILD_HOMEBREW'] && process.env['SUNSHINE_SOURCE_ASSETS_DIR']) {
-    const override = fs.realpathSync(process.env['SUNSHINE_SOURCE_ASSETS_DIR'] as string);
+    const override = fs.realpathSync(process.env['SUNSHINE_SOURCE_ASSETS_DIR']);
     // If override points directly to a folder with index.html, use it
     if (fs.existsSync(resolve(override, 'index.html'))) {
       src = override;
@@ -53,7 +53,7 @@ function resolveAssetsDstPath(): string {
 
   if (!process.env['SUNSHINE_BUILD_HOMEBREW'] && process.env['SUNSHINE_ASSETS_DIR']) {
     // Keep legacy behavior: env points to install root, append assets/web
-    dst = resolve(fs.realpathSync(process.env['SUNSHINE_ASSETS_DIR'] as string), 'assets/web');
+    dst = resolve(fs.realpathSync(process.env['SUNSHINE_ASSETS_DIR']), 'assets/web');
   }
 
   return dst;
@@ -64,7 +64,7 @@ const assetsDstPath = resolveAssetsDstPath();
 
 const header = fs.readFileSync(resolve(assetsSrcPath, 'template_header.html'), 'utf-8');
 
-function getManualChunk(id: string): string | undefined {
+function getManualChunk(id: string) {
   const normalized = id.replace(/\\/g, '/');
   const nodeModulesMarker = '/node_modules/';
   const markerIndex = normalized.indexOf(nodeModulesMarker);
@@ -75,7 +75,7 @@ function getManualChunk(id: string): string | undefined {
   const packagePath = normalized.slice(markerIndex + nodeModulesMarker.length);
   const packageName = packagePath.startsWith('@')
     ? packagePath.split('/').slice(0, 2).join('/')
-    : packagePath.split('/')[0];
+    : (packagePath.split('/')[0] ?? '');
 
   if (
     packageName === 'vue' ||

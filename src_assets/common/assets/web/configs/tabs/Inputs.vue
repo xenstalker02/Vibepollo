@@ -14,10 +14,10 @@ const platform = computed(() =>
 
 <template>
   <div id="input" class="config-page">
-    <ConfigFieldRenderer setting-key="controller" v-model="config.controller" class="mb-3" />
+    <ConfigFieldRenderer v-model="config.controller" setting-key="controller" class="mb-3" />
 
     <div v-if="config.controller === 'enabled' && platform !== 'macos'" class="mb-6">
-      <ConfigFieldRenderer setting-key="gamepad" v-model="config.gamepad" />
+      <ConfigFieldRenderer v-model="config.gamepad" setting-key="gamepad" />
     </div>
 
     <template v-if="config.controller === 'enabled'">
@@ -60,13 +60,13 @@ const platform = computed(() =>
                   "
                 >
                   <ConfigFieldRenderer
-                    setting-key="motion_as_ds4"
                     v-model="config.motion_as_ds4"
+                    setting-key="motion_as_ds4"
                     class="mb-3"
                   />
                   <ConfigFieldRenderer
-                    setting-key="touchpad_as_ds4"
                     v-model="config.touchpad_as_ds4"
+                    setting-key="touchpad_as_ds4"
                     class="mb-3"
                   />
                 </template>
@@ -78,8 +78,8 @@ const platform = computed(() =>
                   "
                 >
                   <ConfigFieldRenderer
-                    setting-key="ds4_back_as_touchpad_click"
                     v-model="config.ds4_back_as_touchpad_click"
+                    setting-key="ds4_back_as_touchpad_click"
                     class="mb-3"
                   />
                 </template>
@@ -90,8 +90,8 @@ const platform = computed(() =>
                   "
                 >
                   <ConfigFieldRenderer
-                    setting-key="ds5_inputtino_randomize_mac"
                     v-model="config.ds5_inputtino_randomize_mac"
+                    setting-key="ds5_inputtino_randomize_mac"
                     class="mb-3"
                   />
                 </template>
@@ -103,66 +103,66 @@ const platform = computed(() =>
     </template>
 
     <div v-if="config.controller === 'enabled'" class="mb-4">
-      <ConfigFieldRenderer setting-key="back_button_timeout" v-model="config.back_button_timeout" />
+      <ConfigFieldRenderer v-model="config.back_button_timeout" setting-key="back_button_timeout" />
     </div>
 
     <ConfigFieldRenderer
       v-if="config.controller === 'enabled'"
-      setting-key="forward_rumble"
       v-model="config.forward_rumble"
+      setting-key="forward_rumble"
       class="mb-3"
     />
 
     <hr />
 
-    <ConfigFieldRenderer setting-key="keyboard" v-model="config.keyboard" class="mb-3" />
+    <ConfigFieldRenderer v-model="config.keyboard" setting-key="keyboard" class="mb-3" />
 
     <div v-if="config.keyboard === 'enabled' && platform === 'windows'" class="mb-4">
-      <ConfigFieldRenderer setting-key="key_repeat_delay" v-model="config.key_repeat_delay" />
+      <ConfigFieldRenderer v-model="config.key_repeat_delay" setting-key="key_repeat_delay" />
     </div>
 
     <div v-if="config.keyboard === 'enabled' && platform === 'windows'" class="mb-4">
       <ConfigFieldRenderer
-        setting-key="key_repeat_frequency"
         v-model="config.key_repeat_frequency"
+        setting-key="key_repeat_frequency"
       />
     </div>
 
     <ConfigFieldRenderer
       v-if="config.keyboard === 'enabled' && platform === 'windows'"
-      setting-key="always_send_scancodes"
       v-model="config.always_send_scancodes"
+      setting-key="always_send_scancodes"
       class="mb-3"
     />
 
     <ConfigFieldRenderer
       v-if="config.keyboard === 'enabled'"
-      setting-key="key_rightalt_to_key_win"
       v-model="config.key_rightalt_to_key_win"
+      setting-key="key_rightalt_to_key_win"
       class="mb-3"
     />
 
-    <ConfigFieldRenderer setting-key="mouse" v-model="config.mouse" class="mt-5 mb-3" />
+    <ConfigFieldRenderer v-model="config.mouse" setting-key="mouse" class="mt-5 mb-3" />
 
     <ConfigFieldRenderer
       v-if="config.mouse === 'enabled'"
-      setting-key="high_resolution_scrolling"
       v-model="config.high_resolution_scrolling"
+      setting-key="high_resolution_scrolling"
       class="mb-3"
     />
 
     <ConfigFieldRenderer
       v-if="config.mouse === 'enabled'"
-      setting-key="native_pen_touch"
       v-model="config.native_pen_touch"
+      setting-key="native_pen_touch"
       class="mb-3"
     />
 
     <hr />
 
     <ConfigFieldRenderer
-      setting-key="enable_input_only_mode"
       v-model="config.enable_input_only_mode"
+      setting-key="enable_input_only_mode"
       class="mb-3"
     />
   </div>

@@ -6,7 +6,22 @@ import { NButton, NTable } from 'naive-ui';
 import { http } from '@/http';
 import { useI18n } from 'vue-i18n';
 
-const props = defineProps<{ stepLabel: string }>();
+type FrameLimiterStatus = {
+  nvidia_available?: boolean;
+  nvcp_ready?: boolean;
+  path_exists?: boolean;
+  hooks_found?: boolean;
+  active_provider?: string;
+  rtss_available?: boolean;
+  can_bootstrap_profile?: boolean;
+  profile_found?: boolean;
+  process_running?: boolean;
+};
+
+const NO_STATUS = null;
+const NO_ERROR = null;
+
+defineProps<{ stepLabel: string }>();
 
 const { t } = useI18n();
 const store = useConfigStore();
@@ -23,8 +38,8 @@ watch(
   { immediate: true },
 );
 
-const status = ref<any>(null);
-const statusError = ref<string | null>(null);
+const status = ref<FrameLimiterStatus | typeof NO_STATUS>(NO_STATUS);
+const statusError = ref<string | typeof NO_ERROR>(NO_ERROR);
 const loading = ref(false);
 
 const frameLimiterEnabled = computed({
@@ -218,11 +233,11 @@ const statusMessage = computed(() => {
 });
 
 watch(frameLimiterProvider, () => {
-  refreshStatus();
+  void refreshStatus();
 });
 
 watch(frameLimiterEnabled, () => {
-  refreshStatus();
+  void refreshStatus();
 });
 
 async function refreshStatus() {
@@ -230,10 +245,19 @@ async function refreshStatus() {
   loading.value = true;
   statusError.value = null;
   try {
-    const res = await http.get('/api/rtss/status', { params: { _ts: Date.now() } });
-    status.value = res?.data || null;
-  } catch (e: any) {
-    statusError.value = e?.message || t('frameLimiter.status.error');
+    const res = await http.get<FrameLimiterStatus>('/api/rtss/status', {
+      params: { _ts: Date.now() },
+    });
+    status.value = res.data || NO_STATUS;
+  } catch (error: unknown) {
+    const message =
+      typeof error === 'object' &&
+      error !== null &&
+      'message' in error &&
+      typeof error.message === 'string'
+        ? error.message
+        : '';
+    statusError.value = message || t('frameLimiter.status.error');
   } finally {
     loading.value = false;
   }
@@ -241,12 +265,12 @@ async function refreshStatus() {
 
 function handleProviderDropdown(show: boolean) {
   if (show) {
-    refreshStatus();
+    void refreshStatus();
   }
 }
 
 onMounted(() => {
-  refreshStatus();
+  void refreshStatus();
 });
 </script>
 
@@ -294,15 +318,15 @@ onMounted(() => {
 
       <div class="grid gap-4 md:grid-cols-2">
         <ConfigFieldRenderer
-          setting-key="frame_limiter_enable"
           v-model="frameLimiterEnabled"
+          setting-key="frame_limiter_enable"
           :label="t('frameLimiter.enable')"
           :desc="t('frameLimiter.enableHint')"
         />
 
         <ConfigFieldRenderer
-          setting-key="frame_limiter_provider"
           v-model="frameLimiterProvider"
+          setting-key="frame_limiter_provider"
           :label="t('frameLimiter.providerLabel')"
           :desc="t('frameLimiter.providerHint')"
           :options="providerOptions"
@@ -311,16 +335,16 @@ onMounted(() => {
       </div>
 
       <ConfigFieldRenderer
-        setting-key="frame_limiter_fps_limit"
         v-model="config.frame_limiter_fps_limit"
+        setting-key="frame_limiter_fps_limit"
         :label="t('frameLimiter.limitLabel')"
         :desc="t('frameLimiter.limitHint')"
         :placeholder="t('frameLimiter.limitPlaceholder')"
       />
 
       <ConfigFieldRenderer
-        setting-key="frame_limiter_disable_vsync"
         v-model="config.frame_limiter_disable_vsync"
+        setting-key="frame_limiter_disable_vsync"
         :label="t('frameLimiter.vsyncUllmLabel')"
         :desc="
           dummyPlugHdrActive
@@ -335,8 +359,8 @@ onMounted(() => {
       <div v-if="shouldShowRtssConfig" class="space-y-4">
         <ConfigFieldRenderer
           v-if="showRtssInstallInput"
-          setting-key="rtss_install_path"
           v-model="config.rtss_install_path"
+          setting-key="rtss_install_path"
           :label="t('frameLimiter.rtssPath')"
           :desc="t('frameLimiter.rtssPathHint')"
           :placeholder="t('frameLimiter.rtssPathPlaceholder')"
@@ -446,8 +470,8 @@ onMounted(() => {
         </div>
         <ConfigFieldRenderer
           v-if="showSyncLimiterSelect"
-          setting-key="rtss_frame_limit_type"
           v-model="config.rtss_frame_limit_type"
+          setting-key="rtss_frame_limit_type"
           :label="t('frameLimiter.syncLimiterLabel')"
           :desc="t('frameLimiter.syncLimiterHint')"
           :options="syncLimiterOptions"

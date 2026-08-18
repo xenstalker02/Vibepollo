@@ -11,18 +11,18 @@ const effectivePort = computed(() => Number(config.port ?? defaultMoonlightPort)
 
 <template>
   <div id="network" class="config-page">
-    <ConfigFieldRenderer setting-key="upnp" v-model="config.upnp" class="mb-3" />
+    <ConfigFieldRenderer v-model="config.upnp" setting-key="upnp" class="mb-3" />
 
     <ConfigFieldRenderer
-      setting-key="address_family"
       v-model="config.address_family"
+      setting-key="address_family"
       class="mb-6"
     />
 
-    <ConfigFieldRenderer setting-key="bind_address" v-model="config['bind_address']" class="mb-6" />
+    <ConfigFieldRenderer v-model="config['bind_address']" setting-key="bind_address" class="mb-6" />
 
     <div class="mb-6">
-      <ConfigFieldRenderer setting-key="port" v-model="config.port" />
+      <ConfigFieldRenderer v-model="config.port" setting-key="port" />
 
       <div
         v-if="+effectivePort - 5 < 1024"
@@ -112,35 +112,35 @@ const effectivePort = computed(() => Number(config.port ?? defaultMoonlightPort)
     </div>
 
     <ConfigFieldRenderer
-      setting-key="origin_web_ui_allowed"
       v-model="config.origin_web_ui_allowed"
+      setting-key="origin_web_ui_allowed"
       class="mb-6"
     />
 
     <ConfigFieldRenderer
-      setting-key="external_ip"
       v-model="config.external_ip"
+      setting-key="external_ip"
       class="mb-6"
       placeholder="123.456.789.12"
     />
 
     <ConfigFieldRenderer
-      setting-key="lan_encryption_mode"
       v-model="config.lan_encryption_mode"
+      setting-key="lan_encryption_mode"
       class="mb-6"
     />
 
     <ConfigFieldRenderer
-      setting-key="wan_encryption_mode"
       v-model="config.wan_encryption_mode"
+      setting-key="wan_encryption_mode"
       class="mb-6"
     />
 
-    <ConfigFieldRenderer setting-key="ping_timeout" v-model="config.ping_timeout" class="mb-6" />
+    <ConfigFieldRenderer v-model="config.ping_timeout" setting-key="ping_timeout" class="mb-6" />
 
     <ConfigFieldRenderer
-      setting-key="video_max_batch_size_kb"
       v-model="config.video_max_batch_size_kb"
+      setting-key="video_max_batch_size_kb"
       class="mb-6"
     />
   </div>

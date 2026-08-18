@@ -119,6 +119,11 @@ const clearRememberPreference = () => {
 };
 const rememberMe = ref(false);
 
+interface AuthActionResponse {
+  status?: boolean;
+  error?: string;
+}
+
 watch(visible, (v) => {
   if (v) reset();
 });
@@ -143,17 +148,7 @@ async function submit() {
   submitting.value = true;
   // Toggle store logging state if the ref exists
   const setLogging = (state: boolean) => {
-    const anyAuth = auth as any;
-    if (
-      anyAuth &&
-      anyAuth.loggingIn &&
-      typeof anyAuth.loggingIn === 'object' &&
-      'value' in anyAuth.loggingIn
-    ) {
-      anyAuth.loggingIn.value = state;
-    } else if (import.meta.env && (import.meta as any).env && (import.meta as any).env.DEV) {
-      console.warn('[LoginModal] auth.loggingIn ref missing; skipping toggle');
-    }
+    auth.loggingIn = state;
   };
   setLogging(true);
   try {
@@ -165,7 +160,7 @@ async function submit() {
         return;
       }
       // Use password save endpoint to create first credentials (no auth required when none configured)
-      const res = await http.post(
+      const res = await http.post<AuthActionResponse>(
         '/api/password',
         {
           currentUsername: username.value,
@@ -187,7 +182,7 @@ async function submit() {
       await new Promise((r) => setTimeout(r, 250));
     }
     // Perform login (if first-time, use the newly created password explicitly)
-    const loginRes = await http.post(
+    const loginRes = await http.post<AuthActionResponse>(
       '/api/auth/login',
       {
         username: username.value,

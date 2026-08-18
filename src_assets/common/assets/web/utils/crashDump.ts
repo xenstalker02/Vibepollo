@@ -13,7 +13,10 @@ export type CrashDumpStatus = {
 
 export const MIN_SUNSHINE_CRASH_DUMP_SIZE_BYTES = 10 * 1024 * 1024;
 
-function isSunshineDump(status?: CrashDumpStatus | null): boolean {
+const NULL_VALUE = null;
+type NullValue = typeof NULL_VALUE;
+
+function isSunshineDump(status?: CrashDumpStatus | NullValue): boolean {
   if (!status) return false;
   const proc = status.process?.toLowerCase();
   if (proc) return proc === 'sunshine.exe';
@@ -21,7 +24,7 @@ function isSunshineDump(status?: CrashDumpStatus | null): boolean {
   return name.startsWith('sunshine.exe.');
 }
 
-export function isCrashDumpEligible(status?: CrashDumpStatus | null): boolean {
+export function isCrashDumpEligible(status?: CrashDumpStatus | NullValue): boolean {
   if (!status || status.available !== true) {
     return false;
   }
@@ -32,7 +35,9 @@ export function isCrashDumpEligible(status?: CrashDumpStatus | null): boolean {
   return true;
 }
 
-export function sanitizeCrashDumpStatus(status?: CrashDumpStatus | null): CrashDumpStatus | null {
+export function sanitizeCrashDumpStatus(
+  status?: CrashDumpStatus | NullValue,
+): CrashDumpStatus | NullValue {
   if (!status) {
     return null;
   }

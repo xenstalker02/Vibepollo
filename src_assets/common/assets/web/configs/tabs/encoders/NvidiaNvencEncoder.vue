@@ -22,25 +22,25 @@ const platform = computed(() => config.platform || '');
       </p>
     </header>
 
-    <ConfigFieldRenderer setting-key="nvenc_preset" v-model="config.nvenc_preset" class="mb-4" />
+    <ConfigFieldRenderer v-model="config.nvenc_preset" setting-key="nvenc_preset" class="mb-4" />
 
-    <ConfigFieldRenderer setting-key="nvenc_twopass" v-model="config.nvenc_twopass" class="mb-4" />
+    <ConfigFieldRenderer v-model="config.nvenc_twopass" setting-key="nvenc_twopass" class="mb-4" />
 
     <ConfigFieldRenderer
-      setting-key="nvenc_spatial_aq"
       v-model="config.nvenc_spatial_aq"
+      setting-key="nvenc_spatial_aq"
       class="mb-3"
     />
 
     <ConfigFieldRenderer
-      setting-key="nvenc_split_encode"
       v-model="config.nvenc_split_encode"
+      setting-key="nvenc_split_encode"
       class="mb-4"
     />
 
     <ConfigFieldRenderer
-      setting-key="nvenc_vbv_increase"
       v-model="config.nvenc_vbv_increase"
+      setting-key="nvenc_vbv_increase"
       class="mb-4"
     >
       <span class="mt-2 inline-flex flex-wrap items-center gap-1 text-[11px] opacity-80">
@@ -65,8 +65,8 @@ const platform = computed(() => config.platform || '');
       <div class="p-4">
         <ConfigFieldRenderer
           v-if="platform === 'windows'"
-          setting-key="nvenc_realtime_hags"
           v-model="config.nvenc_realtime_hags"
+          setting-key="nvenc_realtime_hags"
           class="mb-3"
         >
           <span class="mt-2 inline-flex flex-wrap items-center gap-1 text-[11px] opacity-80">
@@ -84,21 +84,21 @@ const platform = computed(() => config.platform || '');
 
         <ConfigFieldRenderer
           v-if="platform === 'windows'"
-          setting-key="nvenc_latency_over_power"
           v-model="config.nvenc_latency_over_power"
+          setting-key="nvenc_latency_over_power"
           class="mb-3"
         />
 
         <ConfigFieldRenderer
           v-if="platform === 'windows'"
-          setting-key="nvenc_opengl_vulkan_on_dxgi"
           v-model="config.nvenc_opengl_vulkan_on_dxgi"
+          setting-key="nvenc_opengl_vulkan_on_dxgi"
           class="mb-3"
         />
 
         <ConfigFieldRenderer
-          setting-key="nvenc_h264_cavlc"
           v-model="config.nvenc_h264_cavlc"
+          setting-key="nvenc_h264_cavlc"
           class="mb-3"
         />
 

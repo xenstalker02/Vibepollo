@@ -384,7 +384,43 @@ import { useAuthStore } from '@/stores/auth';
 
 type RouteDef = { path: string; methods: string[] };
 type Scope = { path: string; methods: string[] };
-type TokenRecord = { hash: string; scopes: Scope[]; createdAt?: string | number | null };
+const nullValue = () => null;
+type Nullable<T> = T | ReturnType<typeof nullValue>;
+type TokenRecord = { hash: string; scopes: Scope[]; createdAt?: Nullable<string | number> };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function unknownArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value.map((entry: unknown) => entry) : [];
+}
+
+function recordString(record: Record<string, unknown>, ...keys: string[]): string {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'string') return value;
+  }
+  return '';
+}
+
+function responseDetail(data: unknown, status: number): string {
+  if (isRecord(data)) {
+    const detail = recordString(data, 'message', 'error');
+    if (detail) return detail;
+  }
+  return `HTTP ${status}`;
+}
+
+function errorCode(error: unknown): string {
+  return isRecord(error) ? recordString(error, 'code') : '';
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (isRecord(error)) return recordString(error, 'message') || fallback;
+  return fallback;
+}
 
 const METHOD_ORDER = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
 
@@ -458,12 +494,15 @@ function orderMethods(methods: string[]): string[] {
   return [...preferred, ...extra];
 }
 
-function normalizeRouteDef(route: any): RouteDef | null {
-  const path = typeof route?.path === 'string' ? route.path.trim() : '';
+function normalizeRouteDef(route: unknown): Nullable<RouteDef> {
+  if (!isRecord(route)) return null;
+  const path = typeof route['path'] === 'string' ? route['path'].trim() : '';
   if (!path) {
     return null;
   }
-  const methods = Array.isArray(route?.methods) ? orderMethods(route.methods) : [];
+  const methods = orderMethods(
+    unknownArray(route['methods']).filter((method): method is string => typeof method === 'string'),
+  );
   return { path, methods };
 }
 
@@ -482,38 +521,41 @@ async function loadRouteCatalog(): Promise<void> {
 
   routeCatalogLoading.value = true;
   routeCatalogError.value = '';
-  let ac: AbortController | null = null;
+  let ac: Nullable<AbortController> = null;
 
   try {
     ac = makeAbortController();
-    const res = await http.get('/api/token/routes', {
+    const res = await http.get<unknown>('/api/token/routes', {
       validateStatus: () => true,
       signal: ac.signal,
     });
 
     if (res.status >= 200 && res.status < 300) {
-      const raw = Array.isArray(res.data) ? res.data : res.data?.routes;
+      const payload: unknown = res.data;
+      const raw = Array.isArray(payload)
+        ? payload
+        : isRecord(payload)
+          ? payload['routes']
+          : undefined;
       if (!Array.isArray(raw)) {
         routeCatalog.value = [];
         return;
       }
 
       routeCatalog.value = raw
-        .map((entry: any) => normalizeRouteDef(entry))
+        .map((entry: unknown) => normalizeRouteDef(entry))
         .filter((entry): entry is RouteDef => !!entry)
         .sort((a, b) => a.path.localeCompare(b.path));
     } else {
-      const msg = String(
-        (res.data && (res.data.message || res.data.error)) || `HTTP ${res.status}`,
-      );
+      const msg = responseDetail(res.data, res.status);
       routeCatalogError.value = withDetail(t('auth.routes_load_failed'), msg);
       routeCatalog.value = [];
     }
-  } catch (e: any) {
-    if (e?.code !== 'ERR_CANCELED') {
+  } catch (e: unknown) {
+    if (errorCode(e) !== 'ERR_CANCELED') {
       routeCatalogError.value = withDetail(
         t('auth.routes_load_failed'),
-        e?.message || t('auth.request_failed'),
+        errorMessage(e, t('auth.request_failed')),
       );
       routeCatalog.value = [];
     }
@@ -598,20 +640,26 @@ async function createToken(): Promise<void> {
   }
 
   creating.value = true;
-  let ac: AbortController | null = null;
+  let ac: Nullable<AbortController> = null;
 
   try {
     lastCreatedScopes.value = nextScopes.slice();
     ac = makeAbortController();
 
-    const res = await http.post(
+    const res = await http.post<unknown>(
       '/api/token',
       { scopes: nextScopes },
       { validateStatus: () => true, signal: ac.signal },
     );
 
     if (res.status >= 200 && res.status < 300) {
-      const token = (res.data && (res.data.token || res.data.value || res.data)) as string;
+      const payload: unknown = res.data;
+      const token =
+        typeof payload === 'string'
+          ? payload
+          : isRecord(payload)
+            ? recordString(payload, 'token', 'value')
+            : '';
       if (typeof token === 'string' && token.length > 0) {
         createdToken.value = token;
         await loadTokens();
@@ -623,16 +671,14 @@ async function createToken(): Promise<void> {
         );
       }
     } else {
-      const msg = String(
-        (res.data && (res.data.message || res.data.error)) || `HTTP ${res.status}`,
-      );
+      const msg = responseDetail(res.data, res.status);
       createError.value = withDetail(t('auth.failed_to_generate_token'), msg);
     }
-  } catch (e: any) {
-    if (e?.code !== 'ERR_CANCELED') {
+  } catch (e: unknown) {
+    if (errorCode(e) !== 'ERR_CANCELED') {
       createError.value = withDetail(
         t('auth.failed_to_generate_token'),
-        e?.message || t('auth.request_failed'),
+        errorMessage(e, t('auth.request_failed')),
       );
     }
   } finally {
@@ -677,22 +723,28 @@ const tableControls = reactive<{ filter: string; sortBy: 'created' | 'path' }>({
 });
 const revoking = ref('');
 const showRevoke = ref(false);
-const pendingRevoke = ref<TokenRecord | null>(null);
+const pendingRevoke = ref<Nullable<TokenRecord>>(null);
 
-function normalizeToken(rec: any): TokenRecord | null {
-  if (!rec) {
+function normalizeToken(rec: unknown): Nullable<TokenRecord> {
+  if (!isRecord(rec)) {
     return null;
   }
 
-  const scopes: Scope[] = Array.isArray(rec.scopes)
-    ? rec.scopes.map((scope: any) => ({
-        path: scope.path || scope.route || '',
-        methods: orderMethods(scope.methods || scope.verbs || []),
-      }))
-    : [];
+  const scopes: Scope[] = unknownArray(rec['scopes']).map((scope) => {
+    if (!isRecord(scope)) return { path: '', methods: [] };
+    const methods = unknownArray(scope['methods'] ?? scope['verbs']).filter(
+      (method): method is string => typeof method === 'string',
+    );
+    return {
+      path: recordString(scope, 'path', 'route'),
+      methods: orderMethods(methods),
+    };
+  });
 
-  const hash: string = rec.hash ?? rec.id ?? rec.token_hash ?? '';
-  const createdAt = rec.createdAt ?? rec.created_at ?? rec.created ?? null;
+  const hash = recordString(rec, 'hash', 'id', 'token_hash');
+  const rawCreatedAt = rec['createdAt'] ?? rec['created_at'] ?? rec['created'];
+  const createdAt =
+    typeof rawCreatedAt === 'string' || typeof rawCreatedAt === 'number' ? rawCreatedAt : null;
   if (!hash) {
     return null;
   }
@@ -708,28 +760,30 @@ async function loadTokens(): Promise<void> {
 
   tokensLoading.value = true;
   tokensError.value = '';
-  let ac: AbortController | null = null;
+  let ac: Nullable<AbortController> = null;
 
   try {
     ac = makeAbortController();
-    const res = await http.get('/api/tokens', { validateStatus: () => true, signal: ac.signal });
+    const res = await http.get<unknown>('/api/tokens', {
+      validateStatus: () => true,
+      signal: ac.signal,
+    });
 
     if (res.status >= 200 && res.status < 300) {
-      const list = Array.isArray(res.data) ? res.data : res.data?.tokens || [];
-      tokens.value = (list as any[])
+      const payload: unknown = res.data;
+      const list = Array.isArray(payload) ? payload : isRecord(payload) ? payload['tokens'] : [];
+      tokens.value = unknownArray(list)
         .map((entry) => normalizeToken(entry))
-        .filter(Boolean) as TokenRecord[];
+        .filter((entry): entry is TokenRecord => entry !== null);
     } else {
-      const msg = String(
-        (res.data && (res.data.message || res.data.error)) || `HTTP ${res.status}`,
-      );
+      const msg = responseDetail(res.data, res.status);
       tokensError.value = withDetail(t('auth.request_failed'), msg);
     }
-  } catch (e: any) {
-    if (e?.code !== 'ERR_CANCELED') {
+  } catch (e: unknown) {
+    if (errorCode(e) !== 'ERR_CANCELED') {
       tokensError.value = withDetail(
         t('auth.request_failed'),
-        e?.message || t('auth.request_failed'),
+        errorMessage(e, t('auth.request_failed')),
       );
     }
   } finally {
@@ -752,27 +806,25 @@ async function confirmRevoke(): Promise<void> {
   }
 
   revoking.value = token.hash;
-  let ac: AbortController | null = null;
+  let ac: Nullable<AbortController> = null;
 
   try {
     const url = `/api/token/${encodeURIComponent(token.hash)}`;
     ac = makeAbortController();
 
-    const res = await http.delete(url, { validateStatus: () => true, signal: ac.signal });
+    const res = await http.delete<unknown>(url, { validateStatus: () => true, signal: ac.signal });
     if (res.status >= 200 && res.status < 300) {
       tokens.value = tokens.value.filter((entry) => entry.hash !== token.hash);
       showRevoke.value = false;
       pendingRevoke.value = null;
     } else {
-      const msg = String(
-        (res.data && (res.data.message || res.data.error)) || `HTTP ${res.status}`,
-      );
+      const msg = responseDetail(res.data, res.status);
       message.error(withDetail(t('auth.failed_to_revoke_token'), msg));
     }
-  } catch (e: any) {
-    if (e?.code !== 'ERR_CANCELED') {
+  } catch (e: unknown) {
+    if (errorCode(e) !== 'ERR_CANCELED') {
       message.error(
-        withDetail(t('auth.failed_to_revoke_token'), e?.message || t('auth.request_failed')),
+        withDetail(t('auth.failed_to_revoke_token'), errorMessage(e, t('auth.request_failed'))),
       );
     }
   } finally {
@@ -821,9 +873,9 @@ function shortHash(hash: string): string {
   return `${hash.slice(0, 6)}…${hash.slice(-4)}`;
 }
 
-function formatTime(rawValue: any): string {
+function formatTime(rawValue: unknown): string {
   try {
-    let value = rawValue;
+    let value: unknown = rawValue;
     if (typeof rawValue === 'string' && /^\d+$/.test(rawValue)) {
       value = Number(rawValue);
     }
@@ -875,7 +927,7 @@ async function sendTest(): Promise<void> {
   testResponse.value = '';
   testing.value = true;
 
-  let ac: AbortController | null = null;
+  let ac: Nullable<AbortController> = null;
   try {
     const urlBase = test.path;
     const query = (test.query || '').trim();
@@ -886,14 +938,18 @@ async function sendTest(): Promise<void> {
     };
 
     ac = makeAbortController();
-    const res = await http.get(url, { headers, validateStatus: () => true, signal: ac.signal });
+    const res = await http.get<unknown>(url, {
+      headers,
+      validateStatus: () => true,
+      signal: ac.signal,
+    });
     const pretty = prettyPrint(res.data);
     testResponse.value = `${res.status} ${res.statusText || ''}\n\n${pretty}`;
-  } catch (e: any) {
-    if (e?.code !== 'ERR_CANCELED') {
+  } catch (e: unknown) {
+    if (errorCode(e) !== 'ERR_CANCELED') {
       testError.value = withDetail(
         t('auth.request_failed'),
-        e?.message || t('auth.request_failed'),
+        errorMessage(e, t('auth.request_failed')),
       );
     }
   } finally {
@@ -904,11 +960,11 @@ async function sendTest(): Promise<void> {
   }
 }
 
-function prettyPrint(data: any): string {
+function prettyPrint(data: unknown): string {
   try {
     if (typeof data === 'string') {
       try {
-        const parsed = JSON.parse(data);
+        const parsed: unknown = JSON.parse(data);
         return JSON.stringify(parsed, null, 2);
       } catch {
         return data;

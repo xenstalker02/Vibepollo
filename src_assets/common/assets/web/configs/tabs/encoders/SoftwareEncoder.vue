@@ -8,9 +8,9 @@ const config = store.config;
 
 <template>
   <div id="software-encoder" class="config-page">
-    <ConfigFieldRenderer setting-key="sw_preset" v-model="config.sw_preset" class="mb-4" />
+    <ConfigFieldRenderer v-model="config.sw_preset" setting-key="sw_preset" class="mb-4" />
 
-    <ConfigFieldRenderer setting-key="sw_tune" v-model="config.sw_tune" class="mb-4" />
+    <ConfigFieldRenderer v-model="config.sw_tune" setting-key="sw_tune" class="mb-4" />
   </div>
 </template>
 

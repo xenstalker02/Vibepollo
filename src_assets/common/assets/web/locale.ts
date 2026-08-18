@@ -1,4 +1,4 @@
-import { createI18n, I18n } from 'vue-i18n';
+import { createI18n } from 'vue-i18n';
 
 // Import only the fallback language files
 import en from '@/public/assets/locale/en.json';
@@ -8,13 +8,13 @@ interface LocaleResponse {
   locale?: string;
 }
 
-type MessageSchema = typeof en;
+export type MessageSchema = typeof en;
 
-export default async function (): Promise<any> {
-  const r: LocaleResponse = await http
-    .get('./api/configLocale', { validateStatus: () => true })
-    .then((r) => (r.status === 200 ? r.data : {}))
-    .catch(() => ({}));
+export default async function createLocale() {
+  const response = await http
+    .get<LocaleResponse>('./api/configLocale', { validateStatus: () => true })
+    .catch(() => undefined);
+  const r = response?.status === 200 ? response.data : {};
   const locale = r.locale ?? 'en';
   document.querySelector('html')?.setAttribute('lang', locale);
   const messages: Record<string, MessageSchema> = {
@@ -22,10 +22,12 @@ export default async function (): Promise<any> {
   };
   try {
     if (locale !== 'en') {
-      const r = await http
-        .get(`/assets/locale/${locale}.json`, { validateStatus: () => true })
-        .then((r) => (r.status === 200 ? r.data : null));
-      if (r) messages[locale] = r;
+      const localeResponse = await http.get<MessageSchema>(`/assets/locale/${locale}.json`, {
+        validateStatus: () => true,
+      });
+      if (localeResponse.status === 200 && localeResponse.data) {
+        messages[locale] = localeResponse.data;
+      }
     }
   } catch (e) {
     console.error('Failed to download translations', e);

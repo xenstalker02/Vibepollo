@@ -6,7 +6,7 @@ export interface GitHubRelease {
   html_url: string;
   body: string;
   prerelease?: boolean;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 function hasStableChannel(preRelease: (string | number)[]): boolean {
@@ -67,9 +67,11 @@ export default class SunshineVersion {
     // Extract numeric major.minor.patch via regex to avoid NaN on suffixed parts
     const m = core.match(/^(\d+)\.(\d+)(?:\.(\d+))?$/);
     if (m) {
-      const maj = parseInt(m[1]!, 10);
-      const min = parseInt(m[2]!, 10);
-      const pat = m[3] ? parseInt(m[3]!, 10) : 0;
+      const [, major, minor, patch] = m;
+      if (major === undefined || minor === undefined) return [0, 0, 0];
+      const maj = parseInt(major, 10);
+      const min = parseInt(minor, 10);
+      const pat = patch ? parseInt(patch, 10) : 0;
       return [maj, min, pat];
     }
     // Fallback: split and coerce numerics defensively
@@ -78,8 +80,7 @@ export default class SunshineVersion {
       return Number.isFinite(n) ? n : 0;
     });
     while (parts.length < 3) parts.push(0);
-    const tup = parts.slice(0, 3) as [number, number, number];
-    return tup;
+    return [parts[0] ?? 0, parts[1] ?? 0, parts[2] ?? 0];
   }
 
   /** Parse prerelease identifiers (semver) as array of numbers/strings */
@@ -121,7 +122,7 @@ export default class SunshineVersion {
         const aNum = typeof ai === 'number';
         const bNum = typeof bi === 'number';
         if (aNum && bNum) {
-          if (ai !== bi) return (ai as number) > (bi as number) ? 1 : -1;
+          if (ai !== bi) return ai > bi ? 1 : -1;
         } else if (aNum !== bNum) {
           // numeric identifiers always have lower precedence than non-numeric
           return aNum ? -1 : 1;

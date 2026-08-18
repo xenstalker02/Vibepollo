@@ -13,7 +13,7 @@ class PlatformMessageI18n {
 
   getMessageUsingPlatform(key: string, defaultMsg?: string): string {
     const realKey = this.getPlatformKey(key, this.platform);
-    const i18n = inject<{ t: (k: string) => string } | undefined>('i18n');
+    const i18n = inject<{ t: (k: string) => string }>('i18n');
     if (!i18n || typeof i18n.t !== 'function') return defaultMsg ?? realKey;
     let message = i18n.t(realKey);
 
@@ -42,7 +42,7 @@ class PlatformMessageI18n {
 export function usePlatformI18n(platform?: string): PlatformMessageI18n {
   // Resolve platform from injected ref if not explicitly passed.
   if (!platform) {
-    const injected = inject('platform', null) as string | Ref<string> | null;
+    const injected = inject<string | Ref<string>>('platform');
     if (injected) {
       // Support either a ref or plain value
       platform = typeof injected === 'object' && 'value' in injected ? injected.value : injected;
