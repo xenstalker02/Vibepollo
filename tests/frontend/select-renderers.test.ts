@@ -128,7 +128,7 @@ describe('display select renderers', () => {
     vi.restoreAllMocks();
   });
 
-  test('mounts AppEditModal renderer callbacks for selected and dropdown states', () => {
+  test('keeps the AppEdit selected label compact while the dropdown stays padded', () => {
     vi.spyOn(http, 'get').mockResolvedValue({ status: 200, data: {} } as never);
     const wrapper = trackWrapper(
       mount(NMessageProvider, {
@@ -139,7 +139,18 @@ describe('display select renderers', () => {
       }),
     );
 
-    expectBothStates(rendererFrom(wrapper.getComponent(AppEditModal)), true);
+    const renderer = rendererFrom(wrapper.getComponent(AppEditModal));
+    expectBothStates(renderer, true);
+
+    const selectedContent = renderer.get('.selected-value > div');
+    expect(selectedContent.classes()).toContain('leading-tight');
+    expect(selectedContent.classes()).not.toContain('gap-0.5');
+    expect(selectedContent.classes()).not.toContain('py-0.5');
+
+    const dropdownContent = renderer.get('.dropdown-option > div');
+    expect(dropdownContent.classes()).toContain('gap-0.5');
+    expect(dropdownContent.classes()).toContain('py-0.5');
+    expect(dropdownContent.classes()).not.toContain('leading-tight');
   });
 
   test('mounts DisplayDeviceOptions renderer callbacks for both states', () => {

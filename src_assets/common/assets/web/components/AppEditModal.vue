@@ -1839,26 +1839,34 @@ const displayDeviceOptions = computed(() => {
   return opts;
 });
 
-function renderDisplayDeviceContent(option: unknown) {
+function renderDisplayDeviceLines(option: unknown) {
   const device = option as DisplayDeviceOption;
   const label = device.displayName || String(device.label || device.value || 'Display');
   const status = device.active === null ? '' : device.active ? 'Active' : 'Inactive';
-  return h('div', { class: 'flex min-w-0 flex-col gap-0.5 py-0.5' }, [
+  return [
     h('span', { class: 'truncate text-sm font-medium' }, label),
     h(
       'span',
       { class: 'truncate text-[11px] opacity-60' },
       [device.id || '', status].filter(Boolean).join(' · '),
     ),
-  ]);
+  ];
 }
 
 function renderDisplayDeviceLabel(option: SelectOption) {
-  return renderDisplayDeviceContent(option);
+  return h(
+    'div',
+    { class: 'flex min-w-0 flex-col leading-tight' },
+    renderDisplayDeviceLines(option),
+  );
 }
 
 const renderDisplayDeviceOption: SelectRenderOption = ({ option }) => {
-  return renderDisplayDeviceContent(option);
+  return h(
+    'div',
+    { class: 'flex min-w-0 flex-col gap-0.5 py-0.5' },
+    renderDisplayDeviceLines(option),
+  );
 };
 
 function onDisplaySelectFocus() {
