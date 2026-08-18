@@ -118,6 +118,7 @@ installer/output/
 .claude/
 .superpowers/
 .worktrees/
+maintenance/
 QUICK_REFERENCE.md
 sunshine_state.json
 vibeshine_state.json
