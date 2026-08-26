@@ -3,17 +3,16 @@
  * @brief Test src/stream.*
  */
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <string>
 #include <vector>
 
-#include <boost/asio/error.hpp>
-#include <boost/system/error_code.hpp>
+#include <src/stream_udp_receive.h>
 
 namespace stream {
   std::vector<uint8_t> concat_and_insert(uint64_t insert_size, uint64_t slice_size, const std::string_view &data1, const std::string_view &data2);
-  bool should_rearm_udp_receive(const boost::system::error_code &ec, bool socket_open, bool broadcast_shutdown);
 }
 
 #include "../tests_common.h"
@@ -58,4 +57,43 @@ TEST(UdpReceiveRearmTests, StopsAfterTerminalSocketConditions) {
 TEST(UdpReceiveRearmTests, StopsWhenSocketOrBroadcastIsClosing) {
   EXPECT_FALSE(stream::should_rearm_udp_receive({}, false, false));
   EXPECT_FALSE(stream::should_rearm_udp_receive({}, true, true));
+}
+
+TEST(UdpReceiveEndpointsTests, SimultaneousLoopbackReceivesRetainTheirOwnSenders) {
+  namespace asio = boost::asio;
+  using udp = asio::ip::udp;
+
+  asio::io_context io;
+  udp::socket video_receiver {io, {asio::ip::address_v4::loopback(), 0}};
+  udp::socket audio_receiver {io, {asio::ip::address_v4::loopback(), 0}};
+  udp::socket video_sender {io, {asio::ip::address_v4::loopback(), 0}};
+  udp::socket audio_sender {io, {asio::ip::address_v4::loopback(), 0}};
+  stream::udp_receive_endpoints_t senders;
+  std::array<char, 1> video_buffer {};
+  std::array<char, 1> audio_buffer {};
+  boost::system::error_code video_error;
+  boost::system::error_code audio_error;
+  std::size_t receives = 0;
+
+  video_receiver.async_receive_from(asio::buffer(video_buffer), senders.video, [&](const auto &ec, std::size_t) {
+    video_error = ec;
+    ++receives;
+  });
+  audio_receiver.async_receive_from(asio::buffer(audio_buffer), senders.audio, [&](const auto &ec, std::size_t) {
+    audio_error = ec;
+    ++receives;
+  });
+
+  video_sender.send_to(asio::buffer("v", 1), video_receiver.local_endpoint());
+  audio_sender.send_to(asio::buffer("a", 1), audio_receiver.local_endpoint());
+  io.run();
+
+  ASSERT_EQ(receives, 2U);
+  ASSERT_FALSE(video_error);
+  ASSERT_FALSE(audio_error);
+  EXPECT_EQ(video_buffer[0], 'v');
+  EXPECT_EQ(audio_buffer[0], 'a');
+  EXPECT_EQ(senders.video, video_sender.local_endpoint());
+  EXPECT_EQ(senders.audio, audio_sender.local_endpoint());
+  EXPECT_NE(senders.video, senders.audio);
 }
