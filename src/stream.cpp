@@ -1876,16 +1876,16 @@ namespace stream {
       }
     };
 
-    auto recv_func_init = [&](udp::socket &sock, int buf_elem, std::map<av_session_id_t, message_queue_t> &peer_to_session) {
-      recv_func[buf_elem] = [&, buf_elem](const boost::system::error_code &ec, size_t bytes) {
-        auto &peer = peers.for_lane(buf_elem);
+    auto recv_func_init = [&](udp::socket &sock, udp_receive_lane_e lane, std::size_t buf_elem, std::map<av_session_id_t, message_queue_t> &peer_to_session) {
+      recv_func[buf_elem] = [&, lane, buf_elem](const boost::system::error_code &ec, size_t bytes) {
+        const auto &peer = peers.sender(lane);
         auto fg = util::fail_guard([&]() {
           if (!should_rearm_udp_receive(ec, sock.is_open(), broadcast_shutdown_event->peek())) {
             return;
           }
 
           try {
-            sock.async_receive_from(asio::buffer(buf[buf_elem]), peer, 0, recv_func[buf_elem]);
+            peers.async_receive_from(sock, lane, asio::buffer(buf[buf_elem]), recv_func[buf_elem]);
           } catch (const std::exception &e) {
             BOOST_LOG(error) << "Couldn't rearm udp socket receive: "sv << e.what();
           } catch (...) {
@@ -1893,7 +1893,7 @@ namespace stream {
           }
         });
 
-        auto type_str = buf_elem ? "AUDIO"sv : "VIDEO"sv;
+        auto type_str = lane == udp_receive_lane_e::audio ? "AUDIO"sv : "VIDEO"sv;
         BOOST_LOG(verbose) << "Recv: "sv << peer.address().to_string() << ':' << peer.port() << " :: " << type_str;
 
         populate_peer_to_session();
@@ -1926,11 +1926,11 @@ namespace stream {
       };
     };
 
-    recv_func_init(video_sock, 0, peer_to_video_session);
-    recv_func_init(audio_sock, 1, peer_to_audio_session);
+    recv_func_init(video_sock, udp_receive_lane_e::video, 0, peer_to_video_session);
+    recv_func_init(audio_sock, udp_receive_lane_e::audio, 1, peer_to_audio_session);
 
-    video_sock.async_receive_from(asio::buffer(buf[0]), peers.video, 0, recv_func[0]);
-    audio_sock.async_receive_from(asio::buffer(buf[1]), peers.audio, 0, recv_func[1]);
+    peers.async_receive_from(video_sock, udp_receive_lane_e::video, asio::buffer(buf[0]), recv_func[0]);
+    peers.async_receive_from(audio_sock, udp_receive_lane_e::audio, asio::buffer(buf[1]), recv_func[1]);
 
     while (!broadcast_shutdown_event->peek()) {
       io.run();

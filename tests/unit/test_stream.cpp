@@ -59,9 +59,10 @@ TEST(UdpReceiveRearmTests, StopsWhenSocketOrBroadcastIsClosing) {
   EXPECT_FALSE(stream::should_rearm_udp_receive({}, true, true));
 }
 
-TEST(UdpReceiveEndpointsTests, SimultaneousLoopbackReceivesRetainTheirOwnSenders) {
+TEST(UdpReceiveEndpointsTests, SimultaneousLoopbackReceivesAndRearmsRetainTheirOwnSenders) {
   namespace asio = boost::asio;
   using udp = asio::ip::udp;
+  using lane = stream::udp_receive_lane_e;
 
   asio::io_context io;
   udp::socket video_receiver {io, {asio::ip::address_v4::loopback(), 0}};
@@ -73,27 +74,49 @@ TEST(UdpReceiveEndpointsTests, SimultaneousLoopbackReceivesRetainTheirOwnSenders
   std::array<char, 1> audio_buffer {};
   boost::system::error_code video_error;
   boost::system::error_code audio_error;
-  std::size_t receives = 0;
+  std::size_t video_receives = 0;
+  std::size_t audio_receives = 0;
+  std::size_t initial_receives = 0;
 
-  video_receiver.async_receive_from(asio::buffer(video_buffer), senders.video, [&](const auto &ec, std::size_t) {
+  std::function<void(const boost::system::error_code &, std::size_t)> video_receive;
+  std::function<void(const boost::system::error_code &, std::size_t)> audio_receive;
+  video_receive = [&](const boost::system::error_code &ec, std::size_t) {
+    ++video_receives;
     video_error = ec;
-    ++receives;
-  });
-  audio_receiver.async_receive_from(asio::buffer(audio_buffer), senders.audio, [&](const auto &ec, std::size_t) {
+    if (video_receives == 1U) {
+      senders.async_receive_from(video_receiver, lane::video, asio::buffer(video_buffer), video_receive);
+      if (++initial_receives == 2U) {
+        video_sender.send_to(asio::buffer("V", 1), video_receiver.local_endpoint());
+        audio_sender.send_to(asio::buffer("A", 1), audio_receiver.local_endpoint());
+      }
+    }
+  };
+  audio_receive = [&](const boost::system::error_code &ec, std::size_t) {
+    ++audio_receives;
     audio_error = ec;
-    ++receives;
-  });
+    if (audio_receives == 1U) {
+      senders.async_receive_from(audio_receiver, lane::audio, asio::buffer(audio_buffer), audio_receive);
+      if (++initial_receives == 2U) {
+        video_sender.send_to(asio::buffer("V", 1), video_receiver.local_endpoint());
+        audio_sender.send_to(asio::buffer("A", 1), audio_receiver.local_endpoint());
+      }
+    }
+  };
+
+  senders.async_receive_from(video_receiver, lane::video, asio::buffer(video_buffer), video_receive);
+  senders.async_receive_from(audio_receiver, lane::audio, asio::buffer(audio_buffer), audio_receive);
 
   video_sender.send_to(asio::buffer("v", 1), video_receiver.local_endpoint());
   audio_sender.send_to(asio::buffer("a", 1), audio_receiver.local_endpoint());
   io.run();
 
-  ASSERT_EQ(receives, 2U);
+  ASSERT_EQ(video_receives, 2U);
+  ASSERT_EQ(audio_receives, 2U);
   ASSERT_FALSE(video_error);
   ASSERT_FALSE(audio_error);
-  EXPECT_EQ(video_buffer[0], 'v');
-  EXPECT_EQ(audio_buffer[0], 'a');
-  EXPECT_EQ(senders.video, video_sender.local_endpoint());
-  EXPECT_EQ(senders.audio, audio_sender.local_endpoint());
-  EXPECT_NE(senders.video, senders.audio);
+  EXPECT_EQ(video_buffer[0], 'V');
+  EXPECT_EQ(audio_buffer[0], 'A');
+  EXPECT_EQ(senders.sender(lane::video), video_sender.local_endpoint());
+  EXPECT_EQ(senders.sender(lane::audio), audio_sender.local_endpoint());
+  EXPECT_NE(senders.sender(lane::video), senders.sender(lane::audio));
 }
