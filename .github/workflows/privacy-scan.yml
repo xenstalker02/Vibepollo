@@ -14,40 +14,21 @@ jobs:
     name: Scan diff for private data
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - name: Build diff
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git diff origin/${{ github.base_ref }}...HEAD > /tmp/scan.diff
-          elif [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
-            git show HEAD > /tmp/scan.diff
-          else
-            git diff ${{ github.event.before }} ${{ github.sha }} > /tmp/scan.diff
-          fi
+      - name: Test privacy scanner with synthetic cases
+        run: python3 scripts/privacy_scan_test.py
 
-      - name: Scan for private patterns
+      - name: Scan pull request (generic rules, no secrets)
+        if: github.event_name == 'pull_request'
+        run: python3 scripts/privacy_scan.py
+
+      - name: Scan trusted push (generic and optional private rules)
+        if: github.event_name == 'push'
         env:
-          # Pattern (MAC prefix / private IP ranges / device hostnames) is kept in a
-          # repo secret so it isn't published in this workflow or the CI logs.
+          # Python regex; never passed to pull-request code or printed.
           PRIVACY_PATTERN: ${{ secrets.PRIVACY_PATTERN }}
-        run: |
-          if [ -z "$PRIVACY_PATTERN" ]; then
-            echo "⚠️  PRIVACY_PATTERN secret not set — skipping scan."
-            exit 0
-          fi
-          # Only scan ADDED lines (start with '+', excluding '+++' headers). A removed
-          # secret is not a leak, and removing the pattern itself must not self-trigger.
-          ADDED=$(grep -E '^\+[^+]' /tmp/scan.diff || true)
-          # -q: never echo the matching line. This is a public repo, so printing the
-          # match would publish the very identifier the scan exists to protect.
-          # Run the local pre-commit hook to see which line tripped it.
-          if printf '%s' "$ADDED" | grep -qE "$PRIVACY_PATTERN"; then
-            echo ""
-            echo "❌ FAIL: sensitive pattern detected in added lines"
-            echo "   (match not printed by design — run the local pre-commit hook to see it)"
-            exit 1
-          fi
-          echo "✅ Privacy scan passed"
+        run: python3 scripts/privacy_scan.py

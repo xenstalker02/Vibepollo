@@ -100,6 +100,8 @@ Source: "..\build\tools\playnite-launcher.exe";        DestDir: "{app}\tools"; F
 Source: "..\build\tools\dxgi-info.exe";                DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "..\build\tools\audio-info.exe";               DestDir: "{app}\tools"; Flags: ignoreversion
 
+Source: "configure-firewall.ps1"; DestDir: "{app}\tools"; Flags: ignoreversion
+
 ; Web UI assets
 Source: "..\build\assets\web\*"; DestDir: "{app}\assets\web"; Flags: ignoreversion recursesubdirs createallsubdirs
 
@@ -149,18 +151,16 @@ Filename: "sc.exe";      Parameters: "stop ApolloService";              Flags: r
 Filename: "sc.exe";      Parameters: "config ApolloService start= disabled"; Flags: runhidden; StatusMsg: "Disabling legacy service..."
 Filename: "schtasks.exe"; Parameters: "/delete /tn ""Vibepollo"" /f"; Flags: runhidden; StatusMsg: "Removing legacy autostart task..."
 
-; Add firewall rules
-Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""Vibepollo TCP"" protocol=TCP dir=in localport=47984,47989,47990 action=allow"; Flags: runhidden; StatusMsg: "Configuring firewall (TCP)..."
-Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""Vibepollo UDP"" protocol=UDP dir=in localport=47998-48010 action=allow"; Flags: runhidden; StatusMsg: "Configuring firewall (UDP)..."
+; Firewall configuration is checked immediately before service installation.
 
 ; The wrapper runs as LocalSystem and launches Sunshine into the active console session.
 ; That token can follow the input desktop onto Winlogon/PIN, unlike an elevated user task.
-Filename: "sc.exe"; Parameters: "create VibepollService binPath= ""{app}\tools\sunshinesvc.exe"" DisplayName= ""Vibepollo Service"" start= auto error= normal"; Flags: runhidden; StatusMsg: "Installing Vibepollo service..."
-Filename: "sc.exe"; Parameters: "config VibepollService binPath= ""{app}\tools\sunshinesvc.exe"" DisplayName= ""Vibepollo Service"" start= auto error= normal"; Flags: runhidden; StatusMsg: "Configuring Vibepollo service..."
-Filename: "sc.exe"; Parameters: "failure VibepollService reset= 86400 actions= restart/3000/restart/10000/none/0"; Flags: runhidden; StatusMsg: "Configuring service recovery..."
-Filename: "sc.exe"; Parameters: "failureflag VibepollService 1"; Flags: runhidden
-Filename: "sc.exe"; Parameters: "start VibepollService"; Flags: runhidden; StatusMsg: "Starting Vibepollo..."
-Filename: "https://localhost:47990"; Flags: shellexec nowait postinstall skipifsilent; Description: "Open {#MyAppName} Web UI"
+Filename: "sc.exe"; Parameters: "create VibepollService binPath= ""{app}\tools\sunshinesvc.exe"" DisplayName= ""Vibepollo Service"" start= auto error= normal"; Flags: runhidden; StatusMsg: "Installing Vibepollo service..."; Check: EnsureVibepolloFirewall
+Filename: "sc.exe"; Parameters: "config VibepollService binPath= ""{app}\tools\sunshinesvc.exe"" DisplayName= ""Vibepollo Service"" start= auto error= normal"; Flags: runhidden; StatusMsg: "Configuring Vibepollo service..."; Check: EnsureVibepolloFirewall
+Filename: "sc.exe"; Parameters: "failure VibepollService reset= 86400 actions= restart/3000/restart/10000/none/0"; Flags: runhidden; StatusMsg: "Configuring service recovery..."; Check: EnsureVibepolloFirewall
+Filename: "sc.exe"; Parameters: "failureflag VibepollService 1"; Flags: runhidden; Check: EnsureVibepolloFirewall
+Filename: "sc.exe"; Parameters: "start VibepollService"; Flags: runhidden; StatusMsg: "Starting Vibepollo..."; Check: EnsureVibepolloFirewall
+Filename: "https://localhost:47990"; Flags: shellexec nowait postinstall skipifsilent; Description: "Open {#MyAppName} Web UI"; Check: EnsureVibepolloFirewall
 
 [UninstallRun]
 ; Stop and remove the service before deleting its binaries.
@@ -176,11 +176,46 @@ Filename: "powershell.exe"; Parameters: "-Command ""Unregister-ScheduledTask -Ta
 Filename: "sc.exe"; Parameters: "stop ApolloService";   Flags: runhidden; RunOnceId: "StopApolloSvc"
 Filename: "sc.exe"; Parameters: "delete ApolloService"; Flags: runhidden; RunOnceId: "DeleteApolloSvc"
 
-; Remove firewall rules
-Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""Vibepollo TCP"""; Flags: runhidden; RunOnceId: "DelFirewallTCP"
-Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""Vibepollo UDP"""; Flags: runhidden; RunOnceId: "DelFirewallUDP"
+; Remove only recognized installer rules, preserving user-defined same-name rules.
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ""{app}\tools\configure-firewall.ps1"" -Program ""{app}\sunshine.exe"" -Mode Remove"; Flags: runhidden; RunOnceId: "DelManagedFirewall"
 
 [Code]
+var
+  FirewallAttempted: Boolean;
+  FirewallConfigured: Boolean;
+
+function EnsureVibepolloFirewall(): Boolean;
+var
+  ResultCode: Integer;
+begin
+  // Check functions may be evaluated repeatedly. Attempt the migration once;
+  // a failure must keep every service/start/UI entry disabled for this run.
+  if not FirewallAttempted then
+  begin
+    FirewallAttempted := True;
+    ResultCode := -1;
+    FirewallConfigured := Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+      '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' +
+      ExpandConstant('{app}\tools\configure-firewall.ps1') + '" -Program "' +
+      ExpandConstant('{app}\sunshine.exe') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    FirewallConfigured := FirewallConfigured and (ResultCode = 0);
+    if not FirewallConfigured then
+    begin
+      Log('ERROR: Firewall configuration failed; service configuration/start and Web UI were skipped. Installer exit code will be nonzero.');
+      if not WizardSilent() then
+        MsgBox('Firewall configuration failed. Vibepollo was not started. Review installer-managed rules and rerun Setup. Installed files have not been rolled back.', mbError, MB_OK);
+    end;
+  end;
+  Result := FirewallConfigured;
+end;
+
+function GetCustomSetupExitCode(): Integer;
+begin
+  Result := 0;
+  if FirewallAttempted and not FirewallConfigured then
+    Result := 1;
+end;
+
 // Kill any running sunshine.exe before the file copy attempt.
 // CloseApplications=force uses the Restart Manager API which can fail to close
 // Task Scheduler-launched elevated processes. This explicit kill runs at the exact

@@ -38,6 +38,7 @@
 // local includes
 #include "config.h"
 #include "confighttp.h"
+#include "http_origin.h"
 #include "crypto.h"
 #include "file_handler.h"
 #include "globals.h"
@@ -601,7 +602,38 @@ namespace confighttp {
    * @param request The HTTP request object.
    * @return AuthResult with outcome and response details if not authorized.
    */
+  bool cookie_origin_allowed(const req_https_t &request) {
+    if (safe_http_method(request->method)) {
+      return true;
+    }
+    const bool uses_cookies = !extract_session_token_from_cookie(request->header).empty() ||
+                              !extract_refresh_token_from_cookie(request->header).empty();
+    if (!uses_cookies) {
+      return true;  // Explicit token clients do not send ambient credentials.
+    }
+    if (request->header.count("host") != 1 || request->header.count("origin") != 1) {
+      return false;
+    }
+    return same_https_origin(request->header.find("host")->second,
+                             request->header.find("origin")->second);
+  }
+
+  bool enforce_cookie_origin(resp_https_t response, const req_https_t &request) {
+    if (cookie_origin_allowed(request)) {
+      return true;
+    }
+    response->write(StatusCode::client_error_forbidden,
+                    "{\"status\":false,\"error\":\"Cookie requests require the same HTTPS origin\"}",
+                    {{"Content-Type", "application/json"}});
+    return false;
+  }
+
   AuthResult check_auth(const req_https_t &request) {
+    if (!cookie_origin_allowed(request)) {
+      return {false, StatusCode::client_error_forbidden,
+              "{\"status\":false,\"error\":\"Cookie requests require the same HTTPS origin\"}",
+              {{"Content-Type", "application/json"}}};
+    }
     auto address = net::addr_to_normalized_string(request->remote_endpoint().address());
     std::string auth_header;
     // Try Authorization header
@@ -4137,6 +4169,7 @@ namespace confighttp {
 
   void refreshSession(resp_https_t response, req_https_t request) {
     if (!checkIPOrigin(response, request)) return;
+    if (!enforce_cookie_origin(response, request)) return;
     print_req(request);
 
     std::string refresh_token;
@@ -4182,6 +4215,7 @@ namespace confighttp {
    */
   void logoutUser(resp_https_t response, req_https_t request) {
     if (!checkIPOrigin(response, request)) return;
+    if (!enforce_cookie_origin(response, request)) return;
     print_req(request);
 
     std::string session_token;

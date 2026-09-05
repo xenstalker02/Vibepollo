@@ -132,6 +132,15 @@ The token grants access only to the specified paths and HTTP methods.
 
 All session metadata is stored hashed and persisted in the same state file as API tokens so Sunshine can validate cookies across service restarts.
 
+Authenticated API requests, session refresh, and logout carrying session or
+refresh cookies must include exactly one `Origin` and one `Host` header for
+methods other than GET, HEAD, and OPTIONS. The origin
+must be HTTPS and match the host and port; another port on the same host is not
+the same origin. Reverse proxies must preserve the external `Host` (including
+its port) and the browser's `Origin`. Requests rejected by this check return 403.
+Explicit token clients that send no session or refresh cookies do not need an
+`Origin` header; their normal authentication and permissions still apply.
+
 <div class="section_buttons">
 
 | Previous                                    |                                  Next |
