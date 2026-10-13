@@ -1,7 +1,5 @@
+import type { NullValue } from '@/utils/wireAbsence';
 export type EncodingType = 'h264' | 'hevc' | 'av1';
-
-const NULL_VALUE = null;
-type NullValue = typeof NULL_VALUE;
 
 export interface StreamConfig {
   width: number;

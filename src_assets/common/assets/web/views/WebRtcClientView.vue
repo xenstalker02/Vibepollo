@@ -506,6 +506,8 @@
 </template>
 
 <script setup lang="ts">
+import type { NullValue, UndefinedValue } from '@/utils/wireAbsence';
+
 import { ref, reactive, onBeforeUnmount, onMounted, watch, computed, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NSwitch, NInputNumber, NAlert, useDialog } from 'naive-ui';
@@ -532,10 +534,6 @@ import type { App } from '@/stores/apps';
 
 const { t } = useI18n();
 const dialog = useDialog();
-const NULL_VALUE = null;
-const UNDEFINED_VALUE = undefined;
-type NullValue = typeof NULL_VALUE;
-type UndefinedValue = typeof UNDEFINED_VALUE;
 type SessionStatus = { activeSessions: number; appRunning: boolean; paused: boolean };
 type WebkitDocument = Document & {
   webkitFullscreenElement?: Element | NullValue;
@@ -2104,8 +2102,9 @@ function isIosPhone(): boolean {
 function isNativeVideoFullscreenActive(): boolean {
   if (nativeVideoFullscreen.value) return true;
   try {
-    const webkitVideo = videoEl.value as WebkitVideoElement | NullValue;
-    return Boolean(webkitVideo?.webkitDisplayingFullscreen);
+    const webkitVideo = videoEl.value;
+    if (!webkitVideo || !('webkitDisplayingFullscreen' in webkitVideo)) return false;
+    return webkitVideo.webkitDisplayingFullscreen === true;
   } catch {
     return false;
   }
@@ -2864,11 +2863,11 @@ function attachVideoFullscreenEvents(el: HTMLVideoElement): () => void {
     nativeVideoFullscreen.value = false;
     onFullscreenChange();
   };
-  el.addEventListener('webkitbeginfullscreen', onBegin as EventListener);
-  el.addEventListener('webkitendfullscreen', onEnd as EventListener);
+  el.addEventListener('webkitbeginfullscreen', onBegin);
+  el.addEventListener('webkitendfullscreen', onEnd);
   return () => {
-    el.removeEventListener('webkitbeginfullscreen', onBegin as EventListener);
-    el.removeEventListener('webkitendfullscreen', onEnd as EventListener);
+    el.removeEventListener('webkitbeginfullscreen', onBegin);
+    el.removeEventListener('webkitendfullscreen', onEnd);
   };
 }
 
@@ -2902,7 +2901,7 @@ onBeforeUnmount(() => {
   componentMounted = false;
   setWebRtcActive(false);
   document.removeEventListener('fullscreenchange', onFullscreenChange);
-  document.removeEventListener('webkitfullscreenchange', onFullscreenChange as EventListener);
+  document.removeEventListener('webkitfullscreenchange', onFullscreenChange);
   document.removeEventListener('visibilitychange', onVisibilityChange);
   window.removeEventListener('pointerdown', onAudioUserGesture as EventListener, true);
   window.removeEventListener('keydown', onAudioUserGesture as EventListener, true);
@@ -2943,7 +2942,7 @@ onMounted(async () => {
   componentMounted = true;
   loadCachedConfig();
   document.addEventListener('fullscreenchange', onFullscreenChange);
-  document.addEventListener('webkitfullscreenchange', onFullscreenChange as EventListener);
+  document.addEventListener('webkitfullscreenchange', onFullscreenChange);
   document.addEventListener('visibilitychange', onVisibilityChange);
   window.addEventListener('pointerdown', onAudioUserGesture as EventListener, true);
   window.addEventListener('keydown', onAudioUserGesture as EventListener, true);

@@ -1,12 +1,13 @@
 <script setup lang="ts">
+import type { NullValue } from '@/utils/wireAbsence';
+
 defineOptions({ inheritAttrs: false });
 
 import { computed, useAttrs, type PropType } from 'vue';
 import { NInputNumber } from 'naive-ui';
 import ConfigFieldShell from './ConfigFieldShell.vue';
 
-const nullValue = () => null;
-type Nullable<T> = T | ReturnType<typeof nullValue>;
+type Nullable<T> = T | NullValue;
 
 const model = defineModel<Nullable<number>>({ required: true });
 const attrs = useAttrs();

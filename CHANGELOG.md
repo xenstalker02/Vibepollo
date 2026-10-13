@@ -13,17 +13,22 @@ A new installer must be built and verified from its tagged source before release
 ### Security
 - Patch Vue and Axios within their existing major versions; refresh compatible
   brace-expansion, source-map-js and fast-uri dependencies. Scope compression
-  1.8.2 to the fixture server. The development-tool audit still reports the
-  unpatched braces chain and selector-parser findings; the audit gate is unchanged.
+  1.8.2 to the fixture server. Upgrade the development toolchain to Tailwind 4,
+  supported ESLint 10 and maintained TypeScript/Vue lint and component plugins;
+  the full locked dependency audit reports zero findings without weakening its gate.
+  Preserve the existing theme palette, component ordering, focus outlines and
+  disabled-select styling with source-hash-checked browser regression coverage.
 - Cookie-authenticated mutations validate request origin. Installer firewall
   configuration preserves existing user policy rather than replacing it broadly.
 
 ### Validation
 - Source Checks runs dependency auditing, type checking, lint, frontend tests and
-  the production web build, plus offline firewall-policy tests in both PowerShell
+  the production web build and 28 Chrome theme-state scenarios, plus offline firewall-policy tests in both PowerShell
   versions. Native Windows packaging remains a separate manual build gate.
 - These source checks do not establish microphone, audible audio, controller,
-  touch, physical HDR appearance or game performance acceptance.
+  touch, physical HDR appearance or game performance acceptance. Hover coverage
+  exercises the forced CSS pseudo-state with positive/removal controls, rather
+  than establishing pointer-event or device acceptance.
 
 
 ## [1.15.30] — 2026-08-05

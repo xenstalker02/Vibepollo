@@ -1,11 +1,9 @@
+import type { NullValue, UndefinedValue } from '@/utils/wireAbsence';
+
+import { primitiveText } from '@/utils/primitiveText';
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { http } from '@/http';
-
-const NULL_VALUE = null;
-type NullValue = typeof NULL_VALUE;
-const undefinedValue = () => undefined;
-type UndefinedValue = ReturnType<typeof undefinedValue>;
 
 // Metadata describing build/runtime info returned by /api/meta
 export interface MetaInfo {
@@ -553,7 +551,7 @@ export const useConfigStore = defineStore('config', () => {
     const toBool = (v: unknown): boolean | NullValue => {
       if (v === true || v === false) return v;
       if (v === 1 || v === 0) return !!v;
-      const s = String(v ?? '')
+      const s = primitiveText(v ?? '')
         .toLowerCase()
         .trim();
       if (!s) return null;
@@ -585,8 +583,8 @@ export const useConfigStore = defineStore('config', () => {
         for (const el of v) {
           if (el && typeof el === 'object') {
             const entry = el as Record<string, unknown>;
-            const id = String(entry['id'] || '');
-            const name = String(entry['name'] || '');
+            const id = primitiveText(entry['id'] || '');
+            const name = primitiveText(entry['name'] || '');
             if (id || name) out.push({ id, name });
           } else if (typeof el === 'string') {
             const s = el.trim();
@@ -698,7 +696,7 @@ export const useConfigStore = defineStore('config', () => {
       : defaultResolutionOption;
     if (resOpt === 'manual') {
       const manualResolutionKey = 'dd_manual_resolution';
-      const raw = String(data[manualResolutionKey] ?? '').trim();
+      const raw = primitiveText(data[manualResolutionKey] ?? '').trim();
       const resolutionPattern = /^\d{2,5}\s*[xX]\s*\d{2,5}$/;
       if (!resolutionPattern.test(raw)) {
         return {
@@ -717,7 +715,7 @@ export const useConfigStore = defineStore('config', () => {
       : defaultRefreshOption;
     if (rrOpt === 'manual') {
       const manualRefreshKey = 'dd_manual_refresh_rate';
-      const raw = String(data[manualRefreshKey] ?? '').trim();
+      const raw = primitiveText(data[manualRefreshKey] ?? '').trim();
       const valid = /^\d+(?:\.\d+)?$/.test(raw) && Number(raw) > 0;
       if (!valid) {
         return {
@@ -732,11 +730,13 @@ export const useConfigStore = defineStore('config', () => {
       const remapObj = remap as Record<string, unknown>;
       const resolutionPattern = /^\d{2,5}\s*[xX]\s*\d{2,5}$/;
       const checkResolution = (value: unknown) =>
-        !value || String(value).trim() === '' || resolutionPattern.test(String(value));
+        !value ||
+        primitiveText(value).trim() === '' ||
+        resolutionPattern.test(primitiveText(value));
       const checkNumber = (value: unknown) =>
         !value ||
-        String(value).trim() === '' ||
-        (/^\d+(?:\.\d+)?$/.test(String(value)) && Number(value) > 0);
+        primitiveText(value).trim() === '' ||
+        (/^\d+(?:\.\d+)?$/.test(primitiveText(value)) && Number(value) > 0);
 
       const resolutionBuckets = ['mixed', 'resolution_only'] as const;
       for (const bucket of resolutionBuckets) {
@@ -768,7 +768,7 @@ export const useConfigStore = defineStore('config', () => {
           };
         }
         const finalRate = item?.['final_refresh_rate'];
-        if (!finalRate || String(finalRate).trim() === '') {
+        if (!finalRate || primitiveText(finalRate).trim() === '') {
           return {
             ok: false,
             message: 'For refresh-rate-only mappings, Final refresh rate is required.',
@@ -787,8 +787,8 @@ export const useConfigStore = defineStore('config', () => {
         }
         const finalRes = item?.['final_resolution'];
         const finalFps = item?.['final_refresh_rate'];
-        const hasFinalRes = !!finalRes && String(finalRes).trim() !== '';
-        const hasFinalFps = !!finalFps && String(finalFps).trim() !== '';
+        const hasFinalRes = !!finalRes && primitiveText(finalRes).trim() !== '';
+        const hasFinalFps = !!finalFps && primitiveText(finalFps).trim() !== '';
         if (!hasFinalRes && !hasFinalFps) {
           return {
             ok: false,
@@ -803,7 +803,7 @@ export const useConfigStore = defineStore('config', () => {
       for (const entry of resolutionOnly) {
         const item = entry as Record<string, unknown>;
         const finalRes = item?.['final_resolution'];
-        if (!finalRes || String(finalRes).trim() === '') {
+        if (!finalRes || primitiveText(finalRes).trim() === '') {
           return {
             ok: false,
             message: 'For resolution-only mappings, Final resolution is required.',
@@ -858,7 +858,7 @@ export const useConfigStore = defineStore('config', () => {
       }
       savingState.value = 'error';
       return false;
-    } catch (e) {
+    } catch {
       savingState.value = 'error';
       return false;
     }
@@ -897,7 +897,7 @@ export const useConfigStore = defineStore('config', () => {
           m.platform = norm;
           metadata.value = m;
         }
-      } catch (_) {
+      } catch {
         /* ignore */
       }
       // keep settings and metadata separate
@@ -953,7 +953,7 @@ export const useConfigStore = defineStore('config', () => {
       }
       savingState.value = 'error';
       return false;
-    } catch (e) {
+    } catch {
       savingState.value = 'error';
       return false;
     } finally {

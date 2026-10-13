@@ -63,7 +63,7 @@ export function $tp(key: string, defaultMsg?: string): string {
     const pm = usePlatformI18n();
     // Guard i18n injection absence (early render before init) inside message getter
     return pm.getMessageUsingPlatform(key, defaultMsg);
-  } catch (e) {
+  } catch {
     return defaultMsg || key;
   }
 }

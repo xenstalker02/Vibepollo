@@ -1,5 +1,6 @@
 import type { Config } from 'tailwindcss';
 import plugin from 'tailwindcss/plugin';
+import legacyTheme from './legacy-theme.json' with { type: 'json' };
 
 interface SemanticColorTokens {
   primary: string;
@@ -32,6 +33,7 @@ export default {
     './stores/**/*.{js,ts}',
   ],
   theme: {
+    ...legacyTheme,
     extend: {
       // Single source of truth for semantic colors (light/dark).
       // These values drive CSS variables that both Tailwind utilities and Naive UI consume.
@@ -106,11 +108,6 @@ export default {
         brand: 'rgb(var(--color-brand) / <alpha-value>)',
       },
     },
-  },
-  // Enable Tailwind preflight now that Bootstrap is removed. Keep visibility disabled if not needed.
-  corePlugins: {
-    preflight: true,
-    visibility: false,
   },
   plugins: [
     // Emit CSS variables for semantic tokens from theme.semanticColors

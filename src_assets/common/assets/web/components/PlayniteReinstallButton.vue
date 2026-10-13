@@ -39,6 +39,8 @@
 </template>
 
 <script setup lang="ts">
+import { primitiveText } from '@/utils/primitiveText';
+
 import { ref } from 'vue';
 import { NButton, NModal, NCard } from 'naive-ui';
 import { http } from '@/http';
@@ -100,8 +102,9 @@ async function confirm() {
     if (!ok) {
       error =
         typeof body === 'object' && body !== null
-          ? String(('error' in body && body.error) || ('message' in body && body.message) || '') ||
-            `HTTP ${r.status}`
+          ? primitiveText(
+              ('error' in body && body.error) || ('message' in body && body.message) || '',
+            ) || `HTTP ${r.status}`
           : `HTTP ${r.status}`;
     }
   } catch (caught) {

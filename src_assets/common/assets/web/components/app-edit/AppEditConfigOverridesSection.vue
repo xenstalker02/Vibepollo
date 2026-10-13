@@ -707,6 +707,8 @@
 </template>
 
 <script setup lang="ts">
+import { primitiveText } from '@/utils/primitiveText';
+
 import ConfigFieldRenderer from '@/ConfigFieldRenderer.vue';
 import ConfigInputField from '@/ConfigInputField.vue';
 import ConfigSelectField from '@/ConfigSelectField.vue';
@@ -864,7 +866,7 @@ function platformKey(): string {
   try {
     const meta = getMetadataState();
     const cfg = getConfigState();
-    return String(meta.platform ?? cfg['platform'] ?? '')
+    return primitiveText(meta.platform ?? cfg['platform'] ?? '')
       .toLowerCase()
       .trim();
   } catch {
@@ -1124,12 +1126,12 @@ function getOverrideStringFor(target: EditTarget, key: string): Nullable<string>
   const o = getOverridesSource(target);
   const v = o[key];
   if (v === undefined || v === null) return null;
-  return String(v);
+  return primitiveText(v);
 }
 
 function globalDdConfigDisabled(): boolean {
   const gv = getGlobalValue(DD_KEYS.configurationOption);
-  return String(gv ?? 'disabled') === 'disabled';
+  return primitiveText(gv ?? 'disabled') === 'disabled';
 }
 
 function ensureDdEnabledForDisplayOverrides(target: EditTarget): void {
@@ -1708,7 +1710,7 @@ function formatValue(v: unknown): string {
     const s = JSON.stringify(v);
     return s.length > 120 ? `${s.slice(0, 117)}...` : s;
   } catch {
-    return String(v);
+    return primitiveText(v);
   }
 }
 
@@ -1866,7 +1868,7 @@ function setRenderedOverrideValueFor(target: EditTarget, key: string, value: unk
   }
 
   if (kind === 'string') {
-    setOverrideKeyFor(target, key, String(value));
+    setOverrideKeyFor(target, key, primitiveText(value));
     return;
   }
 
@@ -1899,11 +1901,11 @@ function jsonDraftFor(target: EditTarget, key: string): string {
     return drafts.value[key] ?? '';
   }
   const cur = rawOverrideValueFor(target, key);
-  let text = '';
+  let text: string;
   try {
     text = JSON.stringify(cur, null, 2);
   } catch {
-    text = String(cur ?? '');
+    text = primitiveText(cur ?? '');
   }
   drafts.value = { ...drafts.value, [key]: text };
   return text;

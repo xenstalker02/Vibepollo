@@ -1,3 +1,4 @@
+import type { NullValue } from '@/utils/wireAbsence';
 import { defineStore } from 'pinia';
 import { ref, Ref, computed } from 'vue';
 import { useAuthStore } from '@/stores/auth';
@@ -8,9 +9,6 @@ declare global {
     __sunshine_webrtc_active?: boolean;
   }
 }
-
-const NULL_VALUE = null;
-type NullValue = typeof NULL_VALUE;
 
 export const useConnectivityStore = defineStore('connectivity', () => {
   const offline: Ref<boolean> = ref(false);

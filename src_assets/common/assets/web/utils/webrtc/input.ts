@@ -1,3 +1,4 @@
+import type { NullValue } from '@/utils/wireAbsence';
 import { GamepadFeedbackMessage, InputMessage } from '@/types/webrtc';
 
 export interface InputCaptureMetrics {
@@ -19,8 +20,6 @@ interface InputCaptureOptions {
   shouldDrop?: (payload: InputMessage) => boolean;
 }
 
-const NULL_VALUE = null;
-type NullValue = typeof NULL_VALUE;
 type UndefinedValue = typeof undefined;
 
 const WHEEL_STEP_PIXELS = 120;

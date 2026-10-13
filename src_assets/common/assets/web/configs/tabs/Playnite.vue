@@ -689,6 +689,8 @@
 </template>
 
 <script setup lang="ts">
+import { primitiveText } from '@/utils/primitiveText';
+
 import { computed, onMounted, reactive, ref, onUnmounted, watch, h } from 'vue';
 import {
   NInputNumber,
@@ -739,7 +741,7 @@ function stringValue(value: unknown): string {
 }
 
 function textValue(value: unknown): string {
-  return value === undefined || value === null ? '' : String(value);
+  return value === undefined || value === null ? '' : primitiveText(value);
 }
 
 function stringArray(value: unknown): string[] {
@@ -793,7 +795,7 @@ type IdNameEntry = { id?: string; name?: string };
 
 function normalizeIdNameEntries(value: unknown): IdNameEntry[] {
   if (Array.isArray(value)) return value as IdNameEntry[];
-  if (value && typeof value === 'object') return [value as IdNameEntry];
+  if (value && typeof value === 'object') return [value];
   return [];
 }
 
@@ -1143,7 +1145,7 @@ async function loadGames(useCacheFirst = true) {
         gamesSource.value = 'none';
       }
     }
-  } catch (_) {
+  } catch {
     if (gamesSource.value === 'none') {
       const cached = loadGamesCache();
       if (cached && cached.games.length) {

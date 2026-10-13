@@ -610,6 +610,10 @@
 </template>
 
 <script setup lang="ts">
+import type { NullValue } from '@/utils/wireAbsence';
+
+import { primitiveText } from '@/utils/primitiveText';
+
 import { computed, h, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { http } from '@/http';
@@ -636,8 +640,6 @@ import AppEditConfigOverridesSection from '@/components/app-edit/AppEditConfigOv
 import { useAuthStore } from '@/stores/auth';
 import { useConfigStore } from '@/stores/config';
 
-const NULL_VALUE = null;
-type NullValue = typeof NULL_VALUE;
 type ClientDisplaySelection = 'physical' | 'virtual';
 type ClientVirtualDisplayMode = 'disabled' | 'per_client' | 'shared' | 'global' | NullValue;
 type ClientVirtualDisplayLayout =
@@ -950,7 +952,7 @@ function togglePermission(client: ClientViewModel, permission: PermissionToggleK
 }
 
 function parseClientVirtualDisplayMode(value: unknown): ClientVirtualDisplayMode {
-  const v = String(value ?? '')
+  const v = primitiveText(value ?? '')
     .trim()
     .toLowerCase();
   if (!v) return null;
@@ -959,7 +961,7 @@ function parseClientVirtualDisplayMode(value: unknown): ClientVirtualDisplayMode
 }
 
 function parseClientVirtualDisplayLayout(value: unknown): ClientVirtualDisplayLayout {
-  const v = String(value ?? '')
+  const v = primitiveText(value ?? '')
     .trim()
     .toLowerCase();
   if (!v) return null;
@@ -994,7 +996,7 @@ function normalizeClientCommandEntry(value: unknown): ClientCommandEntry | NullV
   }
   if (!value || typeof value !== 'object') return null;
   const obj = value as Record<string, unknown>;
-  const cmd = String(obj['cmd'] ?? '').trim();
+  const cmd = primitiveText(obj['cmd'] ?? '').trim();
   if (!cmd) return null;
   return {
     cmd,

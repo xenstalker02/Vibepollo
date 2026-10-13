@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { NullValue } from '@/utils/wireAbsence';
+
 defineOptions({ inheritAttrs: false });
 
 import { computed, useAttrs } from 'vue';
@@ -11,8 +13,7 @@ type SelectOption = {
   disabled?: boolean;
 };
 
-const nullValue = () => null;
-type Nullable<T> = T | ReturnType<typeof nullValue>;
+type Nullable<T> = T | NullValue;
 
 const model = defineModel<Nullable<string | number>>({ required: true });
 const attrs = useAttrs();

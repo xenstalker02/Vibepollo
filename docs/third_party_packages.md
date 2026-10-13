@@ -3,6 +3,10 @@
 > [!WARNING]
 > These packages are not maintained by LizardByte. Use at your own risk.
 
+## Bundled Tailwind theme data
+
+The web interface retains selected default theme and palette values from [Tailwind CSS 3.4.19](https://github.com/tailwindlabs/tailwindcss/tree/v3.4.19) in src_assets/common/assets/web/legacy-theme.json to preserve existing styling while using Tailwind CSS 4. Tailwind Labs licenses these values under MIT; the full copyright and permission notice is retained beside the data in [legacy-theme.LICENSE](../src_assets/common/assets/web/legacy-theme.LICENSE).
+
 ## Chocolatey
 [![Chocolatey](https://img.shields.io/badge/dynamic/xml.svg?color=orange&label=chocolatey&style=for-the-badge&prefix=v&query=%2F%2Ftr%5B%40id%3D%27chocolatey%27%5D%2Ftd%5B3%5D%2Fspan%2Fa&url=https%3A%2F%2Frepology.org%2Fproject%2Fsunshine%2Fversions&logo=chocolatey)](https://community.chocolatey.org/packages/sunshine)
 

@@ -202,6 +202,8 @@
   </div>
 </template>
 <script setup lang="ts">
+import type { NullValue } from '@/utils/wireAbsence';
+
 import { ref, onMounted, computed, defineAsyncComponent } from 'vue';
 // Lazy-load the modal when first opened
 const AppEditModal = defineAsyncComponent(() => import('@/components/AppEditModal.vue'));
@@ -234,8 +236,6 @@ const playniteEnabled = computed(() => playniteInstalled.value);
 
 const showModal = ref(false);
 const modalKey = ref(0);
-const NULL_VALUE = null;
-type NullValue = typeof NULL_VALUE;
 type UndefinedValue = typeof undefined;
 const currentApp = ref<App | NullValue>(null);
 const currentIndex = ref(-1);

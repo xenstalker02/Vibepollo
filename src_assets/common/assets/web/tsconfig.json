@@ -1,9 +1,19 @@
 {
   "extends": "./tsconfig.base.json",
-  "include": ["**/*.js", "**/*.ts", "**/*.tsx", "**/*.vue", "*.ts"],
+  "include": [
+    "**/*.js",
+    "**/*.ts",
+    "**/*.tsx",
+    "**/*.vue",
+    "*.ts",
+    "**/*.mts",
+    "**/*.mjs",
+    "**/*.cjs"
+  ],
   "exclude": ["node_modules", "dist", "build"],
   "compilerOptions": {
     "strict": true,
+    "lib": ["ES2021", "DOM", "DOM.Iterable", "ES2022.Error"],
     "strictNullChecks": true,
     "exactOptionalPropertyTypes": true,
     "noImplicitAny": true,

@@ -28,7 +28,7 @@ const { t } = useI18n();
 
 function tFirst(keys: string[], fallback: string): string {
   for (const k of keys) {
-    const m = t(k) as unknown as string;
+    const m = t(k);
     if (m && m !== k) return m;
   }
   return fallback;

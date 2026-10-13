@@ -56,6 +56,7 @@ const config = store.config;
 </template>
 
 <style scoped>
+@reference '../../../styles/tailwind.css';
 .group-heading {
   @apply mb-3 text-xs font-semibold uppercase tracking-[0.08em] opacity-70;
 }

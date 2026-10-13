@@ -1,7 +1,5 @@
+import type { NullValue } from '@/utils/wireAbsence';
 import type { GitHubRelease } from '@/sunshine_version';
-
-const NULL_VALUE = null;
-type NullValue = typeof NULL_VALUE;
 
 export type DashboardRelease = GitHubRelease & { draft?: boolean };
 

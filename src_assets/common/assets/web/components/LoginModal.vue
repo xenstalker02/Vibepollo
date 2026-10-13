@@ -206,7 +206,7 @@ async function submit() {
       error.value =
         loginRes.data && loginRes.data.error ? loginRes.data.error : t('auth.login_failed');
     }
-  } catch (e) {
+  } catch {
     error.value = t('auth.login_network_error');
   } finally {
     submitting.value = false;

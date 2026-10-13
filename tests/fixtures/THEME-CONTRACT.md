@@ -1,0 +1,13 @@
+# Theme migration contract
+
+`theme-v3.css` preserves the complete initial stylesheet set from the production web build at commit `83588c4687bba4a5d3f5fd83d454c7256e97f032`, using the locked Tailwind CSS 3.4.19 dependency. SHA-256: `fbda8a1c8a6a56fdc3915777df1f3debcc181cdbc64532580eead72df17cb5e1`. It is regression input, not a runtime stylesheet. Its retained Font Awesome license header and the Tailwind notice in `src_assets/common/assets/web/legacy-theme.LICENSE` cover the copied stylesheet/theme material.
+
+The create-only `theme-contract-v3-semantic-interactions.json` records that preserved CSS in existing Chrome. The harness rejects an altered source stylesheet, source commit or contract hash. It compares the migrated build's complete initial CSS against 28 light/dark, mobile/desktop scenarios for reusable control styling: default, input focus/disabled, button hover/disabled and native `select.form-control` focus/disabled. The current application's Naive UI select renderers have separate component tests; this native-select probe covers the retained reusable CSS, not every application widget.
+
+Focus and disabled states use actual DOM interactions and assertions. Headless Windows Edge and Chrome did not activate `:hover` after Playwright's pointer action in minimal positive controls. Hover therefore uses the browser's forced CSS pseudo-state, with a known color-change control and state-removal control. This establishes CSS hover styling only; pointer hit testing, event handling, transitions and device behavior remain outside this contract.
+
+Colors are compared as visible raster channels and original alpha, allowing one 8-bit step of rounding in each channel, including alpha. Shadow color syntax is normalized through the same raster; only fully transparent or zero-area shadow layers are omitted. Geometry, alpha, outlines, disabled opacity, layout and select appearance remain checked. Snapshot/probe/property coverage must match exactly. A changed candidate color and a corrupted contract hash are negative controls and must fail.
+
+Run `npm ci --ignore-scripts`, then the audit, typecheck, lint, component tests, production build and `npm run test:theme` from the web directory. CI uses the existing Chrome channel on Ubuntu with browser sandboxing enabled. The harness blocks external requests and closes every context/browser. It does not install browsers, run a server, call a streaming device or weaken sandboxing.
+
+Recording requires `--css` pointing to the exact preserved source hash and an unused `--contract` path. Existing contracts are never overwritten. Changes to source provenance, comparison semantics or expected results require separate review; do not refresh a baseline from candidate CSS to make a failure pass.

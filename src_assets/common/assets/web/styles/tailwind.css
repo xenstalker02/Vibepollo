@@ -1,11 +1,46 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss' source(none);
+@config '../tailwind.config.mts';
+@source not inline('visible invisible collapse');
+
+@layer components {
+  .form-control,
+  .form-select {
+    @apply w-full px-3 py-2 text-sm rounded-md
+           border border-dark/55 dark:border-light/15
+           bg-light dark:bg-surface/70
+           text-dark dark:text-light
+           placeholder-dark/70 dark:placeholder-light/40
+           focus:ring-2 focus:ring-primary/40;
+    /* normalize native select appearance and ensure padding for custom arrow */
+    -webkit-appearance: none;
+    appearance: none;
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 1.25rem 1.25rem;
+  }
+  .form-control:focus,
+  .form-select:focus {
+    /* Preserve Tailwind 3's transparent outline, including forced-color accessibility. */
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+  }
+}
 
 /* Theme CSS variables (semantic tokens) */
 @layer base {
+  *,
+  ::before,
+  ::after,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: #e5e7eb;
+  }
   body {
     @apply text-dark dark:text-light bg-light dark:bg-dark antialiased;
+  }
+  select:disabled {
+    /* Tailwind 4 resets the previous Chromium disabled-select opacity. */
+    opacity: 0.7;
   }
 }
 
@@ -279,21 +314,6 @@
     @apply flex items-center gap-3 mb-4;
   }
 
-  .form-control {
-    @apply w-full px-3 py-2 text-sm rounded-md 
-           border border-dark/55 dark:border-light/15
-           bg-light dark:bg-surface/70
-           text-dark dark:text-light
-           placeholder-dark/70 dark:placeholder-light/40
-           focus:outline-none focus:ring-2 focus:ring-primary/40;
-    /* normalize native select appearance and ensure padding for custom arrow */
-    -webkit-appearance: none;
-    appearance: none;
-    background-repeat: no-repeat;
-    background-position: right 0.75rem center;
-    background-size: 1.25rem 1.25rem;
-  }
-
   .form-control.monospace {
     @apply font-mono;
   }
@@ -308,10 +328,6 @@
   }
   .dark .form-text {
     color: rgb(var(--color-light) / 0.65);
-  }
-
-  .form-select {
-    @apply form-control;
   }
 
   select.form-control option {

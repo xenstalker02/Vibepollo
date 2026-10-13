@@ -194,6 +194,8 @@
 </template>
 
 <script setup lang="ts">
+import type { NullValue } from '@/utils/wireAbsence';
+
 import {
   ref,
   computed,
@@ -219,8 +221,7 @@ import { useAuthStore } from '@/stores/auth';
 import { http } from '@/http';
 import { storeToRefs } from 'pinia';
 
-const nullValue = () => null;
-type Nullable<T> = T | ReturnType<typeof nullValue>;
+type Nullable<T> = T | NullValue;
 
 type SearchOption = { text: string; value: string };
 type SearchItem = {
@@ -289,7 +290,11 @@ const openSections = ref(new Set<string>(['general']));
 const isOpen = (id: string) => openSections.value.has(id);
 const toggle = (id: string) => {
   const s = new Set(openSections.value);
-  s.has(id) ? s.delete(id) : s.add(id);
+  if (s.has(id)) {
+    s.delete(id);
+  } else {
+    s.add(id);
+  }
   openSections.value = s;
   // When expanding, (cheaply) rebuild index so new controls are searchable
   if (s.has(id)) queueBuildIndex();
