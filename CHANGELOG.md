@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased - source changes after 1.15.30
+
+These changes are on master; the latest published installer remains 1.15.30.
+A new installer must be built and verified from its tagged source before release.
+
+### Fixed
+- Frontend type checking, linting, configuration editing, display selection and
+  WebRTC state handling were hardened, with deterministic regression coverage.
+- Web dependencies include the compatible Vite 6 security update and js-yaml 4.3.2.
+
+### Security
+- Cookie-authenticated mutations validate request origin. Installer firewall
+  configuration preserves existing user policy rather than replacing it broadly.
+
+### Validation
+- Source Checks runs dependency auditing, type checking, lint, frontend tests and
+  the production web build, plus offline firewall-policy tests in both PowerShell
+  versions. Native Windows packaging remains a separate manual build gate.
+- These source checks do not establish microphone, audible audio, controller,
+  touch, physical HDR appearance or game performance acceptance.
+
+
 ## [1.15.30] — 2026-08-05
 
 ### Fixed
