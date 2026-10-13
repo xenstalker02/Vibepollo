@@ -126,6 +126,7 @@ const platform = computed(() => config.platform || '');
 </template>
 
 <style scoped>
+@reference '../../../styles/tailwind.css';
 .section-header {
   @apply mb-4;
 }

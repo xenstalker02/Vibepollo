@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { primitiveText } from '@/utils/primitiveText';
+
 import { computed, h, onMounted, ref, watch } from 'vue';
 import PlatformLayout from '@/PlatformLayout.vue';
 import Checkbox from '@/Checkbox.vue';
@@ -348,7 +350,7 @@ function isResolutionFieldValid(v?: string): boolean {
 // ----- Refresh Rate Validation -----
 // Allow integers or decimals, must be > 0
 function isPositiveNumber(value: unknown): boolean {
-  if (value === undefined || value === null || String(value).trim() === '') return false;
+  if (value === undefined || value === null || primitiveText(value).trim() === '') return false;
   const n = Number(value);
   return Number.isFinite(n) && n > 0;
 }

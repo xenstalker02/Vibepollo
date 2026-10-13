@@ -1,3 +1,4 @@
+import type { NullValue } from '@/utils/wireAbsence';
 export type CrashDumpStatus = {
   available?: boolean;
   filename?: string;
@@ -12,9 +13,6 @@ export type CrashDumpStatus = {
 };
 
 export const MIN_SUNSHINE_CRASH_DUMP_SIZE_BYTES = 10 * 1024 * 1024;
-
-const NULL_VALUE = null;
-type NullValue = typeof NULL_VALUE;
 
 function isSunshineDump(status?: CrashDumpStatus | NullValue): boolean {
   if (!status) return false;

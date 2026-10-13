@@ -1,3 +1,4 @@
+import type { NullValue } from '@/utils/wireAbsence';
 export interface PrepCmd {
   do: string;
   undo: string;
@@ -176,10 +177,9 @@ export interface FrameGenHealth {
     emphasis: 'info' | 'warning';
   };
 }
-const nullValue = () => null;
 
 /** Runtime null sentinel used by the application configuration protocol. */
-export type Nullish = ReturnType<typeof nullValue>;
+export type Nullish = NullValue;
 
 export type Nullable<T> = T | Nullish;
 

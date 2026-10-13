@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { NullValue } from '@/utils/wireAbsence';
+
 defineOptions({ inheritAttrs: false });
 
 import { computed, useAttrs } from 'vue';
@@ -18,8 +20,7 @@ import {
 } from '@/configs/configFieldSchema';
 import type { ConfigSelectOption } from '@/configs/configSelectOptions';
 
-const noValue = null;
-type NoValue = typeof noValue;
+type NoValue = NullValue;
 const model = defineModel<unknown>({ required: true });
 const attrs = useAttrs();
 const store = useConfigStore();
@@ -61,9 +62,10 @@ function translateDesc(key: string): string {
   return value;
 }
 
-const platform = computed(() =>
-  String(store.metadata?.platform || configValues['platform'] || '').toLowerCase(),
-);
+const platform = computed(() => {
+  const value = store.metadata?.platform || configValues['platform'];
+  return typeof value === 'string' ? value.toLowerCase() : '';
+});
 
 const configValues = store.config as unknown as Record<string, unknown>;
 const defaultValues = store.defaults as unknown as Record<string, unknown>;
@@ -138,7 +140,10 @@ const stringModel = computed<string>({
   get() {
     if (typeof model.value === 'string') return model.value;
     if (model.value === null || model.value === undefined) return '';
-    return String(model.value);
+    if (typeof model.value === 'number' || typeof model.value === 'boolean') {
+      return String(model.value);
+    }
+    return '';
   },
   set(value) {
     model.value = value;

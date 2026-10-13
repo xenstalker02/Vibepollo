@@ -1,3 +1,4 @@
+import type { NullValue } from '@/utils/wireAbsence';
 import { defineStore } from 'pinia';
 import { ref, Ref } from 'vue';
 import { http } from '@/http';
@@ -47,9 +48,6 @@ export interface App {
   [key: string]: unknown;
 }
 
-const NULL_VALUE = null;
-type NullValue = typeof NULL_VALUE;
-
 interface AppsResponse {
   apps?: App[];
   current_app?: string | NullValue;
@@ -86,7 +84,7 @@ export const useAppsStore = defineStore('apps', () => {
       }
       setApps((r.data && r.data.apps) || []);
       setCurrentApp(r.data?.current_app ?? null);
-    } catch (e) {
+    } catch {
       setApps([]);
       setCurrentApp(null);
     }

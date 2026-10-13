@@ -1,3 +1,4 @@
+import type { NullValue } from '@/utils/wireAbsence';
 import { defineStore } from 'pinia';
 import { ref, Ref } from 'vue';
 import { http, refreshSession } from '@/http';
@@ -24,9 +25,6 @@ interface AuthSessionsResponse {
   sessions?: AuthSession[];
   error?: string;
 }
-
-const NULL_VALUE = null;
-type NullValue = typeof NULL_VALUE;
 
 export interface AuthSession {
   id: string;
@@ -208,7 +206,7 @@ export const useAuthStore = defineStore('auth', () => {
         return;
       }
       sessionsError.value = res.data && res.data.error ? res.data.error : 'error';
-    } catch (e) {
+    } catch {
       sessionsError.value = 'error';
     } finally {
       sessionsLoading.value = false;
@@ -232,7 +230,7 @@ export const useAuthStore = defineStore('auth', () => {
         }
         return true;
       }
-    } catch (e) {
+    } catch {
       /* swallow */
     }
     return false;

@@ -468,6 +468,8 @@
 </template>
 
 <script setup lang="ts">
+import { primitiveText } from '@/utils/primitiveText';
+
 import { computed, h, ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useMessage } from 'naive-ui';
 import { http } from '@/http';
@@ -945,7 +947,7 @@ function toServerPayload(f: AppForm): Record<string, unknown> {
   if (f.playniteManaged) payload['playnite-managed'] = f.playniteManaged;
   const provider = normalizeFrameGenerationProvider(f.frameGenerationProvider);
   const mode = f.frameGenerationMode ?? 'off';
-  let resolvedProvider: FrameGenerationProvider = provider;
+  let resolvedProvider: FrameGenerationProvider;
   if (mode === 'nvidia-smooth-motion') {
     resolvedProvider = 'nvidia-smooth-motion';
   } else if (mode === 'lossless-scaling') {
@@ -1381,7 +1383,7 @@ const nameSelectValue = ref<string>('');
 type AppNameOption = { label: string; value: string; disabled?: boolean };
 const nameOptions = ref<AppNameOption[]>([]);
 const fallbackOption = (value: unknown) => {
-  const v = String(value ?? '');
+  const v = primitiveText(value ?? '');
   const label = String(form.value.name || '').trim() || v;
   return { label, value: v };
 };
@@ -2868,7 +2870,7 @@ async function del() {
         // Update local store (keeps UI in sync) and persist via store API
         configStore.updateOption('playnite_exclude_games', next);
         await configStore.save();
-      } catch (_) {
+      } catch {
         // best-effort; continue with deletion even if exclusion save fails
       }
     }

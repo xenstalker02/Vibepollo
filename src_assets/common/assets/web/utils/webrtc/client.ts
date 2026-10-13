@@ -1,10 +1,7 @@
+import type { NullValue, UndefinedValue } from '@/utils/wireAbsence';
 import { WebRtcApi } from '@/services/webrtcApi';
 import { GamepadFeedbackMessage, StreamConfig, WebRtcStatsSnapshot } from '@/types/webrtc';
 
-const NULL_VALUE = null;
-const UNDEFINED_VALUE = undefined;
-type NullValue = typeof NULL_VALUE;
-type UndefinedValue = typeof UNDEFINED_VALUE;
 type RtpCodecCapability = RTCRtpCapabilities['codecs'][number];
 type ReceiverParameters = RTCRtpReceiveParameters & { jitterBufferTarget?: number };
 type ExtendedReceiver = RTCRtpReceiver & {
@@ -813,6 +810,7 @@ export class WebRtcClient {
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(
           `Failed to apply WebRTC answer SDP (${sessionConfig.encoding}; offered: ${offered}): ${message}`,
+          { cause: error },
         );
       }
       await this.flushPendingCandidates();

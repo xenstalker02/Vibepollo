@@ -1,3 +1,4 @@
+import type { NullValue } from '@/utils/wireAbsence';
 import { http } from '@/http';
 import type { AxiosRequestConfig } from 'axios';
 import {
@@ -8,9 +9,6 @@ import {
   WebRtcSessionInfo,
   WebRtcSessionState,
 } from '@/types/webrtc';
-
-const NULL_VALUE = null;
-type NullValue = typeof NULL_VALUE;
 
 export interface WebRtcApi {
   createSession(config: StreamConfig): Promise<WebRtcSessionInfo>;

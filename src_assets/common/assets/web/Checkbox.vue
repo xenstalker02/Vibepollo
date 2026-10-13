@@ -52,8 +52,8 @@ function mapToBoolRepresentation(value: unknown): CheckboxPair | false {
     ['on', 'off'],
   ] as const satisfies ReadonlyArray<readonly [string, string]>;
 
-  if (value === undefined || value === null) return false;
-  const norm = String(value).toLowerCase().trim();
+  if (typeof value !== 'string') return false;
+  const norm = value.toLowerCase().trim();
   for (const pair of stringPairs) {
     if (norm === pair[0] || norm === pair[1]) return { possibleValues: pair, value: norm };
   }

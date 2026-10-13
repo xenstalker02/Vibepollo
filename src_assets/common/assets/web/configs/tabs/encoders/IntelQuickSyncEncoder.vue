@@ -21,6 +21,7 @@ const config = store.config;
 </template>
 
 <style scoped>
+@reference '../../../styles/tailwind.css';
 .section-header {
   @apply mb-4;
 }

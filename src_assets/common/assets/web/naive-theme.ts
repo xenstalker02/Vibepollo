@@ -1,3 +1,4 @@
+import type { NullValue } from '@/utils/wireAbsence';
 import type { GlobalThemeOverrides } from 'naive-ui';
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
 
@@ -112,8 +113,7 @@ export function useNaiveThemeOverrides() {
 // Usage: const isDark = useDarkModeClass();
 export function useDarkModeClassRef() {
   const isDark = ref<boolean>(false);
-  const NULL_OBSERVER = null;
-  type NullObserver = typeof NULL_OBSERVER;
+  type NullObserver = NullValue;
   let observer: MutationObserver | NullObserver = null;
 
   const update = () => {

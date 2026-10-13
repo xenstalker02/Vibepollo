@@ -355,6 +355,8 @@
 </template>
 
 <script setup lang="ts">
+import type { NullValue } from '@/utils/wireAbsence';
+
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
@@ -384,8 +386,7 @@ import { useAuthStore } from '@/stores/auth';
 
 type RouteDef = { path: string; methods: string[] };
 type Scope = { path: string; methods: string[] };
-const nullValue = () => null;
-type Nullable<T> = T | ReturnType<typeof nullValue>;
+type Nullable<T> = T | NullValue;
 type TokenRecord = { hash: string; scopes: Scope[]; createdAt?: Nullable<string | number> };
 
 function isRecord(value: unknown): value is Record<string, unknown> {

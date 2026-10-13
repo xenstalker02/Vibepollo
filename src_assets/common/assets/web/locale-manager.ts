@@ -1,9 +1,8 @@
+import type { NullValue } from '@/utils/wireAbsence';
 import { http } from '@/http';
 import type createLocale from '@/locale';
 import type { MessageSchema } from '@/locale';
 
-const NULL_VALUE = null;
-type NullValue = typeof NULL_VALUE;
 type AppI18n = Awaited<ReturnType<typeof createLocale>>;
 
 let _i18n: AppI18n | NullValue = null;

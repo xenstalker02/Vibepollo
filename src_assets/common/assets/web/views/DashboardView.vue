@@ -485,6 +485,8 @@
 </template>
 
 <script setup lang="ts">
+import type { NullValue } from '@/utils/wireAbsence';
+
 import { ref, onMounted, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NCard, NAlert, useMessage, useDialog } from 'naive-ui';
@@ -501,8 +503,6 @@ import type { CrashDumpStatus } from '@/utils/crashDump';
 import { isCrashDumpEligible, sanitizeCrashDumpStatus } from '@/utils/crashDump';
 
 const installedVersion = ref<VibepolloVersion>(new VibepolloVersion('0.0.0'));
-const NULL_VALUE = null;
-type NullValue = typeof NULL_VALUE;
 const githubRelease = ref<DashboardRelease | NullValue>(null);
 const preReleaseRelease = ref<DashboardRelease | NullValue>(null);
 
@@ -757,7 +757,7 @@ async function runVersionChecks() {
       } else {
         vigemInstalled.value = null;
       }
-    } catch (e) {
+    } catch {
       vigemInstalled.value = null;
     }
     await refreshCrashDumpStatus(plat);

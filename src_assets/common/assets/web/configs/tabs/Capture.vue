@@ -559,6 +559,7 @@ const shouldShowSoftware = computed(() => showAll() || props.currentTab === 'sw'
 </template>
 
 <style scoped>
+@reference '../../styles/tailwind.css';
 .encoder-outline {
   @apply border border-dark/35 dark:border-light/25 rounded-xl p-4 bg-light/60 dark:bg-dark/40 space-y-4;
 }

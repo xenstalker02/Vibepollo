@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { primitiveText } from '@/utils/primitiveText';
+
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { $tp } from '@/platform-i18n';
@@ -36,7 +38,7 @@ const sudovdaStatus = computed(() => ({
 const vdisplay = computed(() => configValues.value['vdisplay'] || 0);
 const currentDriverStatus = computed(
   () =>
-    sudovdaStatus.value[String(vdisplay.value) as keyof typeof sudovdaStatus.value] ||
+    sudovdaStatus.value[primitiveText(vdisplay.value) as keyof typeof sudovdaStatus.value] ||
     t('config.sudovda_status_unknown'),
 );
 
@@ -438,6 +440,7 @@ function selectVirtualDisplayLayout(v: unknown) {
 </template>
 
 <style scoped>
+@reference '../../styles/tailwind.css';
 .display-mode-option {
   @apply block w-full rounded-xl border border-dark/10 dark:border-light/10 px-4 py-3 text-sm font-semibold transition-colors;
   min-height: 56px;

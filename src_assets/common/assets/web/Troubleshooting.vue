@@ -317,6 +317,8 @@
 </template>
 
 <script setup lang="ts">
+import type { NullValue } from '@/utils/wireAbsence';
+
 import {
   ref,
   computed,
@@ -338,8 +340,6 @@ const store = useConfigStore();
 const authStore = useAuthStore();
 const { t } = useI18n();
 const platform = computed(() => store.metadata.platform);
-const NULL_VALUE = null;
-type NullValue = typeof NULL_VALUE;
 
 const crashDump = ref<CrashDumpStatus | NullValue>(null);
 const crashDumpAvailable = computed(() => isCrashDumpEligible(crashDump.value));
@@ -1156,6 +1156,7 @@ watch(logSource, () => {
 </script>
 
 <style scoped>
+@reference './styles/tailwind.css';
 .troubleshoot-root {
   @apply space-y-6;
 }

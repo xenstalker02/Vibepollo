@@ -1,3 +1,5 @@
+import type { UndefinedValue } from '@/utils/wireAbsence';
+
 export type ConfigSelectOption = { label: string; value: string | number; disabled?: boolean };
 
 type GpuMetadata = {
@@ -12,12 +14,10 @@ type ConfigMetadata = {
   has_amd_gpu?: boolean;
 };
 
-const NO_METADATA = undefined;
-
 export type ConfigSelectOptionsContext = {
   t: (key: string) => string;
   platform: string;
-  metadata?: ConfigMetadata | typeof NO_METADATA;
+  metadata?: ConfigMetadata | UndefinedValue;
   currentValue?: unknown;
 };
 
@@ -40,7 +40,7 @@ function ensureIncludesCurrentValue(
   return options.concat([{ label: String(currentValue), value: currentValue }]);
 }
 
-function gpuFlags(metadata?: ConfigMetadata | typeof NO_METADATA) {
+function gpuFlags(metadata?: ConfigMetadata) {
   const gpus = Array.isArray(metadata?.gpus) ? metadata.gpus : [];
   const hasVendor = (vendorId: number) =>
     gpus.some((gpu) => Number(gpu?.vendor_id ?? gpu?.vendorId ?? 0) === vendorId);

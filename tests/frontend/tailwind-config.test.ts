@@ -11,10 +11,8 @@ describe('Tailwind config', () => {
       './configs/**/*.{vue,js,ts}',
       './stores/**/*.{js,ts}',
     ]);
-    expect(tailwindConfig.corePlugins).toEqual({
-      preflight: true,
-      visibility: false,
-    });
+    expect(tailwindConfig.theme.borderRadius.sm).toBe('0.125rem');
+    expect(tailwindConfig.theme.boxShadow.sm).toBe('0 1px 2px 0 rgb(0 0 0 / 0.05)');
   });
 
   test('preserves representative light and dark semantic tokens', () => {

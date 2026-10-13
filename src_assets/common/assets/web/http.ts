@@ -1,3 +1,4 @@
+import type { NullValue } from '@/utils/wireAbsence';
 // Axios HTTP client with centralized auth handling
 import axios, { AxiosResponse, AxiosError, AxiosRequestConfig } from 'axios';
 import { useAuthStore } from '@/stores/auth';
@@ -12,8 +13,6 @@ export const http = axios.create({
 });
 
 let authInitialized = false;
-const NULL_VALUE = null;
-type NullValue = typeof NULL_VALUE;
 
 interface AuthRequestConfig extends AxiosRequestConfig {
   __allowUnauthenticated?: boolean;
