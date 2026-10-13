@@ -2,7 +2,7 @@
 
 ## Unreleased - source changes after 1.15.30
 
-These changes are on master; the latest published installer remains 1.15.30.
+This section tracks source changes after 1.15.30; the latest published installer remains 1.15.30.
 A new installer must be built and verified from its tagged source before release.
 
 ### Fixed
@@ -11,6 +11,10 @@ A new installer must be built and verified from its tagged source before release
 - Web dependencies include the compatible Vite 6 security update and js-yaml 4.3.2.
 
 ### Security
+- Patch Vue and Axios within their existing major versions; refresh compatible
+  brace-expansion, source-map-js and fast-uri dependencies. Scope compression
+  1.8.2 to the fixture server. The development-tool audit still reports the
+  unpatched braces chain and selector-parser findings; the audit gate is unchanged.
 - Cookie-authenticated mutations validate request origin. Installer firewall
   configuration preserves existing user policy rather than replacing it broadly.
 
